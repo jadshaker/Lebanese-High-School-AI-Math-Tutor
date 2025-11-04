@@ -3,7 +3,6 @@ from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, HTTPException
 from openai import OpenAI
-
 from src.config import Config
 from src.models.schemas import QueryRequest, QueryResponse
 

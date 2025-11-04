@@ -11,9 +11,11 @@ services:
       - .env
     environment:
       - LARGE_LLM_SERVICE_URL=http://large-llm:8001
+      - SMALL_LLM_SERVICE_URL=http://small-llm:8005
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - large-llm
+      - small-llm
     networks:
       - math-tutor-network
 
@@ -27,10 +29,26 @@ services:
       - '8001:8001'
     env_file:
       - .env
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     command: uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload
+    networks:
+      - math-tutor-network
+
+  # Small LLM Service (Ollama)
+  small-llm:
+    build:
+      context: services/small_llm
+      dockerfile: Dockerfile
+    container_name: math-tutor-small-llm
+    ports:
+      - '8005:8005'
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_SERVICE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL_NAME=${OLLAMA_MODEL_NAME:-deepseek-r1:7b}
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8005 --reload
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - math-tutor-network
 
