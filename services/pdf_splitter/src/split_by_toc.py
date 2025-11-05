@@ -1,28 +1,23 @@
-#!/usr/bin/env python3
-"""
-split_by_toc.py — Improved PDF splitter by detecting a printed TOC and splitting by ranges.
-
-Usage:
-    python split_by_toc.py input.pdf --dry-run
-    python split_by_toc.py input.pdf --output-dir ./chapters --max-toc-pages 4
-
-Requirements:
-    pip install pypdf PyMuPDF
-"""
-
-import re
-import os
 import argparse
-from typing import List, Dict, Tuple, Optional
-import fitz  # PyMuPDF
+import os
+import re
+from typing import List, Set, TypedDict
+
+import fitz  # type: ignore  # PyMuPDF (no stubs)
 from pypdf import PdfReader, PdfWriter
 
-
-# ---------- Configurable heuristics ----------
 MIN_TITLE_CHARS = 4            # minimum characters for a TOC title
 MAX_CONSECUTIVE_NONMATCH = 6   # stop TOC scanning after this many non-matching lines in sequence
-MAX_TOC_PAGES_DEFAULT = 2      # maximum pages to scan after finding "Contents"
-# ---------------------------------------------
+MAX_TOC_PAGES_DEFAULT = 1      # maximum pages to scan after finding "Contents"
+
+class TocEntry(TypedDict):
+    title: str
+    page: int
+
+class PageRange(TypedDict):
+    title: str
+    start: int
+    end: int
 
 
 def find_toc_start_pages(pdf_path: str, max_scan_pages: int = 12) -> List[int]:
@@ -50,9 +45,6 @@ def find_toc_start_pages(pdf_path: str, max_scan_pages: int = 12) -> List[int]:
                 end = min(n, start + max_scan_pages)
                 toc_pages = list(range(start, end))
                 print(f"[INFO] Detected 'Contents' marker on page {i+1}. Will scan pages {start+1}-{end}.")
-                print(f"[INFO] First lines on page {i+1}:")
-                for line in lines[:5]:
-                    print(f"    {line}")
                 break
     if not toc_pages:
         print("[WARN] No explicit 'Contents' marker detected at top of any page.")
@@ -69,20 +61,14 @@ def extract_page_lines(pdf_path: str, page_index: int) -> List[str]:
 
 
 def parse_toc_from_pages(pdf_path: str, toc_page_indices: List[int], total_pages: int,
-                         max_consecutive_nonmatch: int = MAX_CONSECUTIVE_NONMATCH) -> List[Dict]:
+                         max_consecutive_nonmatch: int = MAX_CONSECUTIVE_NONMATCH) -> List[TocEntry]:
     """
     Parse TOC entries from the provided pages.
     Returns list of {"title": str, "page": int}.
     Heuristics: a TOC line should end with a page number or a '(pages X-Y)' marker.
     """
-    entries = []
-    consec_nonmatch = 0
+    entries: List[TocEntry] = []
 
-    # regex patterns to match lines that *end* with a page number or page-range marker
-    # Examples matched:
-    # "1. Sets and cartesian product ........................... 5"
-    # "Powers and radicals (pages 33-370)"
-    # "Study of functions (pages 371-4)" -> we'll take 371
     line_page_re = re.compile(
         r"""^
             (?P<title>.+?)               # title (non-greedy)
@@ -101,82 +87,30 @@ def parse_toc_from_pages(pdf_path: str, toc_page_indices: List[int], total_pages
         if not lines:
             continue
 
-        # Use an index-based loop so we can merge a title line with a following
-        # line that contains only the page number (common layout), and also
-        # support multi-line titles that span several lines until a delimiter
-        # (dots/ellipsis/dashes) or a page-number line appears.
-        i = 0
+        i, j = 0, 0
         while i < len(lines):
-            ln = lines[i]
-
-            # Skip very short lines
-            if len(ln) < MIN_TITLE_CHARS:
-                consec_nonmatch += 1
-                if consec_nonmatch >= max_consecutive_nonmatch:
-                    print(f"[INFO] Reached {consec_nonmatch} consecutive non-matching lines; stopping TOC parsing.")
-                    return entries
+            ln = str(lines[i + j])
+            if "table" in ln.lower() or "contents" in ln.lower():
+                # skip this line
                 i += 1
                 continue
-
-            # Try to assemble a possible title block by merging subsequent lines
-            # until we encounter a delimiter line (dots/ellipsis/dashes) or a
-            # line that looks like a page number. We'll then try the strict
-            # regex against the assembled block.
-            merged = ln
-            lookahead = i + 1
-            # limit lookahead to avoid runaway merging
-            while lookahead < len(lines) and lookahead - i <= 4:
-                nxt = lines[lookahead]
-                # if next line is clearly a page-number or contains 'pages X', stop merging
-                if re.search(r"^\.*\s*\d{1,4}\s*$", nxt) or re.search(r"pages?\s*\d{1,4}", nxt, re.I) or re.search(r"(\.{2,}|\u2026|[-–—]{2,})", nxt):
-                    break
-                # otherwise append as continuation of title
-                merged = merged + " " + nxt
-                lookahead += 1
-
-            # Now try strict regex on merged block
+            
+            merged = ""
+            if not re.search(r"^(?:.*\D)?(\d{1,4})$", ln):
+                j += 1
+                continue
+            else:
+                merged = " ".join(lines[i:i+j+1])    
+                i += 1 + j
+            
             m = line_page_re.search(merged)
             page_num = None
             title_raw = None
 
             if m:
-                # matched title+page on the merged block
-                consec_nonmatch = 0
                 title_raw = m.group("title").strip()
-                if m.group("page"):
-                    page_num = int(m.group("page"))
-                elif m.group("range1"):
-                    page_num = int(m.group("range1"))
-                # advance i past consumed lines
-                # if we merged extra lines, move i to lookahead; otherwise i++
-                if lookahead > i + 1:
-                    i = lookahead
-                else:
-                    i += 1
-            else:
-                # If merged didn't match, maybe the page number is on the next line
-                next_page = None
-                if i + 1 < len(lines):
-                    nxt = lines[i + 1].strip()
-                    m_next = re.search(r"(\d{1,4})\s*$", nxt)
-                    if m_next:
-                        next_page = int(m_next.group(1))
-                if next_page:
-                    consec_nonmatch = 0
-                    title_raw = merged
-                    page_num = next_page
-                    # consume title lines up to the page-number line
-                    # determine how many lines were merged (lookahead - i)
-                    # and then consume the additional page-number line as well
-                    consume = max(1, lookahead - i)
-                    i = i + consume + 1
-                else:
-                    consec_nonmatch += 1
-                    if consec_nonmatch >= max_consecutive_nonmatch:
-                        print(f"[INFO] Reached {consec_nonmatch} consecutive non-matching lines; stopping TOC parsing.")
-                        return entries
-                    i += 1
-                    continue
+                page_num = int(m.group("page"))
+                j = 0
 
             # Validate extracted page number
             if page_num is None:
@@ -218,7 +152,7 @@ def sanitize_filename(name: str) -> str:
     return name[:100]
 
 
-def split_pdf_by_toc(pdf_path: str, toc_entries: List[Dict], output_dir: str, dry_run: bool = False):
+def split_pdf_by_toc(pdf_path: str, toc_entries: List[TocEntry], output_dir: str, dry_run: bool = False):
     """Split the PDF using computed TOC entries (expects entries sorted by page ascending)."""
     if not toc_entries:
         print("[ERROR] No TOC entries provided to split.")
@@ -232,8 +166,8 @@ def split_pdf_by_toc(pdf_path: str, toc_entries: List[Dict], output_dir: str, dr
     toc_entries_sorted = sorted(toc_entries, key=lambda x: x["page"])
 
     for i, entry in enumerate(toc_entries_sorted):
-        start = entry["page"]
-        end = (toc_entries_sorted[i + 1]["page"] - 1) if i + 1 < len(toc_entries_sorted) else total_pages
+        start: int = entry["page"]
+        end: int = (toc_entries_sorted[i + 1]["page"] - 1) if i + 1 < len(toc_entries_sorted) else total_pages
         start_idx = max(0, start - 1)
         end_idx = min(total_pages, end)  # end is inclusive in our convention
 
@@ -253,7 +187,7 @@ def split_pdf_by_toc(pdf_path: str, toc_entries: List[Dict], output_dir: str, dr
         print("\n✅ Split complete.")
 
 
-def split_selected_ranges(pdf_path: str, ranges: List[Dict], output_dir: str, dry_run: bool = False):
+def split_selected_ranges(pdf_path: str, ranges: List[PageRange], output_dir: str, dry_run: bool = False):
     """Split PDF using explicit start/end page ranges.
 
     ranges: list of {'title': str, 'start': int, 'end': int}
@@ -267,9 +201,9 @@ def split_selected_ranges(pdf_path: str, ranges: List[Dict], output_dir: str, dr
     os.makedirs(output_dir, exist_ok=True)
 
     for r in ranges:
-        title = r.get('title')
-        start = r.get('start')
-        end = r.get('end')
+        title = r["title"]
+        start = r["start"]
+        end = r["end"]
         # clamp
         start_idx = max(0, start - 1)
         end_idx = min(total_pages, end)
@@ -351,7 +285,7 @@ def main():
                 return []
 
             parts = [p.strip() for p in sel.split(",") if p.strip()]
-            indices = set()
+            indices: Set[int] = set()
             try:
                 for part in parts:
                     if '-' in part:
