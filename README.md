@@ -64,22 +64,128 @@ pip install -r requirements.txt
 
 ### Running with Docker
 
-**1. Start SSH Tunnel to HPC** (required for small_llm service):
+#### Prerequisites: Start SSH Tunnel to HPC
+
+The small_llm service requires an SSH tunnel to AUB's HPC (Octopus cluster):
 
 ```bash
-# From your local machine
-ssh -L 0.0.0.0:11434:localhost:11434 <username>@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 onode11
+ssh username@octopus.aub.edu.lb
 ```
 
-Keep this terminal open while services are running.
+Once you are connected to octopus, you have to preserve a node with GPUs for the `ollama` to run there.
 
-**2. Start all services**:
+Run this command
 
 ```bash
+srun --partition=gpu --pty bash
+```
+
+Once connected to a node, setup `ollama` there:
+
+```bash
+module load ollama
+ollama serve # This might take a few seconds to run
+```
+
+You will have this signature in the terminal `username@node_name`, check the `node_name` and replace it in the below command.
+
+Run the below command on another terminal
+
+```bash
+ssh -L 11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 node_name
+```
+
+This way we have a 2 way tunnel to the node we are connected to on `octopus`.
+
+After setting up the connection with `octopus`, we have to run the model now using the below command in the same terminal, change `deepseek-r1:7b` with the model you want to run on `ollama`:
+
+```bash
+module load ollama
+ollama run deepseek-r1:7b --keepalive -1m
+```
+
+This could take up to a few minutes depending on the number of parameters. Once you are able to send a message to the model you are set up; you can test the model in the terminal if you want.
+
+#### Start All Services
+
+```bash
+# Build and start all services
 docker compose up --build
+
+# Or run in detached mode (background)
+docker compose up -d --build
 ```
 
-The gateway will be available at `http://localhost:8000`
+Services will be available at:
+
+- Gateway: `http://localhost:8000`
+- Large LLM: `http://localhost:8001`
+- Small LLM: `http://localhost:8005`
+
+#### Stop Services
+
+```bash
+# Stop all services (preserves containers)
+docker compose stop
+
+# Stop and remove containers
+docker compose down
+
+# Stop and remove containers + volumes + networks
+docker compose down -v
+```
+
+#### View Logs
+
+```bash
+# View logs from all services
+docker compose logs
+
+# Follow logs in real-time
+docker compose logs -f
+
+# View logs for a specific service
+docker compose logs gateway
+docker compose logs small-llm
+docker compose logs large-llm
+
+# Follow logs for a specific service
+docker compose logs -f small-llm
+```
+
+#### Restart Services
+
+```bash
+# Restart all services
+docker compose restart
+
+# Restart a specific service
+docker compose restart small-llm
+docker compose restart gateway
+```
+
+#### Rebuild Services
+
+```bash
+# Rebuild all services
+docker compose build
+
+# Rebuild a specific service
+docker compose build small-llm
+
+# Rebuild and restart
+docker compose up -d --build small-llm
+```
+
+#### Check Service Status
+
+```bash
+# List running containers
+docker compose ps
+
+# Check health of all services
+curl http://localhost:8000/health | jq
+```
 
 ### API Endpoints
 
@@ -90,7 +196,7 @@ The gateway will be available at `http://localhost:8000`
   ```json
   {
     "query": "What is the derivative of x^2?",
-    "use_large_llm": false  // Optional: set to true to use GPT-4 instead of Ollama (default: false)
+    "use_large_llm": false // Optional: set to true to use GPT-4 instead of Ollama (default: false)
   }
   ```
 
