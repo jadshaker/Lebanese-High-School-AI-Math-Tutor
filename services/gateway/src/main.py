@@ -33,6 +33,7 @@ async def health():
     services = {
         "large_llm": Config.SERVICES.LARGE_LLM_URL,
         "small_llm": Config.SERVICES.SMALL_LLM_URL,
+        "embedding": Config.SERVICES.EMBEDDING_URL,
     }
 
     service_health = {}
