@@ -12,10 +12,12 @@ services:
     environment:
       - LARGE_LLM_SERVICE_URL=http://large-llm:8001
       - SMALL_LLM_SERVICE_URL=http://small-llm:8005
+      - EMBEDDING_SERVICE_URL=http://embedding:8002
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - large-llm
       - small-llm
+      - embedding
     networks:
       - math-tutor-network
 
@@ -49,6 +51,20 @@ services:
     command: uvicorn src.main:app --host 0.0.0.0 --port 8005 --reload
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - math-tutor-network
+
+  # Embedding Service
+  embedding:
+    build:
+      context: services/embedding
+      dockerfile: Dockerfile
+    container_name: math-tutor-embedding
+    ports:
+      - '8002:8002'
+    env_file:
+      - .env
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8002 --reload
     networks:
       - math-tutor-network
 
