@@ -46,6 +46,13 @@ services/<service-name>/
 1. **Configuration**: All services use a `Config` class with nested classes for organization as needed. So `config.py` files differ between services:
 
    ```python
+   import os
+
+   from dotenv import load_dotenv
+
+   load_dotenv()
+
+
    class Config:
        class SERVICES:
            LARGE_LLM_URL = os.getenv("LARGE_LLM_SERVICE_URL", "...")
@@ -61,6 +68,11 @@ services/<service-name>/
    from src.config import Config
    from src.models.schemas import MyModel
    ```
+
+4. **Code Style**:
+   - Do NOT include module-level docstrings at the top of files
+   - Class and function docstrings are encouraged
+   - Keep imports at the top without any docstrings above them
 
 ## Development Commands
 
