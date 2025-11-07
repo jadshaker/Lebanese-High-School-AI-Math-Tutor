@@ -283,7 +283,7 @@ Environment variables can be set in `.env` or through docker-compose environment
 - ✅ Large LLM service with OpenAI GPT-4 integration
 - ✅ Small LLM service with Ollama/DeepSeek-R1 on HPC
 - ✅ Gateway routing: defaults to small_llm, optional large_llm, automatic fallback
-- 🚧 Embedding service (planned)
+- ✅ Embedding service
 - 🚧 Cache service (planned)
 - 🚧 Complexity assessment (planned)
 - 🚧 Local model service (planned)
