@@ -19,7 +19,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip show isort
 
       - name: isort check
         run: isort --check-only --profile black services
@@ -35,4 +34,5 @@ jobs:
               (cd "$service" && mypy src --explicit-package-bases)
             fi
           done
+
 
