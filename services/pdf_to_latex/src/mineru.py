@@ -1,9 +1,10 @@
-import os
-import requests
-import time
-from dotenv import load_dotenv
-import glob
 import argparse
+import glob
+import os
+import time
+
+import requests
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -104,8 +105,8 @@ while True:
                     local_zip_path = os.path.join(output_dir, f"{base_name}.zip")
                     r = requests.get(zip_url)
                     if r.status_code == 200:
-                        with open(local_zip_path, "wb") as f:
-                            f.write(r.content)
+                        with open(local_zip_path, "wb") as zip_file:
+                            zip_file.write(r.content)
                         print(f"Downloaded {fname} ZIP to {local_zip_path}")
                         downloaded_files.add(fname)
                     else:
