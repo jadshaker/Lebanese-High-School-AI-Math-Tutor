@@ -5,6 +5,10 @@ class QueryRequest(BaseModel):
     """User query request"""
 
     query: str = Field(..., description="User's math question")
+    use_large_llm: bool = Field(
+        False,
+        description="Whether to use large LLM instead of small LLM (default: False)",
+    )
 
 
 class FinalResponse(BaseModel):

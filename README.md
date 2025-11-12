@@ -1,6 +1,6 @@
 # Lebanese High School AI Math Tutor
 
-An AI-powered mathematics tutoring application designed for Lebanese high school students, built with a microservices architecture using FastAPI and OpenAI.
+An AI-powered mathematics tutoring application designed for Lebanese high school students, built with a microservices architecture using FastAPI, OpenAI, and Ollama.
 
 ## Architecture
 
@@ -9,8 +9,11 @@ The application uses a microservices architecture with services communicating vi
 ```
 services/
 ├── gateway/          # API Gateway - Main entry point (Port 8000)
-└── large_llm/        # Large LLM Service - OpenAI integration (Port 8001)
+├── large_llm/        # Large LLM Service - OpenAI GPT-4 (Port 8001)
+└── small_llm/        # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
 ```
+
+**Intelligent Routing**: The gateway defaults to the small_llm service for efficiency. Use `use_large_llm: true` in requests to explicitly route to OpenAI's GPT-4. Automatic fallback to large_llm if small_llm fails.
 
 ### Service Structure
 
@@ -36,13 +39,19 @@ services/<service-name>/
 - Python 3.14+
 - Docker and Docker Compose
 - OpenAI API key
+- SSH access to AUB HPC (Octopus cluster) for small_llm service
 
 ### Environment Setup
 
-1. Create a `.env` file in the project root based on the `example.env` file:
+1. Create a `.env` file in the project root based on `.env.example`:
 
 ```bash
+# API Keys
 OPENAI_API_KEY=sk-your-api-key-here
+
+# Ollama Configuration (for small_llm service)
+OLLAMA_SERVICE_URL=http://localhost:11434
+OLLAMA_MODEL_NAME=deepseek-r1:7b
 ```
 
 2. Create and activate a virtual environment:
@@ -55,13 +64,128 @@ pip install -r requirements.txt
 
 ### Running with Docker
 
-Start all services:
+#### Prerequisites: Start SSH Tunnel to HPC
+
+The small_llm service requires an SSH tunnel to AUB's HPC (Octopus cluster):
 
 ```bash
-docker compose up --build
+ssh username@octopus.aub.edu.lb
 ```
 
-The gateway will be available at `http://localhost:8000`
+Once you are connected to octopus, you have to preserve a node with GPUs for the `ollama` to run there.
+
+Run this command
+
+```bash
+srun --partition=gpu --pty bash
+```
+
+Once connected to a node, setup `ollama` there:
+
+```bash
+module load ollama
+ollama serve # This might take a few seconds to run
+```
+
+You will have this signature in the terminal `username@node_name`, check the `node_name` and replace it in the below command.
+
+Run the below command on another terminal
+
+```bash
+ssh -L 11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 node_name
+```
+
+This way we have a 2 way tunnel to the node we are connected to on `octopus`.
+
+After setting up the connection with `octopus`, we have to run the model now using the below command in the same terminal, change `deepseek-r1:7b` with the model you want to run on `ollama`:
+
+```bash
+module load ollama
+ollama run deepseek-r1:7b --keepalive -1m
+```
+
+This could take up to a few minutes depending on the number of parameters. Once you are able to send a message to the model you are set up; you can test the model in the terminal if you want.
+
+#### Start All Services
+
+```bash
+# Build and start all services
+docker compose up --build
+
+# Or run in detached mode (background)
+docker compose up -d --build
+```
+
+Services will be available at:
+
+- Gateway: `http://localhost:8000`
+- Large LLM: `http://localhost:8001`
+- Small LLM: `http://localhost:8005`
+
+#### Stop Services
+
+```bash
+# Stop all services (preserves containers)
+docker compose stop
+
+# Stop and remove containers
+docker compose down
+
+# Stop and remove containers + volumes + networks
+docker compose down -v
+```
+
+#### View Logs
+
+```bash
+# View logs from all services
+docker compose logs
+
+# Follow logs in real-time
+docker compose logs -f
+
+# View logs for a specific service
+docker compose logs gateway
+docker compose logs small-llm
+docker compose logs large-llm
+
+# Follow logs for a specific service
+docker compose logs -f small-llm
+```
+
+#### Restart Services
+
+```bash
+# Restart all services
+docker compose restart
+
+# Restart a specific service
+docker compose restart small-llm
+docker compose restart gateway
+```
+
+#### Rebuild Services
+
+```bash
+# Rebuild all services
+docker compose build
+
+# Rebuild a specific service
+docker compose build small-llm
+
+# Rebuild and restart
+docker compose up -d --build small-llm
+```
+
+#### Check Service Status
+
+```bash
+# List running containers
+docker compose ps
+
+# Check health of all services
+curl http://localhost:8000/health | jq
+```
 
 ### API Endpoints
 
@@ -71,14 +195,25 @@ The gateway will be available at `http://localhost:8000`
 - `POST /query` - Submit a math question
   ```json
   {
-    "query": "What is the derivative of x^2?"
+    "query": "What is the derivative of x^2?",
+    "use_large_llm": false // Optional: set to true to use GPT-4 instead of Ollama (default: false)
   }
   ```
 
 **Large LLM Service** (`http://localhost:8001`)
 
 - `GET /health` - Health check
-- `POST /generate` - Generate answer using OpenAI
+- `POST /generate` - Generate answer using OpenAI GPT-4
+  ```json
+  {
+    "query": "What is the derivative of x^2?"
+  }
+  ```
+
+**Small LLM Service** (`http://localhost:8005`)
+
+- `GET /health` - Health check (verifies Ollama connectivity and model availability)
+- `POST /query` - Generate answer using Ollama (DeepSeek-R1 on HPC)
   ```json
   {
     "query": "What is the derivative of x^2?"
@@ -144,12 +279,13 @@ Environment variables can be set in `.env` or through docker-compose environment
 
 ## Current Implementation Status
 
-- ✅ Gateway service with health checks
-- ✅ Large LLM service with OpenAI integration
-- 🚧 Embedding service (planned)
+- ✅ Gateway service with health checks and intelligent routing
+- ✅ Large LLM service with OpenAI GPT-4 integration
+- ✅ Small LLM service with Ollama/DeepSeek-R1 on HPC
+- ✅ Gateway routing: defaults to small_llm, optional large_llm, automatic fallback
+- ✅ Embedding service
 - 🚧 Cache service (planned)
 - 🚧 Complexity assessment (planned)
-- 🚧 Small LLM service (planned)
 - 🚧 Local model service (planned)
 - 🚧 Verification service (planned)
 
