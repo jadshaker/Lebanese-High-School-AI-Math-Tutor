@@ -13,9 +13,18 @@ MINERU_URL = "https://mineru.net/api/v4/extract/task"
 
 
 # --------- Parse Arguments ----------
-parser = argparse.ArgumentParser(description="Upload PDFs and extract content using MinerU API")
-parser.add_argument("-i", "--input", required=True, help="Input directory containing PDF files")
-parser.add_argument("-o", "--output", default="latex", help="Output directory for downloaded results (default: latex)")
+parser = argparse.ArgumentParser(
+    description="Upload PDFs and extract content using MinerU API"
+)
+parser.add_argument(
+    "-i", "--input", required=True, help="Input directory containing PDF files"
+)
+parser.add_argument(
+    "-o",
+    "--output",
+    default="latex",
+    help="Output directory for downloaded results (default: latex)",
+)
 args = parser.parse_args()
 
 input_dir = args.input
@@ -48,12 +57,12 @@ poll_interval = 5  # seconds between checking batch status
 url_batch = "https://mineru.net/api/v4/file-urls/batch"
 headers = {
     "Content-Type": "application/json",
-    "Authorization": f"Bearer {MINERU_API_KEY}"
+    "Authorization": f"Bearer {MINERU_API_KEY}",
 }
 
 data = {
     "files": [{"name": os.path.basename(f)} for f in files_to_upload],
-    "model_version": model_version
+    "model_version": model_version,
 }
 
 res = requests.post(url_batch, headers=headers, json=data)
@@ -74,7 +83,9 @@ for i, file_path in enumerate(files_to_upload):
         if upload_res.status_code == 200:
             print(f"Uploaded {file_path} successfully")
         else:
-            print(f"Failed to upload {file_path}: {upload_res.status_code} {upload_res.text}")
+            print(
+                f"Failed to upload {file_path}: {upload_res.status_code} {upload_res.text}"
+            )
 
 # Step 3: Poll for batch extraction results
 url_results = f"https://mineru.net/api/v4/extract-results/batch/{batch_id}"
@@ -116,12 +127,14 @@ while True:
                     print(f"No ZIP URL for {fname}")
         elif state == "running":
             progress = file_res.get("extract_progress", {})
-            print(f"{fname} is running: extracted {progress.get('extracted_pages')}/{progress.get('total_pages')} pages")
+            print(
+                f"{fname} is running: extracted {progress.get('extracted_pages')}/{progress.get('total_pages')} pages"
+            )
             all_done = False
         elif state == "failed":
             print(f"{fname} failed: {file_res.get('err_msg')}")
             downloaded_files.add(fname)  # Mark as processed even if failed
-    
+
     if all_done and len(downloaded_files) == len(files_to_upload):
         print(f"All files processed: {len(downloaded_files)} files")
         break

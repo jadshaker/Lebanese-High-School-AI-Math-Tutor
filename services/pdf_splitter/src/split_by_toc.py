@@ -6,13 +6,17 @@ from typing import List, Set, TypedDict
 import fitz  # type: ignore  # PyMuPDF (no stubs)
 from pypdf import PdfReader, PdfWriter
 
-MIN_TITLE_CHARS = 4            # minimum characters for a TOC title
-MAX_CONSECUTIVE_NONMATCH = 6   # stop TOC scanning after this many non-matching lines in sequence
-MAX_TOC_PAGES_DEFAULT = 1      # maximum pages to scan after finding "Contents"
+MIN_TITLE_CHARS = 4  # minimum characters for a TOC title
+MAX_CONSECUTIVE_NONMATCH = (
+    6  # stop TOC scanning after this many non-matching lines in sequence
+)
+MAX_TOC_PAGES_DEFAULT = 1  # maximum pages to scan after finding "Contents"
+
 
 class TocEntry(TypedDict):
     title: str
     page: int
+
 
 class PageRange(TypedDict):
     title: str
@@ -44,7 +48,9 @@ def find_toc_start_pages(pdf_path: str, max_scan_pages: int = 12) -> List[int]:
                 start = i
                 end = min(n, start + max_scan_pages)
                 toc_pages = list(range(start, end))
-                print(f"[INFO] Detected 'Contents' marker on page {i+1}. Will scan pages {start+1}-{end}.")
+                print(
+                    f"[INFO] Detected 'Contents' marker on page {i+1}. Will scan pages {start+1}-{end}."
+                )
                 break
     if not toc_pages:
         print("[WARN] No explicit 'Contents' marker detected at top of any page.")
@@ -60,8 +66,12 @@ def extract_page_lines(pdf_path: str, page_index: int) -> List[str]:
     return lines
 
 
-def parse_toc_from_pages(pdf_path: str, toc_page_indices: List[int], total_pages: int,
-                         max_consecutive_nonmatch: int = MAX_CONSECUTIVE_NONMATCH) -> List[TocEntry]:
+def parse_toc_from_pages(
+    pdf_path: str,
+    toc_page_indices: List[int],
+    total_pages: int,
+    max_consecutive_nonmatch: int = MAX_CONSECUTIVE_NONMATCH,
+) -> List[TocEntry]:
     """
     Parse TOC entries from the provided pages.
     Returns list of {"title": str, "page": int}.
@@ -78,7 +88,7 @@ def parse_toc_from_pages(pdf_path: str, toc_page_indices: List[int], total_pages
                pages?\s*(?P<range1>\d{1,4})(?:\s*[-–—]\s*(?P<range2>\d{1,4}))?\s*\)?\s*$  # pages X or pages X-Y
             )
         """,
-        re.I | re.VERBOSE
+        re.I | re.VERBOSE,
     )
 
     # iterate pages in order
@@ -94,15 +104,15 @@ def parse_toc_from_pages(pdf_path: str, toc_page_indices: List[int], total_pages
                 # skip this line
                 i += 1
                 continue
-            
+
             merged = ""
             if not re.search(r"^(?:.*\D)?(\d{1,4})$", ln):
                 j += 1
                 continue
             else:
-                merged = " ".join(lines[i:i+j+1])    
+                merged = " ".join(lines[i : i + j + 1])
                 i += 1 + j
-            
+
             m = line_page_re.search(merged)
             page_num = None
             title_raw = None
@@ -116,7 +126,9 @@ def parse_toc_from_pages(pdf_path: str, toc_page_indices: List[int], total_pages
             if page_num is None:
                 continue
             if page_num < 1 or page_num > total_pages:
-                print(f"[DEBUG] Ignored entry with out-of-range page {page_num}: '{(title_raw or '')[:40]}...'")
+                print(
+                    f"[DEBUG] Ignored entry with out-of-range page {page_num}: '{(title_raw or '')[:40]}...'"
+                )
                 continue
 
             # filter out lines that are clearly not bona fide entries
@@ -152,7 +164,9 @@ def sanitize_filename(name: str) -> str:
     return name[:100]
 
 
-def split_pdf_by_toc(pdf_path: str, toc_entries: List[TocEntry], output_dir: str, dry_run: bool = False):
+def split_pdf_by_toc(
+    pdf_path: str, toc_entries: List[TocEntry], output_dir: str, dry_run: bool = False
+):
     """Split the PDF using computed TOC entries (expects entries sorted by page ascending)."""
     if not toc_entries:
         print("[ERROR] No TOC entries provided to split.")
@@ -167,7 +181,11 @@ def split_pdf_by_toc(pdf_path: str, toc_entries: List[TocEntry], output_dir: str
 
     for i, entry in enumerate(toc_entries_sorted):
         start: int = entry["page"]
-        end: int = (toc_entries_sorted[i + 1]["page"] - 1) if i + 1 < len(toc_entries_sorted) else total_pages
+        end: int = (
+            (toc_entries_sorted[i + 1]["page"] - 1)
+            if i + 1 < len(toc_entries_sorted)
+            else total_pages
+        )
         start_idx = max(0, start - 1)
         end_idx = min(total_pages, end)  # end is inclusive in our convention
 
@@ -187,7 +205,9 @@ def split_pdf_by_toc(pdf_path: str, toc_entries: List[TocEntry], output_dir: str
         print("\n✅ Split complete.")
 
 
-def split_selected_ranges(pdf_path: str, ranges: List[PageRange], output_dir: str, dry_run: bool = False):
+def split_selected_ranges(
+    pdf_path: str, ranges: List[PageRange], output_dir: str, dry_run: bool = False
+):
     """Split PDF using explicit start/end page ranges.
 
     ranges: list of {'title': str, 'start': int, 'end': int}
@@ -228,14 +248,31 @@ def main():
     # Declare we will override the module-level constant so any use below refers to the global
     global MIN_TITLE_CHARS
 
-    ap = argparse.ArgumentParser(description="Split PDF by printed TOC (improved parsing heuristics).")
+    ap = argparse.ArgumentParser(
+        description="Split PDF by printed TOC (improved parsing heuristics)."
+    )
     ap.add_argument("pdf", help="Input PDF path.")
     ap.add_argument("--output-dir", default="splits", help="Output directory.")
-    ap.add_argument("--dry-run", action="store_true", help="Simulate the split; don't create files.")
-    ap.add_argument("--max-toc-pages", type=int, default=MAX_TOC_PAGES_DEFAULT,
-                    help="Maximum number of pages to scan after the detected 'Contents' page.")
-    ap.add_argument("--min-title-chars", type=int, default=MIN_TITLE_CHARS, help="Minimum title length to accept.")
-    ap.add_argument("--all", action="store_true", help="Select all parsed chapters (non-interactive).")
+    ap.add_argument(
+        "--dry-run", action="store_true", help="Simulate the split; don't create files."
+    )
+    ap.add_argument(
+        "--max-toc-pages",
+        type=int,
+        default=MAX_TOC_PAGES_DEFAULT,
+        help="Maximum number of pages to scan after the detected 'Contents' page.",
+    )
+    ap.add_argument(
+        "--min-title-chars",
+        type=int,
+        default=MIN_TITLE_CHARS,
+        help="Minimum title length to accept.",
+    )
+    ap.add_argument(
+        "--all",
+        action="store_true",
+        help="Select all parsed chapters (non-interactive).",
+    )
     args = ap.parse_args()
 
     # allow heuristic constant overrides from CLI
@@ -257,7 +294,9 @@ def main():
     toc_entries = sorted(toc_entries, key=lambda e: e["page"])
 
     if not toc_entries:
-        print("[ERROR] No valid TOC entries found. Try OCRing the PDF (ocrmypdf) or increase heuristics limits.")
+        print(
+            "[ERROR] No valid TOC entries found. Try OCRing the PDF (ocrmypdf) or increase heuristics limits."
+        )
         return
 
     # If user asked for all chapters via CLI flag, split everything non-interactively
@@ -266,14 +305,16 @@ def main():
         return
 
     # Interactive selection: list chapters and allow the user to pick indices/ranges
-    print('\nParsed chapters:')
+    print("\nParsed chapters:")
     for idx, e in enumerate(toc_entries, start=1):
         print(f" {idx:3d}. {e['title']} (p{e['page']})")
 
     def prompt_selection(max_idx: int) -> List[int]:
         """Prompt user until a valid selection is entered. Returns list of 1-based indices."""
         while True:
-            sel = input("\nEnter chapters to extract (e.g. 1,3-5), 'all' to select all, or 'q' to quit: ").strip()
+            sel = input(
+                "\nEnter chapters to extract (e.g. 1,3-5), 'all' to select all, or 'q' to quit: "
+            ).strip()
             if not sel:
                 print("No selection provided. Aborting.")
                 return []
@@ -288,8 +329,8 @@ def main():
             indices: Set[int] = set()
             try:
                 for part in parts:
-                    if '-' in part:
-                        s_s, e_s = part.split('-', 1)
+                    if "-" in part:
+                        s_s, e_s = part.split("-", 1)
                         s = int(s_s)
                         e = int(e_s)
                         if s < 1 or e > max_idx or s > e:
@@ -301,7 +342,9 @@ def main():
                             raise ValueError()
                         indices.add(n)
             except ValueError:
-                print("Invalid selection. Use numbers, comma-separated and ranges (e.g. 1,3-5). Try again.")
+                print(
+                    "Invalid selection. Use numbers, comma-separated and ranges (e.g. 1,3-5). Try again."
+                )
                 continue
 
             if not indices:
@@ -317,13 +360,16 @@ def main():
     ranges = []
     for idx in selected:
         i0 = idx - 1
-        start = toc_entries[i0]['page']
-        end = (toc_entries[i0 + 1]['page'] - 1) if i0 + 1 < len(toc_entries) else total_pages
-        ranges.append({'title': toc_entries[i0]['title'], 'start': start, 'end': end})
+        start = toc_entries[i0]["page"]
+        end = (
+            (toc_entries[i0 + 1]["page"] - 1)
+            if i0 + 1 < len(toc_entries)
+            else total_pages
+        )
+        ranges.append({"title": toc_entries[i0]["title"], "start": start, "end": end})
 
     split_selected_ranges(args.pdf, ranges, args.output_dir, args.dry_run)
 
 
 if __name__ == "__main__":
     main()
-
