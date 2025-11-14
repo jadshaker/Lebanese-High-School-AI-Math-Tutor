@@ -6,19 +6,81 @@ from pathlib import Path
 import sys
 
 
+# Category mapping dictionary
+CATEGORY_MAP = {
+    "Arithmetic": [
+        "Sets and cartesian product",
+        "Absolute value and intervals",
+        "Powers and radicals",
+        "Order on R - Framing and approximation"
+    ],
+    "Algebra": [
+        "The polynomials",
+        "First degree equations and inequalities in one unknown",
+        "Mapping - bijection",
+        "Generalities about functions",
+        "Equations of straight lines",
+        "Linear systems",
+        "Study of functions"
+    ],
+    "Geometry": [
+        "Addition of vectors",
+        "Multiplication of a vector by a real number",
+        "Projection in the plane",
+        "Coordinate system",
+        "Cavalier perspective",
+        "Straight lines and planes",
+        "Parallel straight lines and planes"
+    ],
+    "Trigonometry": [
+        "Trigonometric circle - Oriented arc",
+        "Trigonometric lines"
+    ],
+    "Statistics": [
+        "Statistics"
+    ],
+    "Probability / Counting": [
+        "Counting"
+    ]
+}
+
+
+def get_chapter_attribute(chapter_title):
+    """Determine chapter attribute based on chapter title"""
+    # Normalize the chapter title for comparison (lowercase, strip whitespace)
+    normalized_title = chapter_title.strip().lower()
+    
+    # Check each category
+    for category, titles in CATEGORY_MAP.items():
+        for title in titles:
+            if normalized_title in title.lower() or title.lower() in normalized_title:
+                return category.lower()
+    
+    # Default to algebra if no match found
+    return "algebra"
+
+
 def extract_exercises_from_content(content, chapter_name):
     """Extract exercises from markdown content"""
     
-    # Extract chapter info
-    chapter_title_match = re.search(r'^# (.+)', content, re.MULTILINE)
-    chapter_title = chapter_title_match.group(1) if chapter_title_match else chapter_name
-    
-    # Find chapter number (e.g., "11" from "# 11")
-    chapter_number_match = re.search(r'^# (\d+)', content, re.MULTILINE)
+    # Extract chapter number (first # heading with just a number)
+    chapter_number_match = re.search(r'^# (\d+)\s*$', content, re.MULTILINE)
     chapter_number = chapter_number_match.group(1) if chapter_number_match else ""
     
-    # Determine chapter attribute (you can customize this logic)
-    chapter_attribute = "geometry" if "triangle" in content.lower() else "algebra"
+    # Extract chapter title (second # heading, which should be the title)
+    # Look for the heading after the number
+    if chapter_number_match:
+        # Find the next # heading after the chapter number
+        remaining_content = content[chapter_number_match.end():]
+        title_match = re.search(r'^# (.+?)\s*$', remaining_content, re.MULTILINE)
+        chapter_title = title_match.group(1).strip() if title_match else chapter_name
+    else:
+        # Fallback: use the first # heading as title
+        chapter_title_match = re.search(r'^# (.+)', content, re.MULTILINE)
+        chapter_title = chapter_title_match.group(1).strip() if chapter_title_match else chapter_name
+    
+    # Determine chapter attribute based on title
+    chapter_attribute = get_chapter_attribute(chapter_title)
     
     # Find the EXERCISES section
     exercises_section_match = re.search(
