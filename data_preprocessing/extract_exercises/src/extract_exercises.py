@@ -60,6 +60,15 @@ def get_chapter_attribute(chapter_title):
     return "algebra"
 
 
+def roman_to_int(roman):
+    """Convert Roman numeral to integer."""
+    roman_map = {
+        'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
+        'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10
+    }
+    return roman_map.get(roman, None)
+
+
 def extract_exercises_from_content(content, chapter_name):
     """Extract exercises from markdown content"""
     
@@ -135,6 +144,11 @@ def extract_exercises_from_content(content, chapter_name):
         
         # Check if there's a figure (image reference)
         has_figure = bool(re.search(r'!\[.*?\]\(.*?\)', exercise_content))
+        
+        # Convert Roman numerals to integers
+        converted_num = roman_to_int(exercise_num)
+        if converted_num is not None:
+            exercise_num = str(converted_num)
         
         exercise_dict = {
             "chapter_title": chapter_title,

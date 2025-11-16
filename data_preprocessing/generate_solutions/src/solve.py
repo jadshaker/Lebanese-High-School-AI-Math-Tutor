@@ -27,12 +27,15 @@ def get_exercise_count(current_num, next_num):
     if next_num is None:
         return 1
     
-    # Convert to integers (handle Roman numerals if needed)
+    # Convert to integers
     try:
         if current_num.isdigit() and next_num.isdigit():
-            gap = int(next_num) - int(current_num)
+            current_int = int(current_num)
+            next_int = int(next_num)
+            gap = next_int - current_int
             return max(1, gap)  # If gap is 2, it means current entry has 1 exercise (normal)
-        return 1
+        else:
+            return 1
     except:
         return 1
 
@@ -65,22 +68,19 @@ IMPORTANT: This text contains {num_exercises} separate exercises that were combi
 Combined Exercises:
 {exercise_text}
 
-For each exercise, provide:
-1. Exercise number
-2. Given information
-3. What we need to find
-4. Step-by-step solution
-5. Final answer
+For each exercise, provide ONLY the final answer(s) for each part/question. Do NOT include step-by-step explanations or intermediate steps.
+
+If an exercise has multiple parts (e.g., 1°, 2°, 3°), list the final answer for each part.
 
 Use LaTeX notation for mathematical expressions (wrapped in $ for inline or $$ for display math).
 
 Format your response as:
 
 ## Exercise {exercise_number}
-[solution here]
+[Final answer(s) only]
 
 ## Exercise {int(exercise_number) + 1}
-[solution here]
+[Final answer(s) only]
 
 (and so on for all {num_exercises} exercises)
 """
@@ -93,14 +93,13 @@ Exercise Number: {exercise_number}
 Exercise:
 {exercise_text}
 
-Please provide a detailed step-by-step solution to this exercise. 
-Format your answer clearly with:
-1. Given information
-2. What we need to find
-3. Step-by-step solution
-4. Final answer
+Please provide ONLY the final answer(s) for this exercise. Do NOT include step-by-step explanations, working, or intermediate steps.
+
+If the exercise has multiple parts (e.g., 1°, 2°, 3°), list the final answer for each part clearly.
 
 Use LaTeX notation for mathematical expressions (wrapped in $ for inline or $$ for display math).
+
+Format: Provide concise final answers only.
 """
 
     try:
@@ -154,8 +153,10 @@ def split_multi_exercise_solution(solution, original_exercise, num_exercises):
     if len(matches) >= num_exercises:
         # Successfully split into individual exercises
         result = []
+        base_exercise_num = int(original_exercise['exercise_number'])
+        
         for i, match in enumerate(matches[:num_exercises]):
-            ex_num = int(original_exercise['exercise_number']) + i
+            ex_num = base_exercise_num + i
             ex_solution = match.group(2).strip()
             
             exercise_copy = original_exercise.copy()
@@ -217,7 +218,8 @@ def process_json_file(input_file, output_file, delay=1.0, max_exercises=None):
         num_exercises = get_exercise_count(current_num, next_num)
         
         if num_exercises > 1:
-            print(f"  Solving exercises {current_num}-{int(current_num) + num_exercises - 1} ({i}/{len(exercises)})...", end=' ')
+            end_num = int(current_num) + num_exercises - 1
+            print(f"  Solving exercises {current_num}-{end_num} ({i}/{len(exercises)})...", end=' ')
         else:
             print(f"  Solving exercise {current_num} ({i}/{len(exercises)})...", end=' ')
         
