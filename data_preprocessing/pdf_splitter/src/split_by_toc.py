@@ -159,7 +159,11 @@ def parse_toc_from_pages(
 
 def sanitize_filename(name: str) -> str:
     """Sanitize filenames by removing illegal characters and trimming length."""
+    # Remove control characters (0x00-0x1F and 0x7F-0x9F)
+    name = re.sub(r'[\x00-\x1F\x7F-\x9F]', "", name)
+    # Remove illegal Windows filename characters
     name = re.sub(r'[\\/*?:"<>|]', "", name)
+    # Replace whitespace sequences with single underscore
     name = re.sub(r"\s+", "_", name.strip())
     return name[:100]
 
