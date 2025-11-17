@@ -47,19 +47,16 @@ services/<service-name>/
 
 ```bash
 # API Keys
-OPENAI_API_KEY=sk-your-api-key-here
+OPENAI_API_KEY=your_openai_api_key_here
+MINERU_API_KEY=your_mineru_api_key_here
 
 # Ollama Configuration (for small_llm service)
 OLLAMA_SERVICE_URL=http://localhost:11434
 OLLAMA_MODEL_NAME=deepseek-r1:7b
-```
 
-2. Create and activate a virtual environment:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+# Embedding Service Configuration
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMENSIONS=1536
 ```
 
 ### Running with Docker
@@ -199,26 +196,7 @@ curl http://localhost:8000/health | jq
     "use_large_llm": false // Optional: set to true to use GPT-4 instead of Ollama (default: false)
   }
   ```
-
-**Large LLM Service** (`http://localhost:8001`)
-
-- `GET /health` - Health check
-- `POST /generate` - Generate answer using OpenAI GPT-4
-  ```json
-  {
-    "query": "What is the derivative of x^2?"
-  }
-  ```
-
-**Small LLM Service** (`http://localhost:8005`)
-
-- `GET /health` - Health check (verifies Ollama connectivity and model availability)
-- `POST /query` - Generate answer using Ollama (DeepSeek-R1 on HPC)
-  ```json
-  {
-    "query": "What is the derivative of x^2?"
-  }
-  ```
+  <!-- TODO: check sample response -->
 
 ## Development
 
@@ -230,12 +208,6 @@ Run formatting and type checking:
 python3 cli.py clean
 ```
 
-Or use VSCode tasks:
-
-- Press `Cmd+Shift+P` (or `Ctrl+Shift+P`)
-- Select "Tasks: Run Task"
-- Choose "🧹 Clean"
-
 This runs:
 
 1. **isort** - Import sorting
@@ -245,27 +217,15 @@ This runs:
 ### Project Configuration
 
 - **CLAUDE.md** - Instructions for Claude Code when working with this codebase
-- **.vscode/tasks.json** - VSCode tasks for development
 - **.github/workflows/pre-merge-checks.yml** - CI/CD checks
 
 ### Adding New Services
 
 1. Create a new directory in `services/`
 2. Follow the service structure pattern
-3. Add service URL to `src/config.py`
+3. Add service URL to `src/config.py` and `.env.example`
 4. Update docker-compose.yml
 5. Add health check endpoint
-
-## Deployment
-
-### Syncing to Remote
-
-Use the VSCode task "🔄 Sync to Octopus" or run:
-
-```bash
-rsync -av --delete --exclude=.git --exclude=.venv --exclude=.mypy_cache \
-  . octopus:~/dev/Lebanese-High-School-AI-Math-Tutor
-```
 
 ## Configuration
 
@@ -282,12 +242,8 @@ Environment variables can be set in `.env` or through docker-compose environment
 - ✅ Gateway service with health checks and intelligent routing
 - ✅ Large LLM service with OpenAI GPT-4 integration
 - ✅ Small LLM service with Ollama/DeepSeek-R1 on HPC
-- ✅ Gateway routing: defaults to small_llm, optional large_llm, automatic fallback
 - ✅ Embedding service
 - 🚧 Cache service (planned)
-- 🚧 Complexity assessment (planned)
-- 🚧 Local model service (planned)
-- 🚧 Verification service (planned)
 
 ## License
 
