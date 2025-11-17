@@ -30,30 +30,32 @@ def assess_complexity(query: str) -> tuple[float, str]:
     query_lower = query.lower()
 
     # Check for advanced math topics (higher complexity)
-    advanced_topics = [
-        "integral",
-        "derivative",
-        "differential equation",
-        "partial derivative",
-        "multivariable",
-        "series",
-        "convergence",
-        "limit",
-        "taylor",
-        "fourier",
-        "laplace",
-        "matrix",
-        "eigenvalue",
-        "eigenvector",
-        "proof",
-        "theorem",
-    ]
+    advanced_topics = {
+        "integral": 0.35,
+        "derivative": 0.25,
+        "differential equation": 0.5,
+        "partial derivative": 0.45,
+        "multivariable": 0.4,
+        "series": 0.35,
+        "convergence": 0.4,
+        "limit": 0.3,
+        "taylor": 0.45,
+        "fourier": 0.5,
+        "laplace": 0.5,
+        "matrix": 0.35,
+        "eigenvalue": 0.45,
+        "eigenvector": 0.45,
+        "proof": 0.5,
+        "prove": 0.5,
+        "theorem": 0.4,
+        "gamma function": 0.5,
+    }
 
-    for topic in advanced_topics:
+    for topic, topic_score in advanced_topics.items():
         if topic in query_lower:
-            score += 0.3
+            score += topic_score
             reasons.append(f"Contains advanced topic: {topic}")
-            break
+            # Don't break - accumulate scores for multiple advanced topics
 
     # Check for equation complexity
     if re.search(r"\^[3-9]|\^\{[0-9]{2,}\}", query):
@@ -68,18 +70,20 @@ def assess_complexity(query: str) -> tuple[float, str]:
         reasons.append("Multiple variables detected")
 
     # Check for word problem indicators (can be complex)
-    word_problem_indicators = [
-        "if",
-        "find",
-        "calculate",
-        "determine",
-        "prove",
-        "show that",
-        "given that",
-    ]
-    if any(indicator in query_lower for indicator in word_problem_indicators):
-        score += 0.1
-        reasons.append("Word problem structure")
+    word_problem_indicators = {
+        "prove": 0.2,
+        "show that": 0.15,
+        "demonstrate": 0.15,
+        "find": 0.05,
+        "calculate": 0.05,
+        "determine": 0.05,
+        "given that": 0.05,
+    }
+    for indicator, indicator_score in word_problem_indicators.items():
+        if indicator in query_lower:
+            score += indicator_score
+            reasons.append(f"Contains '{indicator}' - word problem")
+            break
 
     # Check query length (longer queries might be more complex)
     if len(query) > 200:
