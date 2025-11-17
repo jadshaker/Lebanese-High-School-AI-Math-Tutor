@@ -10,10 +10,12 @@ The application uses a microservices architecture with services communicating vi
 services/
 ├── gateway/          # API Gateway - Main entry point (Port 8000)
 ├── large_llm/        # Large LLM Service - OpenAI GPT-4 (Port 8001)
-└── small_llm/        # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
+├── small_llm/        # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
+├── embedding/        # Embedding Service - Text embeddings (Port 8002)
+└── complexity/       # Complexity Assessment Service (Port 8004)
 ```
 
-**Intelligent Routing**: The gateway defaults to the small_llm service for efficiency. Use `use_large_llm: true` in requests to explicitly route to OpenAI's GPT-4. Automatic fallback to large_llm if small_llm fails.
+**Intelligent Routing**: The gateway uses the complexity service to automatically assess query difficulty. Simple queries (basic arithmetic, simple algebra) are routed to the efficient small_llm service, while complex queries (proofs, advanced calculus, linear algebra) are routed to the powerful large_llm service. You can override this by setting `use_large_llm: true` in requests. Automatic fallback to large_llm if small_llm fails.
 
 ### Service Structure
 
@@ -120,6 +122,8 @@ Services will be available at:
 
 - Gateway: `http://localhost:8000`
 - Large LLM: `http://localhost:8001`
+- Embedding: `http://localhost:8002`
+- Complexity: `http://localhost:8004`
 - Small LLM: `http://localhost:8005`
 
 #### Stop Services
@@ -192,11 +196,11 @@ curl http://localhost:8000/health | jq
 **Gateway Service** (`http://localhost:8000`)
 
 - `GET /health` - Health check (includes status of all downstream services)
-- `POST /query` - Submit a math question
+- `POST /query` - Submit a math question (automatically routes based on complexity)
   ```json
   {
     "query": "What is the derivative of x^2?",
-    "use_large_llm": false // Optional: set to true to use GPT-4 instead of Ollama (default: false)
+    "use_large_llm": false // Optional: set to true to force GPT-4 usage (default: false, uses complexity-based routing)
   }
   ```
 
@@ -217,6 +221,24 @@ curl http://localhost:8000/health | jq
   ```json
   {
     "query": "What is the derivative of x^2?"
+  }
+  ```
+
+**Complexity Service** (`http://localhost:8004`)
+
+- `GET /health` - Health check
+- `POST /assess` - Assess the complexity of a math query
+  ```json
+  {
+    "query": "Prove that the integral from 0 to infinity of x^n * e^(-x) dx equals n!"
+  }
+  ```
+  Response:
+  ```json
+  {
+    "complexity_score": 0.85,
+    "is_complex": true,
+    "reasoning": "Contains advanced topic: integral; Contains advanced topic: prove; ..."
   }
   ```
 
@@ -282,10 +304,10 @@ Environment variables can be set in `.env` or through docker-compose environment
 - ✅ Gateway service with health checks and intelligent routing
 - ✅ Large LLM service with OpenAI GPT-4 integration
 - ✅ Small LLM service with Ollama/DeepSeek-R1 on HPC
-- ✅ Gateway routing: defaults to small_llm, optional large_llm, automatic fallback
+- ✅ Complexity assessment service with heuristic-based routing
+- ✅ Gateway routing: complexity-based automatic routing with fallback
 - ✅ Embedding service
 - 🚧 Cache service (planned)
-- 🚧 Complexity assessment (planned)
 - 🚧 Local model service (planned)
 - 🚧 Verification service (planned)
 

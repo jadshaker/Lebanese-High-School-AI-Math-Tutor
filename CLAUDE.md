@@ -14,13 +14,13 @@ The application uses a **microservices architecture** with services communicatin
 
 - **Gateway** (Port 8000) - API Gateway that orchestrates requests to other services
 - **Large LLM** (Port 8001) - OpenAI GPT-4 integration for complex math questions
+- **Embedding** (Port 8002) - Text embedding service using OpenAI embeddings
+- **Complexity** (Port 8004) - Complexity assessment service for intelligent routing
 - **Small LLM** (Port 8005) - Ollama integration for efficient local inference (DeepSeek-R1 hosted on AUB HPC)
 
 ### Planned Services
 
-- Embedding service (Port 8002)
 - Cache service (Port 8003)
-- Complexity assessment (Port 8004)
 - Local model service (Port 8006)
 - Verification service (Port 8007)
 
