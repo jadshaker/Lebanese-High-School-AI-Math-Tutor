@@ -1,0 +1,68 @@
+# Basic .gitattributes for a python repo.
+
+# Set default behavior - auto detect text files and normalize to LF
+* text=auto eol=lf
+
+# Source files
+# ============
+*.pxd    text eol=lf diff=python
+*.py     text eol=lf diff=python
+*.py3    text eol=lf diff=python
+*.pyw    text eol=lf diff=python
+*.pyx    text eol=lf diff=python
+*.pyz    text eol=lf diff=python
+*.pyi    text eol=lf diff=python
+
+# Binary files
+# ============
+*.db     binary
+*.p      binary
+*.pkl    binary
+*.pickle binary
+*.pyc    binary export-ignore
+*.pyo    binary export-ignore
+*.pyd    binary
+
+# Jupyter notebook
+*.ipynb  text eol=lf
+
+# Note: .db, .p, and .pkl files are associated
+# with the python modules ``pickle``, ``dbm.*``,
+# ``shelve``, ``marshal``, ``anydbm``, & ``bsddb``
+# (among others).
+
+# Docker files
+# ============
+Dockerfile          text eol=lf
+*.dockerfile        text eol=lf
+docker-compose*.yml text eol=lf
+docker-compose*.yaml text eol=lf
+
+# Configuration files
+# ===================
+*.json   text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.toml   text eol=lf
+*.ini    text eol=lf
+*.cfg    text eol=lf
+*.conf   text eol=lf
+*.txt    text eol=lf
+.env*    text eol=lf
+
+# Documentation
+# =============
+*.md        text eol=lf diff=markdown
+README      text eol=lf
+CLAUDE.md   text eol=lf
+
+# Git files
+# =========
+.gitattributes text eol=lf
+.gitignore     text eol=lf
+.gitkeep       text eol=lf
+
+# Shell scripts
+# =============
+*.sh   text eol=lf
+*.bash text eol=lf
