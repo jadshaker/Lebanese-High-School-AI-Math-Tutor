@@ -232,18 +232,9 @@ This runs:
 
 1. Create a new directory in `services/`
 2. Follow the service structure pattern
-3. Add service URL to `src/config.py`
+3. Add service URL to `src/config.py` and `.env.example`
 4. Update docker-compose.yml
 5. Add health check endpoint
-
-## Deployment
-
-### Syncing to Remote
-
-```bash
-rsync -av --delete --exclude=.git --exclude=.venv --exclude=.mypy_cache \
-  . octopus:~/dev/Lebanese-High-School-AI-Math-Tutor
-```
 
 ## Configuration
 
