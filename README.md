@@ -196,7 +196,16 @@ curl http://localhost:8000/health | jq
     "use_large_llm": false // Optional: set to true to use GPT-4 instead of Ollama (default: false)
   }
   ```
-  <!-- TODO: check sample response -->
+  
+  Sample Response:
+  ```json
+  {
+    "answer": "The derivative of x^2 is 2x. This is found using the power rule: d/dx(x^n) = n*x^(n-1).",
+    "path_taken": "small_llm",
+    "verified": true,
+    "fallback_used": false
+  }
+  ```
 
 ## Development
 
