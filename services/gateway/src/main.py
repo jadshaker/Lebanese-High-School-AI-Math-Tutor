@@ -34,6 +34,7 @@ async def health():
         "large_llm": Config.SERVICES.LARGE_LLM_URL,
         "small_llm": Config.SERVICES.SMALL_LLM_URL,
         "embedding": Config.SERVICES.EMBEDDING_URL,
+        "complexity": Config.SERVICES.COMPLEXITY_URL,
     }
 
     service_health = {}
@@ -108,34 +109,76 @@ async def call_small_llm(query: str) -> dict:
         )
 
 
+async def assess_complexity(query: str) -> dict:
+    """Call the complexity service to assess query complexity"""
+    url = f"{Config.SERVICES.COMPLEXITY_URL}/assess"
+    data = {"query": query}
+
+    req = Request(
+        url,
+        data=json.dumps(data).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urlopen(req) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            return result
+    except HTTPError as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Complexity service error: {e.code}",
+        )
+    except URLError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Complexity service unavailable: {str(e.reason)}",
+        )
+
+
 @app.post("/query", response_model=FinalResponse)
 async def process_query(request: QueryRequest):
     """
     Main query processing endpoint implementing the multi-model architecture:
 
-    By default, routes to small_llm (Ollama on HPC). Set use_large_llm=true to use large LLM.
-
     Flow:
-    1. Check use_large_llm flag
-    2. Route to appropriate service:
-       - use_large_llm=false (default): use small LLM (Ollama)
-       - use_large_llm=true: use large LLM (OpenAI GPT-4)
-    3. If small LLM fails, fallback to large LLM
+    1. If use_large_llm is explicitly set to true, use large LLM
+    2. Otherwise, assess query complexity using complexity service
+    3. Route based on complexity:
+       - Complex queries: use large LLM (OpenAI GPT-4)
+       - Simple queries: use small LLM (Ollama)
+    4. If small LLM fails, fallback to large LLM
     """
     try:
+        # Check if user explicitly requested large LLM
         if request.use_large_llm:
             llm_response = await call_large_llm(request.query)
-            path_taken = "large_llm"
+            path_taken = "large_llm (explicit)"
             fallback_used = False
         else:
+            # Assess complexity to determine routing
             try:
-                llm_response = await call_small_llm(request.query)
-                path_taken = "small_llm"
-                fallback_used = False
+                complexity_result = await assess_complexity(request.query)
+                is_complex = complexity_result.get("is_complex", False)
             except HTTPException:
+                # If complexity service fails, default to small LLM
+                is_complex = False
+
+            # Route based on complexity assessment
+            if is_complex:
                 llm_response = await call_large_llm(request.query)
-                path_taken = "large_llm"
-                fallback_used = True
+                path_taken = "large_llm (complex)"
+                fallback_used = False
+            else:
+                try:
+                    llm_response = await call_small_llm(request.query)
+                    path_taken = "small_llm"
+                    fallback_used = False
+                except HTTPException:
+                    llm_response = await call_large_llm(request.query)
+                    path_taken = "large_llm (fallback)"
+                    fallback_used = True
 
         return FinalResponse(
             answer=llm_response["answer"],

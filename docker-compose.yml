@@ -13,11 +13,13 @@ services:
       - LARGE_LLM_SERVICE_URL=http://large-llm:8001
       - SMALL_LLM_SERVICE_URL=http://small-llm:8005
       - EMBEDDING_SERVICE_URL=http://embedding:8002
+      - COMPLEXITY_SERVICE_URL=http://complexity:8004
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - large-llm
       - small-llm
       - embedding
+      - complexity
     networks:
       - math-tutor-network
 
@@ -65,6 +67,20 @@ services:
     env_file:
       - .env
     command: uvicorn src.main:app --host 0.0.0.0 --port 8002 --reload
+    networks:
+      - math-tutor-network
+
+  # Complexity Service
+  complexity:
+    build:
+      context: services/complexity
+      dockerfile: Dockerfile
+    container_name: math-tutor-complexity
+    ports:
+      - '8004:8004'
+    env_file:
+      - .env
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8004 --reload
     networks:
       - math-tutor-network
 
