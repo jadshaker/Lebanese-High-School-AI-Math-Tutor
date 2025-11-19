@@ -5,6 +5,9 @@ click==8.3.0
 fastapi==0.120.4
 h11==0.16.0
 idna==3.11
+langchain-core==1.0.6
+langchain-openai==1.0.3
+langchain-ollama==1.0.0
 pydantic==2.12.3
 pydantic_core==2.41.4
 python-dotenv==1.2.1

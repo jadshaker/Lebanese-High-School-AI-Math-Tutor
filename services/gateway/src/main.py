@@ -1,8 +1,10 @@
 import json
-from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, HTTPException
+from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 from src.config import Config
 from src.models.schemas import (
     FinalResponse,
@@ -10,6 +12,23 @@ from src.models.schemas import (
 )
 
 app = FastAPI(title="Math Tutor API Gateway")
+
+# Initialize LangChain LLMs
+large_llm = (
+    ChatOpenAI(
+        model=Config.LLM.LARGE_MODEL,
+        temperature=Config.LLM.TEMPERATURE,
+        max_completion_tokens=Config.LLM.MAX_TOKENS,
+        api_key=SecretStr(Config.API_KEYS.OPENAI),
+    )
+    if Config.API_KEYS.OPENAI
+    else None
+)
+
+small_llm = ChatOllama(
+    model=Config.OLLAMA.MODEL_NAME,
+    base_url=Config.OLLAMA.SERVICE_URL,
+)
 
 
 def check_service_health(service_name: str, service_url: str) -> dict:
@@ -29,82 +48,82 @@ def check_service_health(service_name: str, service_url: str) -> dict:
 
 @app.get("/health")
 async def health():
-    """Health check endpoint - checks all services"""
-    services = {
-        "large_llm": Config.SERVICES.LARGE_LLM_URL,
-        "small_llm": Config.SERVICES.SMALL_LLM_URL,
-        "embedding": Config.SERVICES.EMBEDDING_URL,
+    """Health check endpoint - checks LangChain LLMs and other services"""
+    # Check LangChain LLM configurations
+    langchain_health = {
+        "large_llm": {
+            "status": "healthy" if large_llm else "not_configured",
+            "provider": "OpenAI via LangChain",
+            "model": Config.LLM.LARGE_MODEL if large_llm else None,
+        },
+        "small_llm": {
+            "status": "healthy",
+            "provider": "Ollama via LangChain",
+            "model": Config.OLLAMA.MODEL_NAME,
+            "base_url": Config.OLLAMA.SERVICE_URL,
+        },
     }
 
-    service_health = {}
-    all_healthy = True
+    # Check embedding service (still REST API based)
+    embedding_health = check_service_health("embedding", Config.SERVICES.EMBEDDING_URL)
 
-    for service_name, service_url in services.items():
-        health_status = check_service_health(service_name, service_url)
-        service_health[service_name] = health_status
-        if health_status["status"] != "healthy":
-            all_healthy = False
+    all_healthy = (
+        langchain_health["large_llm"]["status"] != "not_configured"
+        and embedding_health["status"] == "healthy"
+    )
 
     return {
         "status": "healthy" if all_healthy else "degraded",
         "service": "gateway",
-        "services": service_health,
+        "langchain_llms": langchain_health,
+        "services": {"embedding": embedding_health},
     }
 
 
 async def call_large_llm(query: str) -> dict:
-    """Call the large LLM service to generate an answer"""
-    url = f"{Config.SERVICES.LARGE_LLM_URL}/generate"
-    data = {"query": query}
-
-    req = Request(
-        url,
-        data=json.dumps(data).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with urlopen(req) as response:
-            result = json.loads(response.read().decode("utf-8"))
-            return result
-    except HTTPError as e:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Large LLM service error: {e.code}",
-        )
-    except URLError as e:
+    """Call the large LLM using LangChain to generate an answer"""
+    if not large_llm:
         raise HTTPException(
             status_code=503,
-            detail=f"Large LLM service unavailable: {str(e.reason)}",
+            detail="Large LLM not configured: OpenAI API key missing",
+        )
+
+    try:
+        # Build system prompt for math tutoring
+        system_prompt = "You are an expert mathematics tutor for Lebanese high school students. Provide clear, accurate, and educational answers to math questions."
+
+        # Use LangChain to invoke the model
+        messages = [
+            ("system", system_prompt),
+            ("user", query),
+        ]
+        response = await large_llm.ainvoke(messages)
+
+        return {
+            "answer": response.content,
+            "model_used": Config.LLM.LARGE_MODEL,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Large LLM error: {str(e)}",
         )
 
 
 async def call_small_llm(query: str) -> dict:
-    """Call the small LLM service (Ollama) to generate an answer"""
-    url = f"{Config.SERVICES.SMALL_LLM_URL}/query"
-    data = {"query": query}
-
-    req = Request(
-        url,
-        data=json.dumps(data).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
+    """Call the small LLM using LangChain (Ollama) to generate an answer"""
     try:
-        with urlopen(req) as response:
-            result = json.loads(response.read().decode("utf-8"))
-            return result
-    except HTTPError as e:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Small LLM service error: {e.code}",
-        )
-    except URLError as e:
+        # Use LangChain to invoke Ollama model
+        response = await small_llm.ainvoke(query)
+
+        return {
+            "answer": response.content,
+            "model_used": Config.OLLAMA.MODEL_NAME,
+        }
+    except Exception as e:
         raise HTTPException(
             status_code=503,
-            detail=f"Small LLM service unavailable: {str(e.reason)}",
+            detail=f"Small LLM error: {str(e)}",
         )
 
 

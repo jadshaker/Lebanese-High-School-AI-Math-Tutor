@@ -1,5 +1,5 @@
 services:
-  # API Gateway - Main entry point
+  # API Gateway - Main entry point (now using LangChain)
   gateway:
     build:
       context: services/gateway
@@ -10,18 +10,18 @@ services:
     env_file:
       - .env
     environment:
-      - LARGE_LLM_SERVICE_URL=http://large-llm:8001
-      - SMALL_LLM_SERVICE_URL=http://small-llm:8005
       - EMBEDDING_SERVICE_URL=http://embedding:8002
+      - OLLAMA_SERVICE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL_NAME=${OLLAMA_MODEL_NAME:-deepseek-r1:7b}
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
-      - large-llm
-      - small-llm
       - embedding
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - math-tutor-network
 
-  # Large LLM Service
+  # Large LLM Service (kept for backward compatibility, gateway now uses LangChain directly)
   large-llm:
     build:
       context: services/large_llm
@@ -35,7 +35,7 @@ services:
     networks:
       - math-tutor-network
 
-  # Small LLM Service (Ollama)
+  # Small LLM Service (kept for backward compatibility, gateway now uses LangChain directly)
   small-llm:
     build:
       context: services/small_llm
