@@ -8,17 +8,19 @@ Lebanese High School AI Math Tutor - A FastAPI-based application for AI-powered 
 
 ## Architecture
 
-The application uses a **microservices architecture** with services communicating via REST APIs. Each service runs in its own Docker container.
+The application uses a **microservices architecture** with **LangChain** for intelligent LLM orchestration. Each service runs in its own Docker container.
 
 ### Current Services
 
-- **Gateway** (Port 8000) - API Gateway that orchestrates requests to other services
-- **Large LLM** (Port 8001) - OpenAI GPT-4 integration for complex math questions
-- **Small LLM** (Port 8005) - Ollama integration for efficient local inference (DeepSeek-R1 hosted on AUB HPC)
+- **Gateway** (Port 8000) - API Gateway using LangChain to orchestrate LLM requests
+  - Uses `langchain-openai` for OpenAI GPT-4o-mini integration
+  - Uses `langchain-ollama` for Ollama/DeepSeek-R1 on AUB HPC
+- **Embedding** (Port 8002) - OpenAI Embeddings API service
+- **Large LLM** (Port 8001) - [Optional] Kept for backward compatibility
+- **Small LLM** (Port 8005) - [Optional] Kept for backward compatibility
 
 ### Planned Services
 
-- Embedding service (Port 8002)
 - Cache service (Port 8003)
 - Complexity assessment (Port 8004)
 - Local model service (Port 8006)
@@ -132,7 +134,7 @@ OLLAMA_MODEL_NAME=deepseek-r1:7b
 
 Docker Compose loads these via the `env_file` directive.
 
-**Note**: When running small_llm in Docker, `OLLAMA_SERVICE_URL` is overridden to `http://host.docker.internal:11434` to access Ollama via SSH tunnel from the host machine.
+**Note**: When running the gateway in Docker, `OLLAMA_SERVICE_URL` is set to `http://host.docker.internal:11434` to access Ollama via SSH tunnel from the host machine. The gateway uses LangChain to communicate directly with Ollama.
 
 ## Code Quality Tools
 
@@ -185,9 +187,39 @@ raise HTTPException(
 )
 ```
 
+### LangChain Integration
+
+The gateway service uses **LangChain** for LLM orchestration:
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
+from pydantic import SecretStr
+
+# Initialize LangChain LLMs
+large_llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    temperature=0.7,
+    max_completion_tokens=1000,
+    api_key=SecretStr(Config.API_KEYS.OPENAI),
+)
+
+small_llm = ChatOllama(
+    model=Config.OLLAMA.MODEL_NAME,
+    base_url=Config.OLLAMA.SERVICE_URL,
+)
+
+# Use LangChain to invoke models
+response = await large_llm.ainvoke([
+    ("system", "You are a math tutor..."),
+    ("user", query),
+])
+answer = response.content
+```
+
 ### Inter-Service Communication
 
-Services use Python's built-in `urllib`:
+For non-LLM services (e.g., embedding), Python's built-in `urllib` is used:
 
 ```python
 from urllib.request import Request, urlopen
@@ -204,16 +236,16 @@ with urlopen(req) as response:
     result = json.loads(response.read().decode("utf-8"))
 ```
 
-Exception: Large LLM and Small LLM services use the official `openai` package (Large LLM for OpenAI API calls, Small LLM for Ollama's OpenAI-compatible API).
-
 ## Current Implementation Status
 
 ✅ **Completed**:
 
-- Gateway service with health checks and intelligent routing
-- Large LLM service with OpenAI GPT-4o-mini integration
-- Small LLM service with Ollama integration (DeepSeek-R1 on AUB HPC)
+- Gateway service with **LangChain integration** for intelligent routing
+- LangChain-OpenAI integration for large LLM (GPT-4o-mini)
+- LangChain-Ollama integration for small LLM (DeepSeek-R1 on AUB HPC)
 - Gateway routing: defaults to small_llm, optional `use_large_llm` flag, automatic fallback
+- Large LLM and Small LLM microservices (kept for backward compatibility)
+- Embedding service with OpenAI Embeddings API
 - Docker Compose setup with all services
 - Code quality tooling (isort, black, mypy)
 - CI/CD pre-merge checks

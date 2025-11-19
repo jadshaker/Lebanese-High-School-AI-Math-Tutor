@@ -4,16 +4,20 @@ An AI-powered mathematics tutoring application designed for Lebanese high school
 
 ## Architecture
 
-The application uses a microservices architecture with services communicating via REST APIs:
+The application uses a microservices architecture with **LangChain** for intelligent LLM orchestration:
 
 ```
 services/
-├── gateway/          # API Gateway - Main entry point (Port 8000)
-├── large_llm/        # Large LLM Service - OpenAI GPT-4 (Port 8001)
-└── small_llm/        # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
+├── gateway/          # API Gateway - Main entry point using LangChain (Port 8000)
+├── embedding/        # Embedding Service - OpenAI Embeddings (Port 8002)
+├── large_llm/        # [Optional] Large LLM Service - kept for backward compatibility (Port 8001)
+└── small_llm/        # [Optional] Small LLM Service - kept for backward compatibility (Port 8005)
 ```
 
-**Intelligent Routing**: The gateway defaults to the small_llm service for efficiency. Use `use_large_llm: true` in requests to explicitly route to OpenAI's GPT-4. Automatic fallback to large_llm if small_llm fails.
+**LangChain Integration**: The gateway now uses LangChain to communicate directly with LLMs:
+- **Large LLM**: Uses `langchain-openai` to connect to OpenAI GPT-4o-mini
+- **Small LLM**: Uses `langchain-ollama` to connect to Ollama (DeepSeek-R1 on AUB HPC)
+- **Intelligent Routing**: Defaults to small_llm for efficiency. Set `use_large_llm: true` to use GPT-4. Automatic fallback to large_llm if small_llm fails.
 
 ### Service Structure
 
@@ -115,9 +119,12 @@ docker compose up -d --build
 
 Services will be available at:
 
-- Gateway: `http://localhost:8000`
-- Large LLM: `http://localhost:8001`
-- Small LLM: `http://localhost:8005`
+- Gateway (with LangChain): `http://localhost:8000`
+- Embedding Service: `http://localhost:8002`
+- Large LLM (optional): `http://localhost:8001`
+- Small LLM (optional): `http://localhost:8005`
+
+**Note**: The gateway now uses LangChain to communicate directly with OpenAI and Ollama. The large_llm and small_llm services are kept for backward compatibility but are not required for normal operation.
 
 #### Stop Services
 
@@ -240,18 +247,20 @@ This runs:
 
 All configuration is managed through the `Config` class in each service's `src/config.py`:
 
-- **API Keys**: OpenAI API key
-- **Service URLs**: URLs for inter-service communication
-- **App Settings**: Title, description, version
+- **API Keys**: OpenAI API key for LangChain integration
+- **Ollama Settings**: URL and model name for small LLM
+- **LLM Settings**: Model names, temperature, and token limits for LangChain
+- **Service URLs**: URLs for embedding service communication
 
 Environment variables can be set in `.env` or through docker-compose environment settings.
 
 ## Current Implementation Status
 
-- ✅ Gateway service with health checks and intelligent routing
-- ✅ Large LLM service with OpenAI GPT-4 integration
-- ✅ Small LLM service with Ollama/DeepSeek-R1 on HPC
-- ✅ Embedding service
+- ✅ Gateway service with **LangChain integration** for intelligent routing
+- ✅ LangChain-OpenAI integration for large LLM (GPT-4o-mini)
+- ✅ LangChain-Ollama integration for small LLM (DeepSeek-R1 on HPC)
+- ✅ Embedding service with OpenAI Embeddings API
+- ✅ Large LLM and Small LLM microservices (kept for backward compatibility)
 - 🚧 Cache service (planned)
 
 ## License
