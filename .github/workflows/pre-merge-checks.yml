@@ -1,16 +1,26 @@
 name: Pre Merge Checks
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  workflow_run:
+    workflows: ['Auto Clean Code']
+    types:
+      - completed
 
 jobs:
   pre-merge-checks:
+    # Only run if auto-clean succeeded or if this is a direct PR trigger
+    if: |
+      github.event_name == 'pull_request' || 
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Important: checkout the PR branch after auto-clean
+          ref: ${{ github.event.workflow_run.head_branch || github.head_ref }}
+
       - uses: actions/setup-python@v4
         with:
           python-version: '3.14'
