@@ -13,11 +13,13 @@ services:
       - LARGE_LLM_SERVICE_URL=http://large-llm:8001
       - SMALL_LLM_SERVICE_URL=http://small-llm:8005
       - EMBEDDING_SERVICE_URL=http://embedding:8002
+      - REFORMULATOR_SERVICE_URL=http://reformulator:8009
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - large-llm
       - small-llm
       - embedding
+      - reformulator
     networks:
       - math-tutor-network
 
@@ -65,6 +67,25 @@ services:
     env_file:
       - .env
     command: uvicorn src.main:app --host 0.0.0.0 --port 8002 --reload
+    networks:
+      - math-tutor-network
+
+  # Reformulator Service
+  reformulator:
+    build:
+      context: services/reformulator
+      dockerfile: Dockerfile
+    container_name: math-tutor-reformulator
+    ports:
+      - '8009:8009'
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_SERVICE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL_NAME=${OLLAMA_MODEL_NAME:-deepseek-r1:7b}
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8009 --reload
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - math-tutor-network
 
