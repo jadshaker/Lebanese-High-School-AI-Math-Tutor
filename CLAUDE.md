@@ -150,7 +150,7 @@ Configuration:
 
 ## Important Files
 
-- `README.md` - **PRIMARY USER DOCUMENTATION** - Must be kept updated (see Documentation Maintenance section)
+- `README.md` - **PRIMARY USER DOCUMENTATION** - Must be kept updated (see Keeping README.md Updated section)
 - `CLAUDE.md` - This file - Guidance for Claude Code when working with this repository
 - `cli.py` - Development CLI for running code quality checks
 - `docker-compose.yml` - Orchestrates all microservices
@@ -364,13 +364,13 @@ ollama list
 5. **Feature Additions**:
    - Implementing new functionality (caching, verification, new routing logic)
    - Completing planned services (change from 🚧 to ✅)
-   - Example: When the cache service is implemented, update the implementation status section in README.md from "🚧 Cache service (planned)" to "✅ Cache service with [description]"
+   - Example: When the cache service is implemented, update the "Current Implementation Status" section in README.md from "🚧 Cache service (planned)" to "✅ Cache service with [description]"
 
 6. **Development Tool Changes**:
    - Modifying code quality tools or commands
    - Changing testing procedures
    - Updating the CLI or build commands
-   - Example: If you add a new command to `cli.py`, document it in the development section
+   - Example: If you add a new command to `cli.py`, document it in the "Development" section under "Code Quality Tools"
 
 **Before finalizing any task**, review README.md to ensure:
 - All user-facing changes are documented
@@ -393,7 +393,7 @@ ollama list
 - **ALWAYS** activate `.venv` before running development commands
 - **NEVER** commit `.env` file
 - **ALWAYS** add health check endpoint to new services
-- **ALWAYS** update README.md when making changes that affect users or developers (see Documentation Maintenance section)
+- **ALWAYS** update README.md when making changes that affect users or developers (see Keeping README.md Updated section)
 - **FOLLOW** the service structure pattern for consistency
 - Services are independent - each has its own `config.py` and `schemas.py`
 - Run `python3 cli.py clean` before committing changes
