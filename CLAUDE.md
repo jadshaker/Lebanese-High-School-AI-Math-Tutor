@@ -150,6 +150,8 @@ Configuration:
 
 ## Important Files
 
+- `README.md` - **PRIMARY USER DOCUMENTATION** - Must be kept updated (see Keeping README.md Updated section)
+- `CLAUDE.md` - This file - Guidance for Claude Code when working with this repository
 - `cli.py` - Development CLI for running code quality checks
 - `docker-compose.yml` - Orchestrates all microservices
 - `.env` - Environment variables (not committed)
@@ -327,6 +329,62 @@ ollama list
 - Use `0.0.0.0` binding (not `localhost`) so Docker containers can access via `host.docker.internal`
 - For direct service testing (non-Docker), `localhost:11434` works fine
 
+## Documentation Maintenance
+
+### Keeping README.md Updated
+
+**CRITICAL**: The `README.md` file is the primary documentation for users and developers. It MUST be kept in sync with code changes.
+
+**ALWAYS** update `README.md` when making changes to:
+
+1. **Architecture Changes**:
+   - Adding, removing, or modifying services
+   - Changing service ports or URLs
+   - Modifying the microservices architecture
+   - Example: If you add a new service at port 8003, update the architecture diagram and service list in README.md
+
+2. **API Changes**:
+   - Adding, removing, or modifying endpoints
+   - Changing request/response models
+   - Modifying query parameters or flags (e.g., `use_large_llm`)
+   - Example: If you add a new field to the query request, update the API endpoints section with the new field
+
+3. **Configuration Changes**:
+   - Adding new environment variables
+   - Changing configuration requirements
+   - Modifying `.env.example`
+   - Example: If you add a new API key requirement, update both the environment setup section and the example .env snippet
+
+4. **Setup/Installation Changes**:
+   - Modifying prerequisites (Python version, dependencies, external services)
+   - Changing Docker setup or docker-compose configuration
+   - Updating SSH tunnel or HPC connection instructions
+   - Example: If you change the SSH tunnel command, update the "Prerequisites: Start SSH Tunnel to HPC" section
+
+5. **Feature Additions**:
+   - Implementing new functionality (caching, verification, new routing logic)
+   - Completing planned services (change from 🚧 to ✅)
+   - Example: When the cache service is implemented, update the "Current Implementation Status" section in README.md from "🚧 Cache service (planned)" to "✅ Cache service with [description]"
+
+6. **Development Tool Changes**:
+   - Modifying code quality tools or commands
+   - Changing testing procedures
+   - Updating the CLI or build commands
+   - Example: If you add a new command to `cli.py`, document it in the "Development" section under "Code Quality Tools"
+
+**Before finalizing any task**, review README.md to ensure:
+- All user-facing changes are documented
+- Code examples are accurate and up-to-date
+- The implementation status section reflects current reality
+- Commands and examples actually work
+
+**Documentation Quality Standards**:
+- Keep explanations clear and concise
+- Include working code examples
+- Update version numbers if they change
+- Maintain consistency with existing documentation style
+- Test all commands before documenting them
+
 ## Notes for Claude Code
 
 - **EXCEPTION**: Use `openai` package for:
@@ -335,6 +393,7 @@ ollama list
 - **ALWAYS** activate `.venv` before running development commands
 - **NEVER** commit `.env` file
 - **ALWAYS** add health check endpoint to new services
+- **ALWAYS** update README.md when making changes that affect users or developers (see Keeping README.md Updated section)
 - **FOLLOW** the service structure pattern for consistency
 - Services are independent - each has its own `config.py` and `schemas.py`
 - Run `python3 cli.py clean` before committing changes
