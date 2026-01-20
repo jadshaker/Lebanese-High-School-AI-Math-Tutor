@@ -195,7 +195,7 @@ curl http://localhost:8000/health | jq
   ```json
   {
     "query": "What is the derivative of x^2?",
-    "use_large_llm": false // Optional: set to true to use GPT-4o-mini instead of Ollama (default: false)
+    "use_large_llm": false // Optional: set to true to use GPT-4o-mini instead of small_llm (Ollama) (default: false)
   }
   ```
   
@@ -222,7 +222,7 @@ curl http://localhost:8000/health | jq
   Sample Response:
   ```json
   {
-    "embedding": [0.123, -0.456, ...],  // Array of 1536 floats
+    "embedding": [0.0234, -0.0521, 0.0834, -0.0129, ...],  // Array of 1536 floats
     "model": "text-embedding-3-small",
     "dimensions": 1536
   }
