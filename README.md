@@ -9,11 +9,12 @@ The application uses a microservices architecture with services communicating vi
 ```
 services/
 ├── gateway/          # API Gateway - Main entry point (Port 8000)
-├── large_llm/        # Large LLM Service - OpenAI GPT-4 (Port 8001)
-└── small_llm/        # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
+├── large_llm/        # Large LLM Service - OpenAI GPT-4o-mini (Port 8001)
+├── small_llm/        # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
+└── embedding/        # Embedding Service - OpenAI text-embedding-3-small (Port 8002)
 ```
 
-**Intelligent Routing**: The gateway defaults to the small_llm service for efficiency. Use `use_large_llm: true` in requests to explicitly route to OpenAI's GPT-4. Automatic fallback to large_llm if small_llm fails.
+**Intelligent Routing**: The gateway defaults to the small_llm service for efficiency. Use `use_large_llm: true` in requests to explicitly route to OpenAI's GPT-4o-mini. Automatic fallback to large_llm if small_llm fails.
 
 ### Service Structure
 
@@ -117,6 +118,7 @@ Services will be available at:
 
 - Gateway: `http://localhost:8000`
 - Large LLM: `http://localhost:8001`
+- Embedding: `http://localhost:8002`
 - Small LLM: `http://localhost:8005`
 
 #### Stop Services
@@ -193,7 +195,7 @@ curl http://localhost:8000/health | jq
   ```json
   {
     "query": "What is the derivative of x^2?",
-    "use_large_llm": false // Optional: set to true to use GPT-4 instead of Ollama (default: false)
+    "use_large_llm": false // Optional: set to true to use GPT-4o-mini instead of small_llm (Ollama) (default: false)
   }
   ```
   
@@ -204,6 +206,25 @@ curl http://localhost:8000/health | jq
     "path_taken": "small_llm",
     "verified": true,
     "fallback_used": false
+  }
+  ```
+
+**Embedding Service** (`http://localhost:8002`)
+
+- `GET /health` - Health check
+- `POST /embed` - Generate embeddings for text
+  ```json
+  {
+    "text": "What is calculus?"
+  }
+  ```
+  
+  Sample Response:
+  ```json
+  {
+    "embedding": [0.0234, -0.0521, 0.0834, -0.0129, ...],  // Array of 1536 floats
+    "model": "text-embedding-3-small",
+    "dimensions": 1536
   }
   ```
 
@@ -248,11 +269,31 @@ Environment variables can be set in `.env` or through docker-compose environment
 
 ## Current Implementation Status
 
+**Completed Services**:
 - ✅ Gateway service with health checks and intelligent routing
-- ✅ Large LLM service with OpenAI GPT-4 integration
+- ✅ Large LLM service with OpenAI GPT-4o-mini integration
 - ✅ Small LLM service with Ollama/DeepSeek-R1 on HPC
-- ✅ Embedding service
-- 🚧 Cache service (planned)
+- ✅ Embedding service with OpenAI text-embedding-3-small
+
+**Planned Services**:
+- 🚧 Cache service (Port 8003)
+- 🚧 Complexity assessment service (Port 8004)
+- 🚧 Local model service (Port 8006)
+- 🚧 Verification service (Port 8007)
+
+## Data Preprocessing
+
+The `data_preprocessing/` directory contains tools for processing educational materials:
+
+```
+data_preprocessing/
+├── pdf_splitter/        # Split PDF documents into pages
+├── pdf_to_latex/        # Convert PDF documents to LaTeX format
+├── extract_exercises/   # Extract exercises from educational materials
+└── generate_solutions/  # Generate solutions for extracted exercises
+```
+
+These tools help prepare and structure the Lebanese high school mathematics curriculum content for the AI tutoring system.
 
 ## License
 
