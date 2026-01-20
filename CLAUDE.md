@@ -363,8 +363,8 @@ ollama list
 
 5. **Feature Additions**:
    - Implementing new functionality (caching, verification, new routing logic)
-   - Completing planned services from "🚧 In Progress" to "✅ Completed"
-   - Example: When the cache service is implemented, move it from planned to completed status
+   - Completing planned services (change from 🚧 to ✅)
+   - Example: When the cache service is implemented, update the implementation status section in README.md from "🚧 Cache service (planned)" to "✅ Cache service with [description]"
 
 6. **Development Tool Changes**:
    - Modifying code quality tools or commands
