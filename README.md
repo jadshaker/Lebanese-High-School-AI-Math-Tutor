@@ -9,12 +9,12 @@ The application uses a microservices architecture with services communicating vi
 ```
 services/
 ├── gateway/          # API Gateway - Main entry point (Port 8000)
-├── large_llm/        # Large LLM Service - OpenAI GPT-4 (Port 8001)
+├── large_llm/        # Large LLM Service - OpenAI GPT-4o-mini (Port 8001)
 ├── small_llm/        # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
 └── embedding/        # Embedding Service - OpenAI text-embedding-3-small (Port 8002)
 ```
 
-**Intelligent Routing**: The gateway defaults to the small_llm service for efficiency. Use `use_large_llm: true` in requests to explicitly route to OpenAI's GPT-4. Automatic fallback to large_llm if small_llm fails.
+**Intelligent Routing**: The gateway defaults to the small_llm service for efficiency. Use `use_large_llm: true` in requests to explicitly route to OpenAI's GPT-4o-mini. Automatic fallback to large_llm if small_llm fails.
 
 ### Service Structure
 
@@ -195,7 +195,7 @@ curl http://localhost:8000/health | jq
   ```json
   {
     "query": "What is the derivative of x^2?",
-    "use_large_llm": false // Optional: set to true to use GPT-4 instead of Ollama (default: false)
+    "use_large_llm": false // Optional: set to true to use GPT-4o-mini instead of Ollama (default: false)
   }
   ```
   
