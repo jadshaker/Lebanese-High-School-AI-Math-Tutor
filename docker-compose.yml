@@ -13,11 +13,13 @@ services:
       - LARGE_LLM_SERVICE_URL=http://large-llm:8001
       - SMALL_LLM_SERVICE_URL=http://small-llm:8005
       - EMBEDDING_SERVICE_URL=http://embedding:8002
+      - CACHE_SERVICE_URL=http://cache:8003
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - large-llm
       - small-llm
       - embedding
+      - cache
     networks:
       - math-tutor-network
 
@@ -65,6 +67,20 @@ services:
     env_file:
       - .env
     command: uvicorn src.main:app --host 0.0.0.0 --port 8002 --reload
+    networks:
+      - math-tutor-network
+
+  # Cache Service (Stub)
+  cache:
+    build:
+      context: services/cache
+      dockerfile: Dockerfile
+    container_name: math-tutor-cache
+    ports:
+      - '8003:8003'
+    env_file:
+      - .env
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8003 --reload
     networks:
       - math-tutor-network
 
