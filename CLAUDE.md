@@ -22,7 +22,6 @@ The application uses a **microservices architecture** with services communicatin
 - Cache service (Port 8003)
 - Complexity assessment (Port 8004)
 - Local model service (Port 8006)
-- Verification service (Port 8007)
 
 ## Service Structure
 
@@ -223,8 +222,7 @@ Exception: Large LLM and Small LLM services use the official `openai` package (L
 
 🚧 **In Progress**:
 
-- Additional microservices (embedding, cache, complexity assessment, verification)
-- Request verification
+- Additional microservices (embedding, cache, complexity assessment)
 - Caching strategy
 
 ## Adding New Services

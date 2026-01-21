@@ -279,7 +279,6 @@ Environment variables can be set in `.env` or through docker-compose environment
 - 🚧 Cache service (Port 8003)
 - 🚧 Complexity assessment service (Port 8004)
 - 🚧 Local model service (Port 8006)
-- 🚧 Verification service (Port 8007)
 
 ## Data Preprocessing
 
