@@ -13,15 +13,17 @@ The application uses a **microservices architecture** with services communicatin
 ### Current Services
 
 - **Gateway** (Port 8000) - API Gateway that orchestrates requests to other services
-- **Large LLM** (Port 8001) - OpenAI GPT-4 integration for complex math questions
+- **Large LLM** (Port 8001) - OpenAI GPT-4o-mini integration for complex math questions
+- **Embedding** (Port 8002) - OpenAI text-embedding-3-small for vector embeddings
+- **Cache** (Port 8003) - Vector storage with cosine similarity search (stub implementation)
 - **Small LLM** (Port 8005) - Ollama integration for efficient local inference (DeepSeek-R1 hosted on AUB HPC)
+- **Fine-Tuned Model** (Port 8006) - Ollama integration for fine-tuned model (TinyLlama hosted on AUB HPC)
 
 ### Planned Services
 
-- Embedding service (Port 8002)
-- Cache service (Port 8003)
-- Complexity assessment (Port 8004)
-- Local model service (Port 8006)
+- Input Processor (Port 8004)
+- Reformulator (Port 8007)
+- Full cache implementation with vector database
 
 ## Service Structure
 
@@ -124,14 +126,22 @@ All environment variables are defined in `.env` at the project root:
 # API Keys
 OPENAI_API_KEY=sk-...
 
-# Ollama Configuration (for small_llm service)
-OLLAMA_SERVICE_URL=http://localhost:11434
-OLLAMA_MODEL_NAME=deepseek-r1:7b
+# Small LLM Service Configuration (Ollama)
+SMALL_LLM_SERVICE_URL=http://localhost:11434
+SMALL_LLM_MODEL_NAME=deepseek-r1:7b
+
+# Embedding Service Configuration
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMENSIONS=1536
+
+# Fine-Tuned Model Service Configuration (Ollama)
+FINE_TUNED_MODEL_SERVICE_URL=http://localhost:11434
+FINE_TUNED_MODEL_NAME=tinyllama:latest
 ```
 
 Docker Compose loads these via the `env_file` directive.
 
-**Note**: When running small_llm in Docker, `OLLAMA_SERVICE_URL` is overridden to `http://host.docker.internal:11434` to access Ollama via SSH tunnel from the host machine.
+**Note**: Both `small_llm` and `fine_tuned_model` services connect to the same Ollama instance on the HPC. When running in Docker, the service URLs are overridden to `http://host.docker.internal:11434` to access Ollama via SSH tunnel from the host machine. The services differentiate by using different model names.
 
 ## Code Quality Tools
 
@@ -213,7 +223,10 @@ Exception: Large LLM and Small LLM services use the official `openai` package (L
 
 - Gateway service with health checks and intelligent routing
 - Large LLM service with OpenAI GPT-4o-mini integration
+- Embedding service with OpenAI text-embedding-3-small (1536 dimensions)
+- Cache service (stub) with similarity search, save, and tutoring endpoints
 - Small LLM service with Ollama integration (DeepSeek-R1 on AUB HPC)
+- Fine-Tuned Model service with Ollama integration (TinyLlama on AUB HPC)
 - Gateway routing: defaults to small_llm, optional `use_large_llm` flag, automatic fallback
 - Docker Compose setup with all services
 - Code quality tooling (isort, black, mypy)
@@ -222,8 +235,9 @@ Exception: Large LLM and Small LLM services use the official `openai` package (L
 
 🚧 **In Progress**:
 
-- Additional microservices (embedding, cache, complexity assessment)
-- Caching strategy
+- Input Processor service
+- Reformulator service
+- Full cache implementation with vector database
 
 ## Adding New Services
 
@@ -298,33 +312,45 @@ curl -X POST http://localhost:8000/query \
 docker compose up --build
 ```
 
-### Small LLM Service - Ollama SSH Tunnel Setup
+### Small LLM & Fine-Tuned Model Services - Ollama SSH Tunnel Setup
 
-The small_llm service connects to Ollama running on AUB's HPC (Octopus cluster, onode11). A double SSH tunnel is required:
+Both `small_llm` and `fine_tuned_model` services connect to the same Ollama instance running on AUB's HPC (Octopus cluster). They use different models but share the same tunnel. A double SSH tunnel is required:
 
 **Start SSH Tunnel** (from development machine):
 ```bash
 # Bind to all interfaces (0.0.0.0) so Docker can access it
-ssh -L 0.0.0.0:11434:localhost:11434 jss31@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 onode11
+ssh -L 0.0.0.0:11434:localhost:11434 jss31@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 onode26
 ```
 
 This creates:
 - **First tunnel**: Dev machine port 11434 → Octopus port 11434
-- **Second tunnel**: Octopus port 11434 → onode11 port 11434 (where Ollama runs)
+- **Second tunnel**: Octopus port 11434 → onode26 port 11434 (where Ollama runs)
 
-**On onode11** (HPC compute node):
+**On the HPC compute node** (e.g., onode26):
 ```bash
+# Set up Ollama to use shared models and avoid NFS issues
+module load ollama
+export OLLAMA_MODELS=/scratch/shared/ai/models/llms/ollama/models
+export TMPDIR=/scratch/<your-user-id>/tmp
+export OLLAMA_TMPDIR=/scratch/<your-user-id>/tmp
+mkdir -p /scratch/<your-user-id>/tmp
+
 # Start Ollama server (in screen/tmux for persistence)
 screen -S ollama
 ollama serve
 
-# Verify Ollama is running
-ollama list
+# In another terminal, load both models (they stay in memory)
+ollama run deepseek-r1:7b --keepalive -1m    # For small_llm service
+# Press Ctrl+C to exit chat (model stays loaded)
+
+ollama run tinyllama:latest --keepalive -1m  # For fine_tuned_model service
+# Press Ctrl+C to exit chat (model stays loaded)
 ```
 
 **Important**:
 - Keep SSH tunnel running while services are active
 - Use `0.0.0.0` binding (not `localhost`) so Docker containers can access via `host.docker.internal`
+- Both models run in the same Ollama instance, differentiated by model name
 - For direct service testing (non-Docker), `localhost:11434` works fine
 
 ## Documentation Maintenance
@@ -388,6 +414,7 @@ ollama list
 - **EXCEPTION**: Use `openai` package for:
   - Large LLM service: OpenAI API calls
   - Small LLM service: Ollama's OpenAI-compatible API
+  - Fine-Tuned Model service: Ollama's OpenAI-compatible API
 - **ALWAYS** activate `.venv` before running development commands
 - **NEVER** commit `.env` file
 - **ALWAYS** add health check endpoint to new services
@@ -395,4 +422,5 @@ ollama list
 - **FOLLOW** the service structure pattern for consistency
 - Services are independent - each has its own `config.py` and `schemas.py`
 - Run `python3 cli.py clean` before committing changes
-- For small_llm service: ensure SSH tunnel to HPC is active before testing
+- For small_llm and fine_tuned_model services: ensure SSH tunnel to HPC is active and both models are loaded before testing
+- Both small_llm and fine_tuned_model use the same Ollama instance but different model names (SMALL_LLM_MODEL_NAME and FINE_TUNED_MODEL_NAME)

@@ -6,5 +6,5 @@ load_dotenv()
 
 
 class Config:
-    OLLAMA_SERVICE_URL = os.getenv("OLLAMA_SERVICE_URL", "http://localhost:11434")
-    OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "deepseek-r1:7b")
+    SMALL_LLM_SERVICE_URL = os.getenv("SMALL_LLM_SERVICE_URL", "http://localhost:11434")
+    SMALL_LLM_MODEL_NAME = os.getenv("SMALL_LLM_MODEL_NAME", "deepseek-r1:7b")

@@ -8,10 +8,12 @@ The application uses a microservices architecture with services communicating vi
 
 ```
 services/
-├── gateway/          # API Gateway - Main entry point (Port 8000)
-├── large_llm/        # Large LLM Service - OpenAI GPT-4o-mini (Port 8001)
-├── small_llm/        # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
-└── embedding/        # Embedding Service - OpenAI text-embedding-3-small (Port 8002)
+├── gateway/            # API Gateway - Main entry point (Port 8000)
+├── large_llm/          # Large LLM Service - OpenAI GPT-4o-mini (Port 8001)
+├── embedding/          # Embedding Service - OpenAI text-embedding-3-small (Port 8002)
+├── cache/              # Cache Service - Vector storage (stub) (Port 8003)
+├── small_llm/          # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
+└── fine_tuned_model/   # Fine-Tuned Model Service - Ollama/TinyLlama on HPC (Port 8006)
 ```
 
 **Intelligent Routing**: The gateway defaults to the small_llm service for efficiency. Use `use_large_llm: true` in requests to explicitly route to OpenAI's GPT-4o-mini. Automatic fallback to large_llm if small_llm fails.
@@ -51,13 +53,17 @@ services/<service-name>/
 OPENAI_API_KEY=your_openai_api_key_here
 MINERU_API_KEY=your_mineru_api_key_here
 
-# Ollama Configuration (for small_llm service)
-OLLAMA_SERVICE_URL=http://localhost:11434
-OLLAMA_MODEL_NAME=deepseek-r1:7b
+# Small LLM Service Configuration (Ollama)
+SMALL_LLM_SERVICE_URL=http://localhost:11434
+SMALL_LLM_MODEL_NAME=deepseek-r1:7b
 
 # Embedding Service Configuration
 EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
+
+# Fine-Tuned Model Service Configuration (Ollama)
+FINE_TUNED_MODEL_SERVICE_URL=http://localhost:11434
+FINE_TUNED_MODEL_NAME=tinyllama:latest
 ```
 
 ### Running with Docker
@@ -95,14 +101,21 @@ ssh -L 11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434:localho
 
 This way we have a 2 way tunnel to the node we are connected to on `octopus`.
 
-After setting up the connection with `octopus`, we have to run the model now using the below command in the same terminal, change `deepseek-r1:7b` with the model you want to run on `ollama`:
+After setting up the connection with `octopus`, we have to run the models now. Both `small_llm` and `fine_tuned_model` services use the same Ollama instance, so you need to load both models:
 
 ```bash
 module load ollama
+
+# Load the small_llm model
 ollama run deepseek-r1:7b --keepalive -1m
+# Press Ctrl+C to exit the chat (model stays loaded)
+
+# Load the fine-tuned model
+ollama run tinyllama:latest --keepalive -1m
+# Press Ctrl+C to exit the chat (model stays loaded)
 ```
 
-This could take up to a few minutes depending on the number of parameters. Once you are able to send a message to the model you are set up; you can test the model in the terminal if you want.
+This could take up to a few minutes depending on the number of parameters. Both models will remain loaded in memory and accessible via the API.
 
 #### Start All Services
 
@@ -272,13 +285,15 @@ Environment variables can be set in `.env` or through docker-compose environment
 **Completed Services**:
 - ✅ Gateway service with health checks and intelligent routing
 - ✅ Large LLM service with OpenAI GPT-4o-mini integration
-- ✅ Small LLM service with Ollama/DeepSeek-R1 on HPC
 - ✅ Embedding service with OpenAI text-embedding-3-small
+- ✅ Cache service (stub) with vector similarity search endpoints (Port 8003)
+- ✅ Small LLM service with Ollama/DeepSeek-R1 on HPC (Port 8005)
+- ✅ Fine-Tuned Model service with Ollama/TinyLlama on HPC (Port 8006)
 
 **Planned Services**:
-- 🚧 Cache service (Port 8003)
-- 🚧 Complexity assessment service (Port 8004)
-- 🚧 Local model service (Port 8006)
+- 🚧 Input Processor service (Port 8004)
+- 🚧 Reformulator service (Port 8007)
+- 🚧 Full cache implementation with vector database
 
 ## Data Preprocessing
 
