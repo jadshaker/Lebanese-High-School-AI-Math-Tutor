@@ -14,12 +14,14 @@ services:
       - SMALL_LLM_SERVICE_URL=http://small-llm:8005
       - EMBEDDING_SERVICE_URL=http://embedding:8002
       - CACHE_SERVICE_URL=http://cache:8003
+      - FINE_TUNED_MODEL_SERVICE_URL=http://fine-tuned-model:8006
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - large-llm
       - small-llm
       - embedding
       - cache
+      - fine-tuned-model
     networks:
       - math-tutor-network
 
@@ -48,8 +50,8 @@ services:
     env_file:
       - .env
     environment:
-      - OLLAMA_SERVICE_URL=http://host.docker.internal:11434
-      - OLLAMA_MODEL_NAME=${OLLAMA_MODEL_NAME:-deepseek-r1:7b}
+      - SMALL_LLM_SERVICE_URL=http://host.docker.internal:11434
+      - SMALL_LLM_MODEL_NAME=${SMALL_LLM_MODEL_NAME:-deepseek-r1:7b}
     command: uvicorn src.main:app --host 0.0.0.0 --port 8005 --reload
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -81,6 +83,25 @@ services:
     env_file:
       - .env
     command: uvicorn src.main:app --host 0.0.0.0 --port 8003 --reload
+    networks:
+      - math-tutor-network
+
+  # Fine-Tuned Model Service (Ollama)
+  fine-tuned-model:
+    build:
+      context: services/fine_tuned_model
+      dockerfile: Dockerfile
+    container_name: math-tutor-fine-tuned-model
+    ports:
+      - '8006:8006'
+    env_file:
+      - .env
+    environment:
+      - FINE_TUNED_MODEL_SERVICE_URL=http://host.docker.internal:11434
+      - FINE_TUNED_MODEL_NAME=${FINE_TUNED_MODEL_NAME:-tinyllama:latest}
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8006 --reload
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - math-tutor-network
 

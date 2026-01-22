@@ -6,10 +6,10 @@ from openai import OpenAI
 from src.config import Config
 from src.models.schemas import QueryRequest, QueryResponse
 
-app = FastAPI(title="Small LLM Service", version="1.0.0")
+app = FastAPI(title="Fine-Tuned Model Service", version="1.0.0")
 
 client = OpenAI(
-    base_url=f"{Config.SMALL_LLM_SERVICE_URL}/v1",
+    base_url=f"{Config.FINE_TUNED_MODEL_SERVICE_URL}/v1",
     api_key="ollama",
 )
 
@@ -22,7 +22,7 @@ def health_check() -> dict[str, str | bool]:
 
     try:
         req = Request(
-            f"{Config.SMALL_LLM_SERVICE_URL}/api/tags",
+            f"{Config.FINE_TUNED_MODEL_SERVICE_URL}/api/tags",
             method="GET",
         )
 
@@ -32,7 +32,7 @@ def health_check() -> dict[str, str | bool]:
 
             models = result.get("models", [])
             model_available = any(
-                model.get("name") == Config.SMALL_LLM_MODEL_NAME for model in models
+                model.get("name") == Config.FINE_TUNED_MODEL_NAME for model in models
             )
 
     except Exception:
@@ -40,47 +40,47 @@ def health_check() -> dict[str, str | bool]:
 
     return {
         "status": "healthy" if ollama_reachable and model_available else "degraded",
-        "service": "small_llm",
+        "service": "fine_tuned_model",
         "ollama_reachable": ollama_reachable,
         "model_available": model_available,
-        "configured_model": Config.SMALL_LLM_MODEL_NAME,
+        "configured_model": Config.FINE_TUNED_MODEL_NAME,
     }
 
 
 @app.post("/query", response_model=QueryResponse)
-def query_small_llm(request: QueryRequest) -> QueryResponse:
+def query_fine_tuned_model(request: QueryRequest) -> QueryResponse:
     """
-    Query the Ollama service hosted on AUB HPC.
+    Query the fine-tuned model via Ollama service.
 
     This endpoint forwards the query to the Ollama server and returns the response.
 
     Args:
-        request: QueryRequest containing the user's math question
+        request: QueryRequest containing the user's question
 
     Returns:
-        QueryResponse with the answer from Ollama
+        QueryResponse with the answer from the fine-tuned model
 
     Raises:
         HTTPException: If Ollama service is unavailable or returns an error
     """
     try:
         response = client.chat.completions.create(
-            model=Config.SMALL_LLM_MODEL_NAME,
+            model=Config.FINE_TUNED_MODEL_NAME,
             messages=[{"role": "user", "content": request.query}],
             extra_body={"keep_alive": -1},
         )
 
         answer = response.choices[0].message.content or ""
-        return QueryResponse(answer=answer, model_used=Config.SMALL_LLM_MODEL_NAME)
+        return QueryResponse(answer=answer, model_used=Config.FINE_TUNED_MODEL_NAME)
 
     except Exception as e:
         raise HTTPException(
             status_code=503,
-            detail=f"Small LLM service error: {str(e)}",
+            detail=f"Fine-tuned model service error: {str(e)}",
         )
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8005)
+    uvicorn.run(app, host="0.0.0.0", port=8006)
