@@ -105,6 +105,31 @@ services:
     networks:
       - math-tutor-network
 
+  # Answer Retrieval Service (Orchestrator for Phase 2)
+  answer-retrieval:
+    build:
+      context: services/answer_retrieval
+      dockerfile: Dockerfile
+    container_name: math-tutor-answer-retrieval
+    ports:
+      - '8008:8008'
+    env_file:
+      - .env
+    environment:
+      - EMBEDDING_SERVICE_URL=http://embedding:8002
+      - CACHE_SERVICE_URL=http://cache:8003
+      - SMALL_LLM_SERVICE_URL=http://small-llm:8005
+      - LARGE_LLM_SERVICE_URL=http://large-llm:8001
+      - CACHE_TOP_K=${CACHE_TOP_K:-5}
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8008 --reload
+    depends_on:
+      - embedding
+      - cache
+      - small-llm
+      - large-llm
+    networks:
+      - math-tutor-network
+
 networks:
   math-tutor-network:
     driver: bridge

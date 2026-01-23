@@ -13,7 +13,8 @@ services/
 ├── embedding/          # Embedding Service - OpenAI text-embedding-3-small (Port 8002)
 ├── cache/              # Cache Service - Vector storage (stub) (Port 8003)
 ├── small_llm/          # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
-└── fine_tuned_model/   # Fine-Tuned Model Service - Ollama/TinyLlama on HPC (Port 8006)
+├── fine_tuned_model/   # Fine-Tuned Model Service - Ollama/TinyLlama on HPC (Port 8006)
+└── answer_retrieval/   # Answer Retrieval Service - Orchestrator for Phase 2 (Port 8008)
 ```
 
 **Intelligent Routing**: The gateway defaults to the small_llm service for efficiency. Use `use_large_llm: true` in requests to explicitly route to OpenAI's GPT-4o-mini. Automatic fallback to large_llm if small_llm fails.
@@ -64,6 +65,9 @@ EMBEDDING_DIMENSIONS=1536
 # Fine-Tuned Model Service Configuration (Ollama)
 FINE_TUNED_MODEL_SERVICE_URL=http://localhost:11434
 FINE_TUNED_MODEL_NAME=tinyllama:latest
+
+# Answer Retrieval Service Configuration
+CACHE_TOP_K=5
 ```
 
 ### Running with Docker
@@ -132,7 +136,10 @@ Services will be available at:
 - Gateway: `http://localhost:8000`
 - Large LLM: `http://localhost:8001`
 - Embedding: `http://localhost:8002`
+- Cache: `http://localhost:8003`
 - Small LLM: `http://localhost:8005`
+- Fine-Tuned Model: `http://localhost:8006`
+- Answer Retrieval: `http://localhost:8008`
 
 #### Stop Services
 
@@ -231,7 +238,7 @@ curl http://localhost:8000/health | jq
     "text": "What is calculus?"
   }
   ```
-  
+
   Sample Response:
   ```json
   {
@@ -240,6 +247,44 @@ curl http://localhost:8000/health | jq
     "dimensions": 1536
   }
   ```
+
+**Answer Retrieval Service** (`http://localhost:8008`)
+
+- `GET /health` - Health check (includes status of all dependent services: embedding, cache, small_llm, large_llm)
+- `POST /retrieve-answer` - Orchestrated answer retrieval with caching
+  ```json
+  {
+    "query": "What is the derivative of x^2?"
+  }
+  ```
+
+  Sample Response (from cache via small_llm):
+  ```json
+  {
+    "answer": "The derivative of x^2 is 2x",
+    "source": "small_llm",
+    "used_cache": true,
+    "confidence": 0.95
+  }
+  ```
+
+  Sample Response (from large_llm):
+  ```json
+  {
+    "answer": "The derivative of x^2 is 2x. Using the power rule...",
+    "source": "large_llm",
+    "used_cache": false,
+    "confidence": null
+  }
+  ```
+
+  **Flow**:
+  1. Embeds query via Embedding Service
+  2. Searches cache for similar Q&A pairs (top-k=5)
+  3. Queries Small LLM with cached context
+  4. If exact match found (similarity ≥ 0.95), returns cached answer
+  5. Otherwise, queries Large LLM for fresh answer
+  6. Saves Large LLM answer to cache for future use
 
 ## Development
 
@@ -289,6 +334,7 @@ Environment variables can be set in `.env` or through docker-compose environment
 - ✅ Cache service (stub) with vector similarity search endpoints (Port 8003)
 - ✅ Small LLM service with Ollama/DeepSeek-R1 on HPC (Port 8005)
 - ✅ Fine-Tuned Model service with Ollama/TinyLlama on HPC (Port 8006)
+- ✅ Answer Retrieval service with complete Phase 2 orchestration (Port 8008)
 
 **Planned Services**:
 - 🚧 Input Processor service (Port 8004)

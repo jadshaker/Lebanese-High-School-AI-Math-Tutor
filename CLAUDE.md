@@ -18,6 +18,7 @@ The application uses a **microservices architecture** with services communicatin
 - **Cache** (Port 8003) - Vector storage with cosine similarity search (stub implementation)
 - **Small LLM** (Port 8005) - Ollama integration for efficient local inference (DeepSeek-R1 hosted on AUB HPC)
 - **Fine-Tuned Model** (Port 8006) - Ollama integration for fine-tuned model (TinyLlama hosted on AUB HPC)
+- **Answer Retrieval** (Port 8008) - Orchestrator service for Phase 2 answer retrieval flow with caching
 
 ### Planned Services
 
@@ -137,6 +138,9 @@ EMBEDDING_DIMENSIONS=1536
 # Fine-Tuned Model Service Configuration (Ollama)
 FINE_TUNED_MODEL_SERVICE_URL=http://localhost:11434
 FINE_TUNED_MODEL_NAME=tinyllama:latest
+
+# Answer Retrieval Service Configuration
+CACHE_TOP_K=5
 ```
 
 Docker Compose loads these via the `env_file` directive.
@@ -227,6 +231,7 @@ Exception: Large LLM and Small LLM services use the official `openai` package (L
 - Cache service (stub) with similarity search, save, and tutoring endpoints
 - Small LLM service with Ollama integration (DeepSeek-R1 on AUB HPC)
 - Fine-Tuned Model service with Ollama integration (TinyLlama on AUB HPC)
+- Answer Retrieval service with Phase 2 orchestration: Embed → Cache → Small LLM → (conditional) Large LLM → Save
 - Gateway routing: defaults to small_llm, optional `use_large_llm` flag, automatic fallback
 - Docker Compose setup with all services
 - Code quality tooling (isort, black, mypy)
@@ -258,7 +263,7 @@ When creating a new service:
    WORKDIR /app
    COPY requirements.txt .
    RUN pip install --no-cache-dir -r requirements.txt
-   COPY src/ src/
+   COPY . .
    EXPOSE <port>
    CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "<port>"]
    ```
