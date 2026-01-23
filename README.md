@@ -16,7 +16,8 @@ services/
 ├── small_llm/          # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
 ├── fine_tuned_model/   # Fine-Tuned Model Service - Ollama/TinyLlama on HPC (Port 8006)
 ├── reformulator/       # Reformulator Service - Query improvement via LLM (Port 8007)
-└── answer_retrieval/   # Answer Retrieval Service - Orchestrator for Phase 2 (Port 8008)
+├── answer_retrieval/   # Answer Retrieval Service - Orchestrator for Phase 2 (Port 8008)
+└── data_processing/    # Data Processing Service - Orchestrator for Phase 1 (Port 8009)
 ```
 
 **Intelligent Routing**: The gateway defaults to the small_llm service for efficiency. Use `use_large_llm: true` in requests to explicitly route to OpenAI's GPT-4o-mini. Automatic fallback to large_llm if small_llm fails.
@@ -70,6 +71,10 @@ FINE_TUNED_MODEL_NAME=tinyllama:latest
 
 # Answer Retrieval Service Configuration
 CACHE_TOP_K=5
+
+# Data Processing Service Configuration (Phase 1)
+INPUT_PROCESSOR_SERVICE_URL=http://input-processor:8004
+REFORMULATOR_SERVICE_URL=http://reformulator:8007
 ```
 
 ### Running with Docker
@@ -144,6 +149,7 @@ Services will be available at:
 - Fine-Tuned Model: `http://localhost:8006`
 - Reformulator: `http://localhost:8007`
 - Answer Retrieval: `http://localhost:8008`
+- Data Processing: `http://localhost:8009`
 
 #### Stop Services
 
@@ -364,6 +370,42 @@ curl http://localhost:8000/health | jq
   5. Otherwise, queries Large LLM for fresh answer
   6. Saves Large LLM answer to cache for future use
 
+**Data Processing Service** (`http://localhost:8009`)
+
+- `GET /health` - Health check (includes status of dependent services: input_processor, reformulator)
+- `POST /process-query` - Orchestrated Phase 1 data processing pipeline
+  ```json
+  {
+    "input": "derivative of x squared",
+    "type": "text"  // "text" or "image"
+  }
+  ```
+
+  Sample Response:
+  ```json
+  {
+    "reformulated_query": "What is the derivative of f(x) = x²?",
+    "original_input": "derivative of x squared",
+    "input_type": "text",
+    "processing_metadata": {
+      "input_processor": {
+        "preprocessing_applied": ["strip_whitespace", "normalize_spacing"]
+      },
+      "reformulator": {
+        "improvements_made": [
+          "standardized mathematical notation",
+          "added clarity and completeness"
+        ]
+      }
+    }
+  }
+  ```
+
+  **Flow**:
+  1. Processes raw input via Input Processor Service
+  2. Reformulates processed input via Reformulator Service
+  3. Returns reformulated query with metadata from both services
+
 ## Development
 
 ### Code Quality Tools
@@ -415,6 +457,7 @@ Environment variables can be set in `.env` or through docker-compose environment
 - ✅ Fine-Tuned Model service with Ollama/TinyLlama on HPC (Port 8006)
 - ✅ Reformulator service with LLM-powered query improvement (Port 8007)
 - ✅ Answer Retrieval service with complete Phase 2 orchestration (Port 8008)
+- ✅ Data Processing service with Phase 1 orchestration (Port 8009)
 
 **Planned Services**:
 - 🚧 UI service (Port 3000)
