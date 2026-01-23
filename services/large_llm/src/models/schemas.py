@@ -1,21 +1,52 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
 
-class GenerateRequest(BaseModel):
-    """Request to generate an answer"""
+class ChatMessage(BaseModel):
+    """A single chat message"""
 
-    query: str = Field(..., description="User's math question")
-
-
-class GenerateResponse(BaseModel):
-    """Response from answer generation"""
-
-    answer: str = Field(..., description="Generated answer")
-    model_used: str = Field(
-        ..., description="Model identifier that generated the response"
+    role: Literal["system", "user", "assistant"] = Field(
+        ..., description="Role of the message sender"
     )
-    confidence: Optional[float] = Field(
-        None, ge=0.0, le=1.0, description="Model's confidence in answer"
+    content: str = Field(..., description="Message content")
+
+
+class ChatCompletionRequest(BaseModel):
+    """OpenAI-compatible chat completion request"""
+
+    model: str = Field(default="gpt-4o-mini", description="Model to use")
+    messages: list[ChatMessage] = Field(..., description="List of chat messages")
+    temperature: Optional[float] = Field(
+        default=0.7, ge=0.0, le=2.0, description="Sampling temperature"
     )
+    max_tokens: Optional[int] = Field(
+        default=1000, gt=0, description="Maximum tokens to generate"
+    )
+
+
+class ChatCompletionMessageResponse(BaseModel):
+    """The message in a chat completion choice"""
+
+    role: Literal["assistant"] = Field(default="assistant")
+    content: str = Field(..., description="Generated response content")
+
+
+class ChatCompletionChoice(BaseModel):
+    """A single choice in the completion response"""
+
+    index: int = Field(..., description="Choice index")
+    message: ChatCompletionMessageResponse = Field(..., description="Response message")
+    finish_reason: Literal["stop", "length"] = Field(
+        default="stop", description="Why generation stopped"
+    )
+
+
+class ChatCompletionResponse(BaseModel):
+    """OpenAI-compatible chat completion response"""
+
+    id: str = Field(..., description="Unique completion ID")
+    object: Literal["chat.completion"] = Field(default="chat.completion")
+    created: int = Field(..., description="Unix timestamp of creation")
+    model: str = Field(..., description="Model used for generation")
+    choices: list[ChatCompletionChoice] = Field(..., description="Completion choices")

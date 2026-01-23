@@ -1,14 +1,36 @@
+from typing import Any, Literal, Optional
+
 from pydantic import BaseModel, Field
 
 
-class QueryRequest(BaseModel):
-    """Request to query the fine-tuned model"""
+class ChatMessage(BaseModel):
+    """A single chat message"""
 
-    query: str = Field(..., description="User's question")
+    role: Literal["system", "user", "assistant"] = Field(
+        ..., description="Role of the message sender"
+    )
+    content: str = Field(..., description="Message content")
 
 
-class QueryResponse(BaseModel):
-    """Response from the fine-tuned model"""
+class ChatCompletionRequest(BaseModel):
+    """OpenAI-compatible chat completion request"""
 
-    answer: str = Field(..., description="Generated answer")
-    model_used: str = Field(..., description="Model identifier used for response")
+    model: str = Field(..., description="Model to use")
+    messages: list[ChatMessage] = Field(..., description="List of chat messages")
+    temperature: Optional[float] = Field(
+        default=0.7, ge=0.0, le=2.0, description="Sampling temperature"
+    )
+    max_tokens: Optional[int] = Field(default=None, description="Maximum tokens")
+    stream: Optional[bool] = Field(default=False, description="Stream responses")
+
+
+class ChatCompletionResponse(BaseModel):
+    """OpenAI-compatible chat completion response (pass-through from Ollama)"""
+
+    model_config = {"extra": "allow"}
+
+    id: str
+    object: str
+    created: int
+    model: str
+    choices: list[dict[str, Any]]

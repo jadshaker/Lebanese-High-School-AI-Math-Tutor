@@ -1,31 +1,36 @@
+from typing import Any, Literal, Optional
+
 from pydantic import BaseModel, Field
 
 
-class CachedResult(BaseModel):
-    """A cached Q&A result from similarity search"""
+class ChatMessage(BaseModel):
+    """A single chat message"""
 
-    question: str = Field(..., description="Cached question")
-    answer: str = Field(..., description="Cached answer")
-    similarity_score: float = Field(..., description="Similarity score")
-
-
-class QueryRequest(BaseModel):
-    """Request model for querying the small LLM."""
-
-    query: str = Field(..., description="User's math question")
-    cached_results: list[CachedResult] | None = Field(
-        None, description="Optional cached similar Q&A pairs from vector search"
+    role: Literal["system", "user", "assistant"] = Field(
+        ..., description="Role of the message sender"
     )
+    content: str = Field(..., description="Message content")
 
 
-class QueryResponse(BaseModel):
-    """Response model from the small LLM."""
+class ChatCompletionRequest(BaseModel):
+    """OpenAI-compatible chat completion request"""
 
-    answer: str | None = Field(..., description="Answer from the small LLM")
-    model_used: str = Field(default="ollama", description="Model identifier")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Confidence in the answer"
+    model: str = Field(..., description="Model to use")
+    messages: list[ChatMessage] = Field(..., description="List of chat messages")
+    temperature: Optional[float] = Field(
+        default=0.7, ge=0.0, le=2.0, description="Sampling temperature"
     )
-    is_exact_match: bool = Field(
-        ..., description="Whether an exact match was found in cached results"
-    )
+    max_tokens: Optional[int] = Field(default=None, description="Maximum tokens")
+    stream: Optional[bool] = Field(default=False, description="Stream responses")
+
+
+class ChatCompletionResponse(BaseModel):
+    """OpenAI-compatible chat completion response (pass-through from Ollama)"""
+
+    model_config = {"extra": "allow"}
+
+    id: str
+    object: str
+    created: int
+    model: str
+    choices: list[dict[str, Any]]

@@ -104,11 +104,14 @@ Respond ONLY with the reformulated question. Do not add explanations, introducti
 
 Reformulated question:"""
 
-    # Prepare request to Small LLM
-    payload = {"query": prompt, "cached_results": None}
+    # Prepare request to Small LLM using OpenAI chat completions format
+    payload = {
+        "model": "deepseek-r1:7b",
+        "messages": [{"role": "user", "content": prompt}],
+    }
 
     req = Request(
-        f"{Config.SERVICES.SMALL_LLM_URL}/query",
+        f"{Config.SERVICES.SMALL_LLM_URL}/v1/chat/completions",
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -117,7 +120,7 @@ Reformulated question:"""
     try:
         with urlopen(req, timeout=30) as response:
             result = json.loads(response.read().decode("utf-8"))
-            reformulated = result.get("answer", "").strip()
+            reformulated = result["choices"][0]["message"]["content"].strip()
 
             # Clean up the response
             reformulated = _clean_llm_response(reformulated)

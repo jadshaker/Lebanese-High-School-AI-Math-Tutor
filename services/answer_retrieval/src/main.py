@@ -190,7 +190,7 @@ async def _search_cache(embedding: list[float]) -> list[dict]:
 
 async def _query_small_llm(query: str, cached_results: list[dict]) -> dict:
     """
-    Query Small LLM with cached context
+    Query Small LLM with cached context using OpenAI chat completions format
 
     Args:
         query: User's question
@@ -203,32 +203,58 @@ async def _query_small_llm(query: str, cached_results: list[dict]) -> dict:
         HTTPException: If small LLM service fails
     """
     try:
-        # Format cached results for Small LLM
-        formatted_cache = (
-            [
-                {
-                    "question": r["question"],
-                    "answer": r["answer"],
-                    "similarity_score": r["similarity_score"],
-                }
-                for r in cached_results
-            ]
-            if cached_results
-            else None
-        )
+        # Check for exact match in cached results (similarity >= 0.95)
+        if cached_results:
+            for cached in cached_results:
+                if cached.get("similarity_score", 0) >= 0.95:
+                    # Found exact match, return cached answer
+                    return {
+                        "answer": cached["answer"],
+                        "confidence": cached["similarity_score"],
+                        "is_exact_match": True,
+                    }
 
+        # No exact match - build OpenAI messages format
+        messages = []
+
+        # Add system message with cached context if available
+        if cached_results and len(cached_results) > 0:
+            context = "You are a math tutor. Here are some similar questions and answers for context:\n\n"
+            for i, cached in enumerate(cached_results[:3], 1):
+                context += f"{i}. Q: {cached['question']}\n   A: {cached['answer']}\n\n"
+            context += "Use these examples to help answer the user's question."
+            messages.append({"role": "system", "content": context})
+        else:
+            messages.append({"role": "system", "content": "You are a math tutor."})
+
+        # Add user message
+        messages.append({"role": "user", "content": query})
+
+        # Call Small LLM with OpenAI format
         req = Request(
-            f"{Config.SERVICES.SMALL_LLM_URL}/query",
-            data=json.dumps({"query": query, "cached_results": formatted_cache}).encode(
-                "utf-8"
-            ),
+            f"{Config.SERVICES.SMALL_LLM_URL}/v1/chat/completions",
+            data=json.dumps(
+                {
+                    "model": "deepseek-r1:7b",
+                    "messages": messages,
+                }
+            ).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
 
         with urlopen(req, timeout=60) as response:
             result = json.loads(response.read().decode("utf-8"))
-            return result
+            answer = result["choices"][0]["message"]["content"]
+
+            # Determine confidence based on whether we had cached context
+            confidence = 0.7 if cached_results else 0.5
+
+            return {
+                "answer": answer,
+                "confidence": confidence,
+                "is_exact_match": False,
+            }
 
     except (HTTPError, URLError) as e:
         raise HTTPException(
@@ -238,7 +264,7 @@ async def _query_small_llm(query: str, cached_results: list[dict]) -> dict:
 
 async def _query_large_llm(query: str) -> str:
     """
-    Query Large LLM for final answer
+    Query Large LLM for final answer using OpenAI chat completions format
 
     Args:
         query: User's question
@@ -250,16 +276,30 @@ async def _query_large_llm(query: str) -> str:
         HTTPException: If large LLM service fails
     """
     try:
+        # Build OpenAI messages format
+        messages = [
+            {
+                "role": "system",
+                "content": "You are an expert mathematics tutor for Lebanese high school students. Provide clear, accurate, and educational answers to math questions.",
+            },
+            {"role": "user", "content": query},
+        ]
+
         req = Request(
-            f"{Config.SERVICES.LARGE_LLM_URL}/generate",
-            data=json.dumps({"query": query}).encode("utf-8"),
+            f"{Config.SERVICES.LARGE_LLM_URL}/v1/chat/completions",
+            data=json.dumps(
+                {
+                    "model": "gpt-4o-mini",
+                    "messages": messages,
+                }
+            ).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
 
         with urlopen(req, timeout=60) as response:
             result = json.loads(response.read().decode("utf-8"))
-            return result["answer"]
+            return result["choices"][0]["message"]["content"]
 
     except (HTTPError, URLError) as e:
         raise HTTPException(
