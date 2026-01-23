@@ -29,11 +29,10 @@ def check_service_health(service_name: str, service_url: str) -> dict:
 
 @app.get("/health")
 async def health():
-    """Health check endpoint - checks all services"""
+    """Health check endpoint - checks orchestrator services"""
     services = {
-        "large_llm": Config.SERVICES.LARGE_LLM_URL,
-        "small_llm": Config.SERVICES.SMALL_LLM_URL,
-        "embedding": Config.SERVICES.EMBEDDING_URL,
+        "data_processing": Config.SERVICES.DATA_PROCESSING_URL,
+        "answer_retrieval": Config.SERVICES.ANSWER_RETRIEVAL_URL,
     }
 
     service_health = {}
@@ -52,9 +51,37 @@ async def health():
     }
 
 
-async def call_large_llm(query: str) -> dict:
-    """Call the large LLM service to generate an answer"""
-    url = f"{Config.SERVICES.LARGE_LLM_URL}/generate"
+async def call_data_processing(input_data: str, input_type: str) -> dict:
+    """Call the Data Processing service (Phase 1 orchestrator)"""
+    url = f"{Config.SERVICES.DATA_PROCESSING_URL}/process-query"
+    data = {"input": input_data, "type": input_type}
+
+    req = Request(
+        url,
+        data=json.dumps(data).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urlopen(req) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            return result
+    except HTTPError as e:
+        error_detail = f"Data Processing service error: {e.code}"
+        if e.code == 400:
+            error_detail = "Invalid input format"
+        raise HTTPException(status_code=502, detail=error_detail)
+    except URLError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Data Processing service unavailable: {str(e.reason)}",
+        )
+
+
+async def call_answer_retrieval(query: str) -> dict:
+    """Call the Answer Retrieval service (Phase 2 orchestrator)"""
+    url = f"{Config.SERVICES.ANSWER_RETRIEVAL_URL}/retrieve-answer"
     data = {"query": query}
 
     req = Request(
@@ -71,80 +98,62 @@ async def call_large_llm(query: str) -> dict:
     except HTTPError as e:
         raise HTTPException(
             status_code=502,
-            detail=f"Large LLM service error: {e.code}",
+            detail=f"Answer Retrieval service error: {e.code}",
         )
     except URLError as e:
         raise HTTPException(
             status_code=503,
-            detail=f"Large LLM service unavailable: {str(e.reason)}",
-        )
-
-
-async def call_small_llm(query: str) -> dict:
-    """Call the small LLM service (Ollama) to generate an answer"""
-    url = f"{Config.SERVICES.SMALL_LLM_URL}/query"
-    data = {"query": query}
-
-    req = Request(
-        url,
-        data=json.dumps(data).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with urlopen(req) as response:
-            result = json.loads(response.read().decode("utf-8"))
-            return result
-    except HTTPError as e:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Small LLM service error: {e.code}",
-        )
-    except URLError as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Small LLM service unavailable: {str(e.reason)}",
+            detail=f"Answer Retrieval service unavailable: {str(e.reason)}",
         )
 
 
 @app.post("/query", response_model=FinalResponse)
 async def process_query(request: QueryRequest):
     """
-    Main query processing endpoint implementing the multi-model architecture:
-
-    By default, routes to small_llm (Ollama on HPC). Set use_large_llm=true to use large LLM.
+    Main query processing endpoint - orchestrates the complete pipeline.
 
     Flow:
-    1. Check use_large_llm flag
-    2. Route to appropriate service:
-       - use_large_llm=false (default): use small LLM (Ollama)
-       - use_large_llm=true: use large LLM (OpenAI GPT-4)
-    3. If small LLM fails, fallback to large LLM
+    1. Phase 1 (Data Processing): Process and reformulate user input
+       - Input Processor → Reformulator
+    2. Phase 2 (Answer Retrieval): Get answer using cache and LLMs
+       - Embedding → Cache → Small LLM → [conditional] Large LLM
+    3. Combine results and return to user
+
+    Returns final answer with metadata from both phases.
     """
     try:
-        if request.use_large_llm:
-            llm_response = await call_large_llm(request.query)
-            path_taken = "large_llm"
-            fallback_used = False
-        else:
-            try:
-                llm_response = await call_small_llm(request.query)
-                path_taken = "small_llm"
-                fallback_used = False
-            except HTTPException:
-                llm_response = await call_large_llm(request.query)
-                path_taken = "large_llm"
-                fallback_used = True
+        # Phase 1: Data Processing (Input → Reformulated Query)
+        processing_result = await call_data_processing(request.input, request.type)
+
+        # Phase 2: Answer Retrieval (Reformulated Query → Answer)
+        retrieval_result = await call_answer_retrieval(
+            processing_result["reformulated_query"]
+        )
+
+        # Combine metadata from both phases
+        metadata = {
+            "input_type": processing_result.get("input_type", request.type),
+            "original_input": processing_result.get("original_input", request.input),
+            "reformulated_query": processing_result.get("reformulated_query", ""),
+            "processing": {
+                "phase1": processing_result.get("processing_metadata", {}),
+                "phase2": retrieval_result.get("metadata", {}),
+            },
+        }
 
         return FinalResponse(
-            answer=llm_response["answer"],
-            path_taken=path_taken,
-            verified=True,
-            fallback_used=fallback_used,
+            answer=retrieval_result["answer"],
+            source=retrieval_result["source"],
+            used_cache=retrieval_result["used_cache"],
+            metadata=metadata,
         )
 
     except HTTPException:
         raise
+    except KeyError as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Unexpected response format from service: missing key {str(e)}",
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
