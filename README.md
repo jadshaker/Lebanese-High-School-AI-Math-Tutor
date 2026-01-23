@@ -15,6 +15,7 @@ services/
 ├── input_processor/    # Input Processor Service - Text/image processing (Port 8004)
 ├── small_llm/          # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
 ├── fine_tuned_model/   # Fine-Tuned Model Service - Ollama/TinyLlama on HPC (Port 8006)
+├── reformulator/       # Reformulator Service - Query improvement via LLM (Port 8007)
 └── answer_retrieval/   # Answer Retrieval Service - Orchestrator for Phase 2 (Port 8008)
 ```
 
@@ -141,6 +142,7 @@ Services will be available at:
 - Input Processor: `http://localhost:8004`
 - Small LLM: `http://localhost:8005`
 - Fine-Tuned Model: `http://localhost:8006`
+- Reformulator: `http://localhost:8007`
 - Answer Retrieval: `http://localhost:8008`
 
 #### Stop Services
@@ -292,6 +294,38 @@ curl http://localhost:8000/health | jq
   - Image processing: stub implementation (acknowledges receipt, returns sample response)
   - Input validation: checks for empty text, invalid types, exceeds max length
 
+**Reformulator Service** (`http://localhost:8007`)
+
+- `GET /health` - Health check (includes Small LLM service status)
+- `POST /reformulate` - Reformulate processed input for improved clarity
+  ```json
+  {
+    "processed_input": "derivative of x squared",
+    "input_type": "text"
+  }
+  ```
+
+  Sample Response:
+  ```json
+  {
+    "reformulated_query": "What is the derivative of f(x) = x²?",
+    "original_input": "derivative of x squared",
+    "improvements_made": [
+      "standardized mathematical notation",
+      "added clarity and completeness",
+      "completed question structure"
+    ]
+  }
+  ```
+
+  **Features**:
+  - Uses Small LLM (DeepSeek-R1) to reformulate questions
+  - Standardizes mathematical notation (e.g., "x squared" → "x²")
+  - Improves question clarity and completeness
+  - Fixes grammar and structural issues
+  - Provides detailed list of improvements made
+  - Cleans LLM responses (handles reasoning tokens, LaTeX notation)
+
 **Answer Retrieval Service** (`http://localhost:8008`)
 
 - `GET /health` - Health check (includes status of all dependent services: embedding, cache, small_llm, large_llm)
@@ -379,10 +413,11 @@ Environment variables can be set in `.env` or through docker-compose environment
 - ✅ Input Processor service with text processing and image stub (Port 8004)
 - ✅ Small LLM service with Ollama/DeepSeek-R1 on HPC (Port 8005)
 - ✅ Fine-Tuned Model service with Ollama/TinyLlama on HPC (Port 8006)
+- ✅ Reformulator service with LLM-powered query improvement (Port 8007)
 - ✅ Answer Retrieval service with complete Phase 2 orchestration (Port 8008)
 
 **Planned Services**:
-- 🚧 Reformulator service (Port 8007)
+- 🚧 UI service (Port 3000)
 - 🚧 Full cache implementation with vector database
 
 ## Data Preprocessing

@@ -122,9 +122,7 @@ async def retrieve_answer(request: RetrieveAnswerRequest) -> RetrieveAnswerRespo
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Answer retrieval error: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Answer retrieval error: {str(e)}")
 
 
 async def _embed_query(query: str) -> list[float]:
@@ -185,7 +183,7 @@ async def _search_cache(embedding: list[float]) -> list[dict]:
             result = json.loads(response.read().decode("utf-8"))
             return result.get("results", [])
 
-    except (HTTPError, URLError) as e:
+    except (HTTPError, URLError):
         # Cache failure is non-critical, return empty results
         return []
 
@@ -221,9 +219,9 @@ async def _query_small_llm(query: str, cached_results: list[dict]) -> dict:
 
         req = Request(
             f"{Config.SERVICES.SMALL_LLM_URL}/query",
-            data=json.dumps(
-                {"query": query, "cached_results": formatted_cache}
-            ).encode("utf-8"),
+            data=json.dumps({"query": query, "cached_results": formatted_cache}).encode(
+                "utf-8"
+            ),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
