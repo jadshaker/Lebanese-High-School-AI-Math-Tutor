@@ -8,10 +8,13 @@ The application uses a microservices architecture with services communicating vi
 
 ```
 services/
-├── gateway/          # API Gateway - Main entry point (Port 8000)
-├── large_llm/        # Large LLM Service - OpenAI GPT-4o-mini (Port 8001)
-├── small_llm/        # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
-└── embedding/        # Embedding Service - OpenAI text-embedding-3-small (Port 8002)
+├── gateway/            # API Gateway - Main entry point (Port 8000)
+├── large_llm/          # Large LLM Service - OpenAI GPT-4o-mini (Port 8001)
+├── embedding/          # Embedding Service - OpenAI text-embedding-3-small (Port 8002)
+├── cache/              # Cache Service - Vector storage (stub) (Port 8003)
+├── small_llm/          # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
+├── fine_tuned_model/   # Fine-Tuned Model Service - Ollama/TinyLlama on HPC (Port 8006)
+└── answer_retrieval/   # Answer Retrieval Service - Orchestrator for Phase 2 (Port 8008)
 ```
 
 **Intelligent Routing**: The gateway defaults to the small_llm service for efficiency. Use `use_large_llm: true` in requests to explicitly route to OpenAI's GPT-4o-mini. Automatic fallback to large_llm if small_llm fails.
@@ -51,13 +54,20 @@ services/<service-name>/
 OPENAI_API_KEY=your_openai_api_key_here
 MINERU_API_KEY=your_mineru_api_key_here
 
-# Ollama Configuration (for small_llm service)
-OLLAMA_SERVICE_URL=http://localhost:11434
-OLLAMA_MODEL_NAME=deepseek-r1:7b
+# Small LLM Service Configuration (Ollama)
+SMALL_LLM_SERVICE_URL=http://localhost:11434
+SMALL_LLM_MODEL_NAME=deepseek-r1:7b
 
 # Embedding Service Configuration
 EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
+
+# Fine-Tuned Model Service Configuration (Ollama)
+FINE_TUNED_MODEL_SERVICE_URL=http://localhost:11434
+FINE_TUNED_MODEL_NAME=tinyllama:latest
+
+# Answer Retrieval Service Configuration
+CACHE_TOP_K=5
 ```
 
 ### Running with Docker
@@ -95,14 +105,21 @@ ssh -L 11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434:localho
 
 This way we have a 2 way tunnel to the node we are connected to on `octopus`.
 
-After setting up the connection with `octopus`, we have to run the model now using the below command in the same terminal, change `deepseek-r1:7b` with the model you want to run on `ollama`:
+After setting up the connection with `octopus`, we have to run the models now. Both `small_llm` and `fine_tuned_model` services use the same Ollama instance, so you need to load both models:
 
 ```bash
 module load ollama
+
+# Load the small_llm model
 ollama run deepseek-r1:7b --keepalive -1m
+# Press Ctrl+C to exit the chat (model stays loaded)
+
+# Load the fine-tuned model
+ollama run tinyllama:latest --keepalive -1m
+# Press Ctrl+C to exit the chat (model stays loaded)
 ```
 
-This could take up to a few minutes depending on the number of parameters. Once you are able to send a message to the model you are set up; you can test the model in the terminal if you want.
+This could take up to a few minutes depending on the number of parameters. Both models will remain loaded in memory and accessible via the API.
 
 #### Start All Services
 
@@ -119,7 +136,10 @@ Services will be available at:
 - Gateway: `http://localhost:8000`
 - Large LLM: `http://localhost:8001`
 - Embedding: `http://localhost:8002`
+- Cache: `http://localhost:8003`
 - Small LLM: `http://localhost:8005`
+- Fine-Tuned Model: `http://localhost:8006`
+- Answer Retrieval: `http://localhost:8008`
 
 #### Stop Services
 
@@ -218,7 +238,7 @@ curl http://localhost:8000/health | jq
     "text": "What is calculus?"
   }
   ```
-  
+
   Sample Response:
   ```json
   {
@@ -227,6 +247,44 @@ curl http://localhost:8000/health | jq
     "dimensions": 1536
   }
   ```
+
+**Answer Retrieval Service** (`http://localhost:8008`)
+
+- `GET /health` - Health check (includes status of all dependent services: embedding, cache, small_llm, large_llm)
+- `POST /retrieve-answer` - Orchestrated answer retrieval with caching
+  ```json
+  {
+    "query": "What is the derivative of x^2?"
+  }
+  ```
+
+  Sample Response (from cache via small_llm):
+  ```json
+  {
+    "answer": "The derivative of x^2 is 2x",
+    "source": "small_llm",
+    "used_cache": true,
+    "confidence": 0.95
+  }
+  ```
+
+  Sample Response (from large_llm):
+  ```json
+  {
+    "answer": "The derivative of x^2 is 2x. Using the power rule...",
+    "source": "large_llm",
+    "used_cache": false,
+    "confidence": null
+  }
+  ```
+
+  **Flow**:
+  1. Embeds query via Embedding Service
+  2. Searches cache for similar Q&A pairs (top-k=5)
+  3. Queries Small LLM with cached context
+  4. If exact match found (similarity ≥ 0.95), returns cached answer
+  5. Otherwise, queries Large LLM for fresh answer
+  6. Saves Large LLM answer to cache for future use
 
 ## Development
 
@@ -272,13 +330,16 @@ Environment variables can be set in `.env` or through docker-compose environment
 **Completed Services**:
 - ✅ Gateway service with health checks and intelligent routing
 - ✅ Large LLM service with OpenAI GPT-4o-mini integration
-- ✅ Small LLM service with Ollama/DeepSeek-R1 on HPC
 - ✅ Embedding service with OpenAI text-embedding-3-small
+- ✅ Cache service (stub) with vector similarity search endpoints (Port 8003)
+- ✅ Small LLM service with Ollama/DeepSeek-R1 on HPC (Port 8005)
+- ✅ Fine-Tuned Model service with Ollama/TinyLlama on HPC (Port 8006)
+- ✅ Answer Retrieval service with complete Phase 2 orchestration (Port 8008)
 
 **Planned Services**:
-- 🚧 Cache service (Port 8003)
-- 🚧 Complexity assessment service (Port 8004)
-- 🚧 Local model service (Port 8006)
+- 🚧 Input Processor service (Port 8004)
+- 🚧 Reformulator service (Port 8007)
+- 🚧 Full cache implementation with vector database
 
 ## Data Preprocessing
 
