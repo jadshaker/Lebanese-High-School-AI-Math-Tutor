@@ -119,6 +119,24 @@ services:
     networks:
       - math-tutor-network
 
+  # Reformulator Service
+  reformulator:
+    build:
+      context: services/reformulator
+      dockerfile: Dockerfile
+    container_name: math-tutor-reformulator
+    ports:
+      - '8007:8007'
+    env_file:
+      - .env
+    environment:
+      - SMALL_LLM_SERVICE_URL=http://small-llm:8005
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8007 --reload
+    depends_on:
+      - small-llm
+    networks:
+      - math-tutor-network
+
   # Answer Retrieval Service (Orchestrator for Phase 2)
   answer-retrieval:
     build:
