@@ -12,6 +12,7 @@ services/
 ├── large_llm/          # Large LLM Service - OpenAI GPT-4o-mini (Port 8001)
 ├── embedding/          # Embedding Service - OpenAI text-embedding-3-small (Port 8002)
 ├── cache/              # Cache Service - Vector storage (stub) (Port 8003)
+├── input_processor/    # Input Processor Service - Text/image processing (Port 8004)
 ├── small_llm/          # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
 ├── fine_tuned_model/   # Fine-Tuned Model Service - Ollama/TinyLlama on HPC (Port 8006)
 └── answer_retrieval/   # Answer Retrieval Service - Orchestrator for Phase 2 (Port 8008)
@@ -137,6 +138,7 @@ Services will be available at:
 - Large LLM: `http://localhost:8001`
 - Embedding: `http://localhost:8002`
 - Cache: `http://localhost:8003`
+- Input Processor: `http://localhost:8004`
 - Small LLM: `http://localhost:8005`
 - Fine-Tuned Model: `http://localhost:8006`
 - Answer Retrieval: `http://localhost:8008`
@@ -248,6 +250,48 @@ curl http://localhost:8000/health | jq
   }
   ```
 
+**Input Processor Service** (`http://localhost:8004`)
+
+- `GET /health` - Health check
+- `POST /process` - Process user input (text or image)
+  ```json
+  {
+    "input": "What is the derivative of x^2?",
+    "type": "text"  // "text" or "image"
+  }
+  ```
+
+  Sample Response (text):
+  ```json
+  {
+    "processed_input": "What is the derivative of x^2?",
+    "input_type": "text",
+    "metadata": {
+      "original_length": 30,
+      "processed_length": 30,
+      "preprocessing_applied": ["strip_whitespace", "normalize_spacing"]
+    }
+  }
+  ```
+
+  Sample Response (image - stub):
+  ```json
+  {
+    "processed_input": "Image input received",
+    "input_type": "image",
+    "metadata": {
+      "note": "Image processing not yet implemented",
+      "planned_features": ["OCR text extraction", "Math notation recognition", "Image validation"],
+      "image_data_length": 25
+    }
+  }
+  ```
+
+  **Features**:
+  - Text processing: strips whitespace, normalizes spacing, validates length
+  - Image processing: stub implementation (acknowledges receipt, returns sample response)
+  - Input validation: checks for empty text, invalid types, exceeds max length
+
 **Answer Retrieval Service** (`http://localhost:8008`)
 
 - `GET /health` - Health check (includes status of all dependent services: embedding, cache, small_llm, large_llm)
@@ -332,12 +376,12 @@ Environment variables can be set in `.env` or through docker-compose environment
 - ✅ Large LLM service with OpenAI GPT-4o-mini integration
 - ✅ Embedding service with OpenAI text-embedding-3-small
 - ✅ Cache service (stub) with vector similarity search endpoints (Port 8003)
+- ✅ Input Processor service with text processing and image stub (Port 8004)
 - ✅ Small LLM service with Ollama/DeepSeek-R1 on HPC (Port 8005)
 - ✅ Fine-Tuned Model service with Ollama/TinyLlama on HPC (Port 8006)
 - ✅ Answer Retrieval service with complete Phase 2 orchestration (Port 8008)
 
 **Planned Services**:
-- 🚧 Input Processor service (Port 8004)
 - 🚧 Reformulator service (Port 8007)
 - 🚧 Full cache implementation with vector database
 

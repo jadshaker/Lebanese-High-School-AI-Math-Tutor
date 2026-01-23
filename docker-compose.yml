@@ -86,6 +86,20 @@ services:
     networks:
       - math-tutor-network
 
+  # Input Processor Service
+  input-processor:
+    build:
+      context: services/input_processor
+      dockerfile: Dockerfile
+    container_name: math-tutor-input-processor
+    ports:
+      - '8004:8004'
+    env_file:
+      - .env
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8004 --reload
+    networks:
+      - math-tutor-network
+
   # Fine-Tuned Model Service (Ollama)
   fine-tuned-model:
     build:
