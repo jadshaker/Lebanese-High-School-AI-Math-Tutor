@@ -12,9 +12,12 @@ services/
 ├── large_llm/          # Large LLM Service - OpenAI GPT-4o-mini (Port 8001)
 ├── embedding/          # Embedding Service - OpenAI text-embedding-3-small (Port 8002)
 ├── cache/              # Cache Service - Vector storage (stub) (Port 8003)
+├── input_processor/    # Input Processor Service - Text/image processing (Port 8004)
 ├── small_llm/          # Small LLM Service - Ollama/DeepSeek-R1 on HPC (Port 8005)
 ├── fine_tuned_model/   # Fine-Tuned Model Service - Ollama/TinyLlama on HPC (Port 8006)
-└── answer_retrieval/   # Answer Retrieval Service - Orchestrator for Phase 2 (Port 8008)
+├── reformulator/       # Reformulator Service - Query improvement via LLM (Port 8007)
+├── answer_retrieval/   # Answer Retrieval Service - Orchestrator for Phase 2 (Port 8008)
+└── data_processing/    # Data Processing Service - Orchestrator for Phase 1 (Port 8009)
 ```
 
 **Intelligent Routing**: The gateway defaults to the small_llm service for efficiency. Use `use_large_llm: true` in requests to explicitly route to OpenAI's GPT-4o-mini. Automatic fallback to large_llm if small_llm fails.
@@ -68,6 +71,10 @@ FINE_TUNED_MODEL_NAME=tinyllama:latest
 
 # Answer Retrieval Service Configuration
 CACHE_TOP_K=5
+
+# Data Processing Service Configuration (Phase 1)
+INPUT_PROCESSOR_SERVICE_URL=http://input-processor:8004
+REFORMULATOR_SERVICE_URL=http://reformulator:8007
 ```
 
 ### Running with Docker
@@ -137,9 +144,12 @@ Services will be available at:
 - Large LLM: `http://localhost:8001`
 - Embedding: `http://localhost:8002`
 - Cache: `http://localhost:8003`
+- Input Processor: `http://localhost:8004`
 - Small LLM: `http://localhost:8005`
 - Fine-Tuned Model: `http://localhost:8006`
+- Reformulator: `http://localhost:8007`
 - Answer Retrieval: `http://localhost:8008`
+- Data Processing: `http://localhost:8009`
 
 #### Stop Services
 
@@ -248,6 +258,80 @@ curl http://localhost:8000/health | jq
   }
   ```
 
+**Input Processor Service** (`http://localhost:8004`)
+
+- `GET /health` - Health check
+- `POST /process` - Process user input (text or image)
+  ```json
+  {
+    "input": "What is the derivative of x^2?",
+    "type": "text"  // "text" or "image"
+  }
+  ```
+
+  Sample Response (text):
+  ```json
+  {
+    "processed_input": "What is the derivative of x^2?",
+    "input_type": "text",
+    "metadata": {
+      "original_length": 30,
+      "processed_length": 30,
+      "preprocessing_applied": ["strip_whitespace", "normalize_spacing"]
+    }
+  }
+  ```
+
+  Sample Response (image - stub):
+  ```json
+  {
+    "processed_input": "Image input received",
+    "input_type": "image",
+    "metadata": {
+      "note": "Image processing not yet implemented",
+      "planned_features": ["OCR text extraction", "Math notation recognition", "Image validation"],
+      "image_data_length": 25
+    }
+  }
+  ```
+
+  **Features**:
+  - Text processing: strips whitespace, normalizes spacing, validates length
+  - Image processing: stub implementation (acknowledges receipt, returns sample response)
+  - Input validation: checks for empty text, invalid types, exceeds max length
+
+**Reformulator Service** (`http://localhost:8007`)
+
+- `GET /health` - Health check (includes Small LLM service status)
+- `POST /reformulate` - Reformulate processed input for improved clarity
+  ```json
+  {
+    "processed_input": "derivative of x squared",
+    "input_type": "text"
+  }
+  ```
+
+  Sample Response:
+  ```json
+  {
+    "reformulated_query": "What is the derivative of f(x) = x²?",
+    "original_input": "derivative of x squared",
+    "improvements_made": [
+      "standardized mathematical notation",
+      "added clarity and completeness",
+      "completed question structure"
+    ]
+  }
+  ```
+
+  **Features**:
+  - Uses Small LLM (DeepSeek-R1) to reformulate questions
+  - Standardizes mathematical notation (e.g., "x squared" → "x²")
+  - Improves question clarity and completeness
+  - Fixes grammar and structural issues
+  - Provides detailed list of improvements made
+  - Cleans LLM responses (handles reasoning tokens, LaTeX notation)
+
 **Answer Retrieval Service** (`http://localhost:8008`)
 
 - `GET /health` - Health check (includes status of all dependent services: embedding, cache, small_llm, large_llm)
@@ -285,6 +369,42 @@ curl http://localhost:8000/health | jq
   4. If exact match found (similarity ≥ 0.95), returns cached answer
   5. Otherwise, queries Large LLM for fresh answer
   6. Saves Large LLM answer to cache for future use
+
+**Data Processing Service** (`http://localhost:8009`)
+
+- `GET /health` - Health check (includes status of dependent services: input_processor, reformulator)
+- `POST /process-query` - Orchestrated Phase 1 data processing pipeline
+  ```json
+  {
+    "input": "derivative of x squared",
+    "type": "text"  // "text" or "image"
+  }
+  ```
+
+  Sample Response:
+  ```json
+  {
+    "reformulated_query": "What is the derivative of f(x) = x²?",
+    "original_input": "derivative of x squared",
+    "input_type": "text",
+    "processing_metadata": {
+      "input_processor": {
+        "preprocessing_applied": ["strip_whitespace", "normalize_spacing"]
+      },
+      "reformulator": {
+        "improvements_made": [
+          "standardized mathematical notation",
+          "added clarity and completeness"
+        ]
+      }
+    }
+  }
+  ```
+
+  **Flow**:
+  1. Processes raw input via Input Processor Service
+  2. Reformulates processed input via Reformulator Service
+  3. Returns reformulated query with metadata from both services
 
 ## Development
 
@@ -332,13 +452,15 @@ Environment variables can be set in `.env` or through docker-compose environment
 - ✅ Large LLM service with OpenAI GPT-4o-mini integration
 - ✅ Embedding service with OpenAI text-embedding-3-small
 - ✅ Cache service (stub) with vector similarity search endpoints (Port 8003)
+- ✅ Input Processor service with text processing and image stub (Port 8004)
 - ✅ Small LLM service with Ollama/DeepSeek-R1 on HPC (Port 8005)
 - ✅ Fine-Tuned Model service with Ollama/TinyLlama on HPC (Port 8006)
+- ✅ Reformulator service with LLM-powered query improvement (Port 8007)
 - ✅ Answer Retrieval service with complete Phase 2 orchestration (Port 8008)
+- ✅ Data Processing service with Phase 1 orchestration (Port 8009)
 
 **Planned Services**:
-- 🚧 Input Processor service (Port 8004)
-- 🚧 Reformulator service (Port 8007)
+- 🚧 UI service (Port 3000)
 - 🚧 Full cache implementation with vector database
 
 ## Data Preprocessing
