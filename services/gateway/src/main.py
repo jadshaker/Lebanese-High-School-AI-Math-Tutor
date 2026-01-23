@@ -1,12 +1,18 @@
 import json
+import time
+import uuid
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, HTTPException
 from src.config import Config
 from src.models.schemas import (
-    FinalResponse,
-    QueryRequest,
+    ChatCompletionChoice,
+    ChatCompletionMessageResponse,
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+    Model,
+    ModelListResponse,
 )
 
 app = FastAPI(title="Math Tutor API Gateway")
@@ -49,6 +55,23 @@ async def health():
         "service": "gateway",
         "services": service_health,
     }
+
+
+@app.get("/v1/models", response_model=ModelListResponse)
+async def list_models():
+    """
+    OpenAI-compatible models list endpoint.
+    Returns the available model(s) for Open WebUI.
+    """
+    return ModelListResponse(
+        data=[
+            Model(
+                id="math-tutor",
+                created=int(time.time()),
+                owned_by="lebanese-high-school-math-tutor",
+            )
+        ]
+    )
 
 
 async def call_data_processing(input_data: str, input_type: str) -> dict:
@@ -107,45 +130,56 @@ async def call_answer_retrieval(query: str) -> dict:
         )
 
 
-@app.post("/query", response_model=FinalResponse)
-async def process_query(request: QueryRequest):
+@app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
+async def chat_completions(request: ChatCompletionRequest):
     """
-    Main query processing endpoint - orchestrates the complete pipeline.
+    OpenAI-compatible chat completions endpoint - orchestrates the complete pipeline.
 
     Flow:
-    1. Phase 1 (Data Processing): Process and reformulate user input
+    1. Extract last user message from conversation
+    2. Phase 1 (Data Processing): Process and reformulate user input
        - Input Processor → Reformulator
-    2. Phase 2 (Answer Retrieval): Get answer using cache and LLMs
+    3. Phase 2 (Answer Retrieval): Get answer using cache and LLMs
        - Embedding → Cache → Small LLM → [conditional] Large LLM
-    3. Combine results and return to user
+    4. Return answer in OpenAI format
 
-    Returns final answer with metadata from both phases.
+    Returns OpenAI-compatible chat completion response.
     """
     try:
+        # Extract last user message from messages array
+        user_message = next(
+            (msg.content for msg in reversed(request.messages) if msg.role == "user"),
+            None,
+        )
+
+        if not user_message:
+            raise HTTPException(
+                status_code=400,
+                detail="No user message found in request",
+            )
+
         # Phase 1: Data Processing (Input → Reformulated Query)
-        processing_result = await call_data_processing(request.input, request.type)
+        processing_result = await call_data_processing(user_message, "text")
 
         # Phase 2: Answer Retrieval (Reformulated Query → Answer)
         retrieval_result = await call_answer_retrieval(
             processing_result["reformulated_query"]
         )
 
-        # Combine metadata from both phases
-        metadata = {
-            "input_type": processing_result.get("input_type", request.type),
-            "original_input": processing_result.get("original_input", request.input),
-            "reformulated_query": processing_result.get("reformulated_query", ""),
-            "processing": {
-                "phase1": processing_result.get("processing_metadata", {}),
-                "phase2": retrieval_result.get("metadata", {}),
-            },
-        }
+        # Build OpenAI-compatible response
+        answer = retrieval_result["answer"]
 
-        return FinalResponse(
-            answer=retrieval_result["answer"],
-            source=retrieval_result["source"],
-            used_cache=retrieval_result["used_cache"],
-            metadata=metadata,
+        return ChatCompletionResponse(
+            id=f"chatcmpl-{uuid.uuid4().hex[:8]}",
+            created=int(time.time()),
+            model=request.model,
+            choices=[
+                ChatCompletionChoice(
+                    index=0,
+                    message=ChatCompletionMessageResponse(content=answer),
+                    finish_reason="stop",
+                )
+            ],
         )
 
     except HTTPException:

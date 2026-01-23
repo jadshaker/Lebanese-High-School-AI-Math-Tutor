@@ -2,16 +2,10 @@ import json
 from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, HTTPException
-from openai import OpenAI
 from src.config import Config
-from src.models.schemas import QueryRequest, QueryResponse
+from src.models.schemas import ChatCompletionRequest, ChatCompletionResponse
 
 app = FastAPI(title="Fine-Tuned Model Service", version="1.0.0")
-
-client = OpenAI(
-    base_url=f"{Config.FINE_TUNED_MODEL_SERVICE_URL}/v1",
-    api_key="ollama",
-)
 
 
 @app.get("/health")
@@ -47,31 +41,53 @@ def health_check() -> dict[str, str | bool]:
     }
 
 
-@app.post("/query", response_model=QueryResponse)
-def query_fine_tuned_model(request: QueryRequest) -> QueryResponse:
+@app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
+def chat_completions(request: ChatCompletionRequest) -> ChatCompletionResponse:
     """
-    Query the fine-tuned model via Ollama service.
-
-    This endpoint forwards the query to the Ollama server and returns the response.
+    OpenAI-compatible chat completions endpoint.
+    Forwards requests to Ollama's OpenAI-compatible API.
 
     Args:
-        request: QueryRequest containing the user's question
+        request: ChatCompletionRequest with messages and model
 
     Returns:
-        QueryResponse with the answer from the fine-tuned model
+        ChatCompletionResponse from Ollama
 
     Raises:
         HTTPException: If Ollama service is unavailable or returns an error
     """
     try:
-        response = client.chat.completions.create(
-            model=Config.FINE_TUNED_MODEL_NAME,
-            messages=[{"role": "user", "content": request.query}],
-            extra_body={"keep_alive": -1},
+        # Forward request to Ollama's OpenAI-compatible endpoint
+        ollama_url = f"{Config.FINE_TUNED_MODEL_SERVICE_URL}/v1/chat/completions"
+
+        # Build request payload
+        payload: dict[str, object] = {
+            "model": request.model or Config.FINE_TUNED_MODEL_NAME,
+            "messages": [
+                {"role": msg.role, "content": msg.content} for msg in request.messages
+            ],
+            "keep_alive": -1,
+        }
+
+        # Add optional parameters
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
+        if request.max_tokens is not None:
+            payload["max_tokens"] = request.max_tokens
+        if request.stream is not None:
+            payload["stream"] = request.stream
+
+        # Make request to Ollama
+        req = Request(
+            ollama_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
         )
 
-        answer = response.choices[0].message.content or ""
-        return QueryResponse(answer=answer, model_used=Config.FINE_TUNED_MODEL_NAME)
+        with urlopen(req, timeout=120) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            return ChatCompletionResponse(**result)
 
     except Exception as e:
         raise HTTPException(

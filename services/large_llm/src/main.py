@@ -1,7 +1,15 @@
+import time
+import uuid
+
 from fastapi import FastAPI, HTTPException
 from openai import OpenAI
 from src.config import Config
-from src.models.schemas import GenerateRequest, GenerateResponse
+from src.models.schemas import (
+    ChatCompletionChoice,
+    ChatCompletionMessageResponse,
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+)
 
 app = FastAPI(title="Math Tutor API Large LLM Service")
 
@@ -21,44 +29,61 @@ async def health():
     }
 
 
-@app.post("/generate", response_model=GenerateResponse)
-async def generate_answer(request: GenerateRequest):
+@app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
+async def chat_completions(request: ChatCompletionRequest):
     """
-    Generate answer using OpenAI's GPT-4 API.
+    OpenAI-compatible chat completions endpoint.
+    Generates answers using OpenAI's GPT-4 API.
     Falls back to dummy response if API key is not configured.
     """
     if not client:
         # Fallback to dummy response if no API key
-        answer = f"[Dummy Response] API key not configured. Query: {request.query}"
-        return GenerateResponse(
-            answer=answer,
-            model_used="dummy-fallback",
-            confidence=0.5,
+        last_user_message = next(
+            (msg.content for msg in reversed(request.messages) if msg.role == "user"),
+            "No user message",
+        )
+        dummy_answer = (
+            f"[Dummy Response] API key not configured. Query: {last_user_message}"
         )
 
-    # Build the prompt
-    system_prompt = "You are an expert mathematics tutor for Lebanese high school students. Provide clear, accurate, and educational answers to math questions."
-    user_message = request.query
+        return ChatCompletionResponse(
+            id=f"chatcmpl-{uuid.uuid4().hex[:8]}",
+            created=int(time.time()),
+            model="dummy-fallback",
+            choices=[
+                ChatCompletionChoice(
+                    index=0,
+                    message=ChatCompletionMessageResponse(content=dummy_answer),
+                    finish_reason="stop",
+                )
+            ],
+        )
 
     try:
-        # Call OpenAI API
+        # Call OpenAI API with the provided messages
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=request.model,
             messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
+                {"role": msg.role, "content": msg.content}  # type: ignore[misc]
+                for msg in request.messages
             ],
-            temperature=0.7,
-            max_tokens=1000,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
         )
 
         answer = response.choices[0].message.content or ""
-        model_used = response.model
 
-        return GenerateResponse(
-            answer=answer,
-            model_used=model_used,
-            confidence=0.95,
+        return ChatCompletionResponse(
+            id=response.id,
+            created=response.created,
+            model=response.model,
+            choices=[
+                ChatCompletionChoice(
+                    index=0,
+                    message=ChatCompletionMessageResponse(content=answer),
+                    finish_reason="stop",
+                )
+            ],
         )
 
     except Exception as e:
