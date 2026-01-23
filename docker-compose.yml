@@ -10,18 +10,12 @@ services:
     env_file:
       - .env
     environment:
-      - LARGE_LLM_SERVICE_URL=http://large-llm:8001
-      - SMALL_LLM_SERVICE_URL=http://small-llm:8005
-      - EMBEDDING_SERVICE_URL=http://embedding:8002
-      - CACHE_SERVICE_URL=http://cache:8003
-      - FINE_TUNED_MODEL_SERVICE_URL=http://fine-tuned-model:8006
+      - DATA_PROCESSING_SERVICE_URL=http://data-processing:8009
+      - ANSWER_RETRIEVAL_SERVICE_URL=http://answer-retrieval:8008
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
-      - large-llm
-      - small-llm
-      - embedding
-      - cache
-      - fine-tuned-model
+      - data-processing
+      - answer-retrieval
     networks:
       - math-tutor-network
 

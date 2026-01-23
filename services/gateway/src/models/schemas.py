@@ -1,13 +1,14 @@
+from typing import Any, Dict, Literal
+
 from pydantic import BaseModel, Field
 
 
 class QueryRequest(BaseModel):
     """User query request"""
 
-    query: str = Field(..., description="User's math question")
-    use_large_llm: bool = Field(
-        False,
-        description="Whether to use large LLM instead of small LLM (default: False)",
+    input: str = Field(..., description="User's math question or input")
+    type: Literal["text", "image"] = Field(
+        "text", description="Type of input (text or image)"
     )
 
 
@@ -15,10 +16,8 @@ class FinalResponse(BaseModel):
     """Final response to user"""
 
     answer: str = Field(..., description="Final answer to the user's query")
-    path_taken: str = Field(
-        ..., description="Which path was taken (cache/small/local/large)"
-    )
-    verified: bool = Field(..., description="Whether answer was verified as correct")
-    fallback_used: bool = Field(
-        False, description="Whether fallback to large LLM was used"
+    source: str = Field(..., description="LLM source (small_llm or large_llm)")
+    used_cache: bool = Field(..., description="Whether cache was used")
+    metadata: Dict[str, Any] = Field(
+        ..., description="Metadata from processing and retrieval"
     )

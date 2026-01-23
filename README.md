@@ -20,7 +20,11 @@ services/
 └── data_processing/    # Data Processing Service - Orchestrator for Phase 1 (Port 8009)
 ```
 
-**Intelligent Routing**: The gateway defaults to the small_llm service for efficiency. Use `use_large_llm: true` in requests to explicitly route to OpenAI's GPT-4o-mini. Automatic fallback to large_llm if small_llm fails.
+**Pipeline Architecture**: The gateway orchestrates a two-phase pipeline:
+- **Phase 1 (Data Processing)**: Input Processor → Reformulator
+- **Phase 2 (Answer Retrieval)**: Embedding → Cache → Small LLM → (conditional) Large LLM
+
+The system automatically determines when to use the Large LLM based on cache confidence. All complexity is handled by orchestrator services.
 
 ### Service Structure
 
@@ -220,24 +224,47 @@ curl http://localhost:8000/health | jq
 
 **Gateway Service** (`http://localhost:8000`)
 
-- `GET /health` - Health check (includes status of all downstream services)
-- `POST /query` - Submit a math question
+- `GET /health` - Health check (includes status of orchestrator services: data_processing, answer_retrieval)
+- `POST /query` - Submit a math question (orchestrates full pipeline)
   ```json
   {
-    "query": "What is the derivative of x^2?",
-    "use_large_llm": false // Optional: set to true to use GPT-4o-mini instead of small_llm (Ollama) (default: false)
+    "input": "what is derivative of x squared",
+    "type": "text"  // "text" or "image"
   }
   ```
-  
+
   Sample Response:
   ```json
   {
     "answer": "The derivative of x^2 is 2x. This is found using the power rule: d/dx(x^n) = n*x^(n-1).",
-    "path_taken": "small_llm",
-    "verified": true,
-    "fallback_used": false
+    "source": "small_llm",
+    "used_cache": true,
+    "metadata": {
+      "input_type": "text",
+      "original_input": "what is derivative of x squared",
+      "reformulated_query": "What is the derivative of f(x) = x²?",
+      "processing": {
+        "phase1": {
+          "input_processor": {
+            "preprocessing_applied": ["strip_whitespace", "normalize_spacing"]
+          },
+          "reformulator": {
+            "improvements_made": ["standardized mathematical notation", "added clarity"]
+          }
+        },
+        "phase2": {
+          "cache_similarity": 0.95,
+          "llm_used": "small_llm"
+        }
+      }
+    }
   }
   ```
+
+  **Flow**:
+  1. Calls Data Processing Service (Phase 1): processes and reformulates input
+  2. Calls Answer Retrieval Service (Phase 2): retrieves answer using cache and LLMs
+  3. Combines results and metadata from both phases
 
 **Embedding Service** (`http://localhost:8002`)
 
