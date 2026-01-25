@@ -153,12 +153,12 @@ async def metrics():
     """Prometheus metrics endpoint"""
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+
 @app.get("/logs/{request_id}")
 async def get_logs(request_id: str):
     """Get logs for a specific request ID"""
     logs = get_logs_by_request_id(request_id)
     return {"request_id": request_id, "logs": logs, "count": len(logs)}
-
 
 
 @app.post("/process-query", response_model=ProcessQueryResponse)

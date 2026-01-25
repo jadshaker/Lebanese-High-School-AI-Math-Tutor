@@ -501,7 +501,9 @@ async def _search_cache(embedding: list[float], request_id: str) -> list[dict]:
                 "Cache service responded",
                 context={
                     "results_count": len(results),
-                    "top_similarity": results[0].get("similarity_score", 0) if results else 0,
+                    "top_similarity": (
+                        results[0].get("similarity_score", 0) if results else 0
+                    ),
                     "duration_seconds": round(duration, 3),
                 },
                 request_id=request_id,
@@ -943,7 +945,9 @@ async def chat_completions(
         large_llm_answer = await _query_large_llm(reformulated_query, request_id)
 
         # Step 2.6: Save Large LLM answer to cache
-        await _save_to_cache(reformulated_query, large_llm_answer, embedding, request_id)
+        await _save_to_cache(
+            reformulated_query, large_llm_answer, embedding, request_id
+        )
 
         logger.info(
             "PHASE 2: Answer Retrieval - Completed (large LLM used)",

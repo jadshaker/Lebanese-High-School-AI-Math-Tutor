@@ -68,7 +68,9 @@ class StructuredLogger:
 
         # Build log line: timestamp | LEVEL | service:request_id - message - context
         req_id = request_id or generate_request_id()
-        log_parts = [f"{timestamp} | {level_padded} | {self.service_name}:{req_id} - {message}"]
+        log_parts = [
+            f"{timestamp} | {level_padded} | {self.service_name}:{req_id} - {message}"
+        ]
 
         # Add context as key=value pairs
         if context:
@@ -146,7 +148,9 @@ def get_logs_by_request_id(request_id: str, max_lines: int = 1000) -> list[str]:
             all_lines = f.readlines()
 
             # Take last max_lines
-            recent_lines = all_lines[-max_lines:] if len(all_lines) > max_lines else all_lines
+            recent_lines = (
+                all_lines[-max_lines:] if len(all_lines) > max_lines else all_lines
+            )
 
             # Filter lines containing the request ID
             for line in recent_lines:
