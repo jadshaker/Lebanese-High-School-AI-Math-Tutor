@@ -8,12 +8,6 @@ load_dotenv()
 class Config:
     class SERVICES:
         GATEWAY_URL = os.getenv("GATEWAY_SERVICE_URL", "http://gateway:8000")
-        DATA_PROCESSING_URL = os.getenv(
-            "DATA_PROCESSING_SERVICE_URL", "http://data-processing:8009"
-        )
-        ANSWER_RETRIEVAL_URL = os.getenv(
-            "ANSWER_RETRIEVAL_SERVICE_URL", "http://answer-retrieval:8008"
-        )
         INPUT_PROCESSOR_URL = os.getenv(
             "INPUT_PROCESSOR_SERVICE_URL", "http://input-processor:8004"
         )
@@ -27,3 +21,6 @@ class Config:
         FINE_TUNED_MODEL_URL = os.getenv(
             "FINE_TUNED_MODEL_SERVICE_URL", "http://fine-tuned-model:8006"
         )
+
+    # Cache configuration
+    CACHE_TOP_K = int(os.getenv("CACHE_TOP_K", "5"))

@@ -15,9 +15,18 @@ from src.logging_utils import (
     get_logs_by_request_id,
 )
 from src.metrics import (
-    gateway_answer_retrieval_duration_seconds,
-    gateway_data_processing_duration_seconds,
+    gateway_cache_hits_total,
+    gateway_cache_misses_total,
+    gateway_cache_save_duration_seconds,
+    gateway_cache_search_duration_seconds,
+    gateway_confidence,
+    gateway_embedding_duration_seconds,
     gateway_errors_total,
+    gateway_input_processor_duration_seconds,
+    gateway_large_llm_duration_seconds,
+    gateway_llm_calls_total,
+    gateway_reformulator_duration_seconds,
+    gateway_small_llm_duration_seconds,
     http_request_duration_seconds,
     http_requests_total,
 )
@@ -145,10 +154,14 @@ def check_service_health(service_name: str, service_url: str) -> dict:
 
 @app.get("/health")
 async def health():
-    """Health check endpoint - checks orchestrator services"""
+    """Health check endpoint - checks all individual services"""
     services = {
-        "data_processing": Config.SERVICES.DATA_PROCESSING_URL,
-        "answer_retrieval": Config.SERVICES.ANSWER_RETRIEVAL_URL,
+        "input_processor": Config.SERVICES.INPUT_PROCESSOR_URL,
+        "reformulator": Config.SERVICES.REFORMULATOR_URL,
+        "embedding": Config.SERVICES.EMBEDDING_URL,
+        "cache": Config.SERVICES.CACHE_URL,
+        "small_llm": Config.SERVICES.SMALL_LLM_URL,
+        "large_llm": Config.SERVICES.LARGE_LLM_URL,
     }
 
     service_health = {}
@@ -183,10 +196,8 @@ async def track_request(request_id: str):
     """
     all_services = {
         "gateway": Config.SERVICES.GATEWAY_URL,
-        "data-processing": Config.SERVICES.DATA_PROCESSING_URL,
         "input-processor": Config.SERVICES.INPUT_PROCESSOR_URL,
         "reformulator": Config.SERVICES.REFORMULATOR_URL,
-        "answer-retrieval": Config.SERVICES.ANSWER_RETRIEVAL_URL,
         "embedding": Config.SERVICES.EMBEDDING_URL,
         "cache": Config.SERVICES.CACHE_URL,
         "small-llm": Config.SERVICES.SMALL_LLM_URL,
@@ -261,136 +272,525 @@ async def list_models():
     )
 
 
-async def call_data_processing(
-    input_data: str, input_type: str, request_id: str
-) -> dict:
-    """Call the Data Processing service (Phase 1 orchestrator)"""
-    url = f"{Config.SERVICES.DATA_PROCESSING_URL}/process-query"
-    data = {"input": input_data, "type": input_type}
+async def _process_input(input_text: str, input_type: str, request_id: str) -> dict:
+    """
+    Call Input Processor to process raw user input
 
-    logger.info(
-        "Calling Data Processing service",
-        context={"url": url, "input_type": input_type},
-        request_id=request_id,
-    )
+    Args:
+        input_text: Raw user input (text or image data)
+        input_type: Type of input ('text' or 'image')
+        request_id: Request ID for tracing
 
-    req = Request(
-        url,
-        data=json.dumps(data).encode("utf-8"),
-        headers={"Content-Type": "application/json", "X-Request-ID": request_id},
-        method="POST",
-    )
+    Returns:
+        Dict with processed_input, input_type, and metadata
 
-    # Record timing for data processing
+    Raises:
+        HTTPException: If input processor service fails
+    """
     start_time = time.time()
     try:
-        with urlopen(req) as response:
+        logger.info(
+            "Phase 1.1: Calling Input Processor",
+            context={"input_type": input_type, "input_length": len(input_text)},
+            request_id=request_id,
+        )
+
+        req = Request(
+            f"{Config.SERVICES.INPUT_PROCESSOR_URL}/process",
+            data=json.dumps({"input": input_text, "type": input_type}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Request-ID": request_id},
+            method="POST",
+        )
+
+        with urlopen(req, timeout=10) as response:
             result = json.loads(response.read().decode("utf-8"))
             duration = time.time() - start_time
-            gateway_data_processing_duration_seconds.observe(duration)
+            gateway_input_processor_duration_seconds.observe(duration)
 
             logger.info(
-                "Data Processing service responded",
+                "Input Processor responded",
+                context={
+                    "processed_input": result.get("processed_input", "")[:100],
+                    "duration_seconds": round(duration, 3),
+                },
+                request_id=request_id,
+            )
+            return result
+
+    except (HTTPError, URLError) as e:
+        duration = time.time() - start_time
+        gateway_input_processor_duration_seconds.observe(duration)
+        gateway_errors_total.labels(error_type="input_processor_error").inc()
+
+        logger.error(
+            "Input Processor service error",
+            context={"error": str(e), "duration_seconds": round(duration, 3)},
+            request_id=request_id,
+        )
+        raise HTTPException(
+            status_code=503, detail=f"Input processor service unavailable: {str(e)}"
+        )
+
+
+async def _reformulate_query(
+    processed_input: str, input_type: str, request_id: str
+) -> dict:
+    """
+    Call Reformulator to improve query clarity
+
+    Args:
+        processed_input: Processed user input from Input Processor
+        input_type: Type of input ('text' or 'image')
+        request_id: Request ID for tracing
+
+    Returns:
+        Dict with reformulated_query, original_input, and improvements_made
+
+    Raises:
+        HTTPException: If reformulator service fails
+    """
+    start_time = time.time()
+    try:
+        logger.info(
+            "Phase 1.2: Calling Reformulator",
+            context={"processed_input": processed_input[:100]},
+            request_id=request_id,
+        )
+
+        req = Request(
+            f"{Config.SERVICES.REFORMULATOR_URL}/reformulate",
+            data=json.dumps(
+                {"processed_input": processed_input, "input_type": input_type}
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Request-ID": request_id},
+            method="POST",
+        )
+
+        with urlopen(req, timeout=30) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            duration = time.time() - start_time
+            gateway_reformulator_duration_seconds.observe(duration)
+
+            logger.info(
+                "Reformulator responded",
                 context={
                     "reformulated_query": result.get("reformulated_query", "")[:100],
+                    "improvements_made": result.get("improvements_made", []),
                     "duration_seconds": round(duration, 3),
                 },
                 request_id=request_id,
             )
             return result
-    except HTTPError as e:
-        duration = time.time() - start_time
-        gateway_data_processing_duration_seconds.observe(duration)
-        gateway_errors_total.labels(error_type="data_processing_http_error").inc()
 
-        error_detail = f"Data Processing service error: {e.code}"
-        if e.code == 400:
-            error_detail = "Invalid input format"
-        logger.error(
-            "Data Processing service HTTP error",
-            context={"status_code": e.code, "error": error_detail},
-            request_id=request_id,
-        )
-        raise HTTPException(status_code=502, detail=error_detail)
-    except URLError as e:
+    except (HTTPError, URLError) as e:
         duration = time.time() - start_time
-        gateway_data_processing_duration_seconds.observe(duration)
-        gateway_errors_total.labels(error_type="data_processing_unavailable").inc()
+        gateway_reformulator_duration_seconds.observe(duration)
+        gateway_errors_total.labels(error_type="reformulator_error").inc()
 
         logger.error(
-            "Data Processing service unavailable",
-            context={"error": str(e.reason)},
+            "Reformulator service error",
+            context={"error": str(e), "duration_seconds": round(duration, 3)},
             request_id=request_id,
         )
         raise HTTPException(
-            status_code=503,
-            detail=f"Data Processing service unavailable: {str(e.reason)}",
+            status_code=503, detail=f"Reformulator service unavailable: {str(e)}"
         )
 
 
-async def call_answer_retrieval(query: str, request_id: str) -> dict:
-    """Call the Answer Retrieval service (Phase 2 orchestrator)"""
-    url = f"{Config.SERVICES.ANSWER_RETRIEVAL_URL}/retrieve-answer"
-    data = {"query": query}
+async def _embed_query(query: str, request_id: str) -> list[float]:
+    """
+    Call Embedding Service to convert query to vector
 
-    logger.info(
-        "Calling Answer Retrieval service",
-        context={"url": url, "query": query[:100]},
-        request_id=request_id,
-    )
+    Args:
+        query: User's question text
+        request_id: Request ID for distributed tracing
 
-    req = Request(
-        url,
-        data=json.dumps(data).encode("utf-8"),
-        headers={"Content-Type": "application/json", "X-Request-ID": request_id},
-        method="POST",
-    )
+    Returns:
+        Embedding vector as list of floats
 
-    # Record timing for answer retrieval
+    Raises:
+        HTTPException: If embedding service fails
+    """
     start_time = time.time()
     try:
-        with urlopen(req) as response:
+        logger.info(
+            "Phase 2.1: Calling Embedding service",
+            context={"query_length": len(query)},
+            request_id=request_id,
+        )
+
+        req = Request(
+            f"{Config.SERVICES.EMBEDDING_URL}/embed",
+            data=json.dumps({"text": query}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Request-ID": request_id},
+            method="POST",
+        )
+
+        with urlopen(req, timeout=10) as response:
             result = json.loads(response.read().decode("utf-8"))
             duration = time.time() - start_time
-            gateway_answer_retrieval_duration_seconds.observe(duration)
+            gateway_embedding_duration_seconds.observe(duration)
 
             logger.info(
-                "Answer Retrieval service responded",
+                "Embedding service responded",
                 context={
-                    "source": result.get("source", "unknown"),
-                    "used_cache": result.get("used_cache", False),
+                    "embedding_dimension": len(result["embedding"]),
                     "duration_seconds": round(duration, 3),
                 },
                 request_id=request_id,
             )
-            return result
-    except HTTPError as e:
+            return result["embedding"]
+
+    except (HTTPError, URLError) as e:
         duration = time.time() - start_time
-        gateway_answer_retrieval_duration_seconds.observe(duration)
-        gateway_errors_total.labels(error_type="answer_retrieval_http_error").inc()
+        gateway_embedding_duration_seconds.observe(duration)
+        gateway_errors_total.labels(error_type="embedding_error").inc()
 
         logger.error(
-            "Answer Retrieval service HTTP error",
-            context={"status_code": e.code},
+            "Embedding service failed",
+            context={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "duration_seconds": round(duration, 3),
+            },
             request_id=request_id,
         )
         raise HTTPException(
-            status_code=502,
-            detail=f"Answer Retrieval service error: {e.code}",
+            status_code=503, detail=f"Embedding service unavailable: {str(e)}"
         )
-    except URLError as e:
+
+
+async def _search_cache(embedding: list[float], request_id: str) -> list[dict]:
+    """
+    Search cache for similar Q&A pairs
+
+    Args:
+        embedding: Query embedding vector
+        request_id: Request ID for distributed tracing
+
+    Returns:
+        List of similar cached Q&A pairs
+
+    Raises:
+        HTTPException: If cache service fails (non-critical)
+    """
+    start_time = time.time()
+    try:
+        logger.info(
+            "Phase 2.2: Calling Cache service",
+            context={"top_k": Config.CACHE_TOP_K},
+            request_id=request_id,
+        )
+
+        req = Request(
+            f"{Config.SERVICES.CACHE_URL}/search",
+            data=json.dumps(
+                {"embedding": embedding, "top_k": Config.CACHE_TOP_K}
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Request-ID": request_id},
+            method="POST",
+        )
+
+        with urlopen(req, timeout=10) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            results = result.get("results", [])
+            duration = time.time() - start_time
+            gateway_cache_search_duration_seconds.observe(duration)
+
+            logger.info(
+                "Cache service responded",
+                context={
+                    "results_count": len(results),
+                    "top_similarity": results[0].get("similarity_score", 0) if results else 0,
+                    "duration_seconds": round(duration, 3),
+                },
+                request_id=request_id,
+            )
+            return results
+
+    except (HTTPError, URLError) as e:
         duration = time.time() - start_time
-        gateway_answer_retrieval_duration_seconds.observe(duration)
-        gateway_errors_total.labels(error_type="answer_retrieval_unavailable").inc()
+        gateway_cache_search_duration_seconds.observe(duration)
+
+        # Cache failure is non-critical, return empty results
+        logger.warning(
+            "Cache service failed (non-critical)",
+            context={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "duration_seconds": round(duration, 3),
+            },
+            request_id=request_id,
+        )
+        return []
+
+
+async def _query_small_llm(
+    query: str, cached_results: list[dict], request_id: str
+) -> dict:
+    """
+    Query Small LLM with cached context using OpenAI chat completions format
+
+    Args:
+        query: User's question
+        cached_results: Similar cached Q&A pairs
+        request_id: Request ID for distributed tracing
+
+    Returns:
+        Dict with answer, confidence, and is_exact_match
+
+    Raises:
+        HTTPException: If small LLM service fails
+    """
+    start_time = time.time()
+    try:
+        # Check for exact match in cached results (similarity >= 0.95)
+        if cached_results:
+            for cached in cached_results:
+                if cached.get("similarity_score", 0) >= 0.95:
+                    # Found exact match, return cached answer
+                    duration = time.time() - start_time
+                    logger.info(
+                        "Phase 2.3: Exact match found in cache (skipping Small LLM)",
+                        context={
+                            "similarity_score": cached["similarity_score"],
+                            "cached_question": cached.get("question", "")[:100],
+                            "duration_seconds": round(duration, 3),
+                        },
+                        request_id=request_id,
+                    )
+                    return {
+                        "answer": cached["answer"],
+                        "confidence": cached["similarity_score"],
+                        "is_exact_match": True,
+                    }
+
+        # No exact match - build OpenAI messages format
+        messages = []
+
+        # Add system message with cached context if available
+        if cached_results and len(cached_results) > 0:
+            context = "You are a math tutor. Here are some similar questions and answers for context:\n\n"
+            for i, cached in enumerate(cached_results[:3], 1):
+                context += f"{i}. Q: {cached['question']}\n   A: {cached['answer']}\n\n"
+            context += "Use these examples to help answer the user's question."
+            messages.append({"role": "system", "content": context})
+        else:
+            messages.append({"role": "system", "content": "You are a math tutor."})
+
+        # Add user message
+        messages.append({"role": "user", "content": query})
+
+        logger.info(
+            "Phase 2.3: Calling Small LLM service",
+            context={
+                "has_cached_context": len(cached_results) > 0,
+                "cached_count": len(cached_results),
+                "query": query[:100],
+            },
+            request_id=request_id,
+        )
+
+        # Call Small LLM with OpenAI format
+        req = Request(
+            f"{Config.SERVICES.SMALL_LLM_URL}/v1/chat/completions",
+            data=json.dumps(
+                {
+                    "model": "deepseek-r1:7b",
+                    "messages": messages,
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Request-ID": request_id},
+            method="POST",
+        )
+
+        with urlopen(req, timeout=60) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            answer = result["choices"][0]["message"]["content"]
+            duration = time.time() - start_time
+            gateway_small_llm_duration_seconds.observe(duration)
+
+            # Determine confidence based on whether we had cached context
+            confidence = 0.7 if cached_results else 0.5
+
+            # Record small LLM call
+            gateway_llm_calls_total.labels(llm_service="small_llm").inc()
+
+            # Record confidence
+            gateway_confidence.observe(confidence)
+
+            logger.info(
+                "Small LLM service responded",
+                context={
+                    "answer_length": len(answer),
+                    "answer_preview": answer[:100],
+                    "confidence": confidence,
+                    "is_exact_match": False,
+                    "duration_seconds": round(duration, 3),
+                },
+                request_id=request_id,
+            )
+
+            return {
+                "answer": answer,
+                "confidence": confidence,
+                "is_exact_match": False,
+            }
+
+    except (HTTPError, URLError) as e:
+        duration = time.time() - start_time
+        gateway_small_llm_duration_seconds.observe(duration)
+        gateway_errors_total.labels(error_type="small_llm_error").inc()
 
         logger.error(
-            "Answer Retrieval service unavailable",
-            context={"error": str(e.reason)},
+            "Small LLM service failed",
+            context={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "duration_seconds": round(duration, 3),
+            },
             request_id=request_id,
         )
         raise HTTPException(
-            status_code=503,
-            detail=f"Answer Retrieval service unavailable: {str(e.reason)}",
+            status_code=503, detail=f"Small LLM service unavailable: {str(e)}"
+        )
+
+
+async def _query_large_llm(query: str, request_id: str) -> str:
+    """
+    Query Large LLM for final answer using OpenAI chat completions format
+
+    Args:
+        query: User's question
+        request_id: Request ID for distributed tracing
+
+    Returns:
+        Answer string from Large LLM
+
+    Raises:
+        HTTPException: If large LLM service fails
+    """
+    start_time = time.time()
+    try:
+        logger.info(
+            "Phase 2.4: Calling Large LLM service (no exact match from cache/small LLM)",
+            context={"query_length": len(query), "query": query[:100]},
+            request_id=request_id,
+        )
+
+        # Build OpenAI messages format
+        messages = [
+            {
+                "role": "system",
+                "content": "You are an expert mathematics tutor for Lebanese high school students. Provide clear, accurate, and educational answers to math questions.",
+            },
+            {"role": "user", "content": query},
+        ]
+
+        req = Request(
+            f"{Config.SERVICES.LARGE_LLM_URL}/v1/chat/completions",
+            data=json.dumps(
+                {
+                    "model": "gpt-4o-mini",
+                    "messages": messages,
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Request-ID": request_id},
+            method="POST",
+        )
+
+        with urlopen(req, timeout=60) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            answer = result["choices"][0]["message"]["content"]
+            duration = time.time() - start_time
+            gateway_large_llm_duration_seconds.observe(duration)
+
+            # Record large LLM call
+            gateway_llm_calls_total.labels(llm_service="large_llm").inc()
+
+            logger.info(
+                "Large LLM service responded",
+                context={
+                    "answer_length": len(answer),
+                    "answer_preview": answer[:100],
+                    "duration_seconds": round(duration, 3),
+                },
+                request_id=request_id,
+            )
+            return answer
+
+    except (HTTPError, URLError) as e:
+        duration = time.time() - start_time
+        gateway_large_llm_duration_seconds.observe(duration)
+        gateway_errors_total.labels(error_type="large_llm_error").inc()
+
+        logger.error(
+            "Large LLM service failed",
+            context={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "duration_seconds": round(duration, 3),
+            },
+            request_id=request_id,
+        )
+        raise HTTPException(
+            status_code=503, detail=f"Large LLM service unavailable: {str(e)}"
+        )
+
+
+async def _save_to_cache(
+    query: str, answer: str, embedding: list[float], request_id: str
+) -> None:
+    """
+    Save Q&A pair to cache (non-critical operation)
+
+    Args:
+        query: User's question
+        answer: Final answer
+        embedding: Query embedding vector
+        request_id: Request ID for distributed tracing
+    """
+    start_time = time.time()
+    try:
+        logger.info(
+            "Phase 2.5: Saving to Cache service",
+            context={"query_length": len(query), "answer_length": len(answer)},
+            request_id=request_id,
+        )
+
+        req = Request(
+            f"{Config.SERVICES.CACHE_URL}/save",
+            data=json.dumps(
+                {"question": query, "answer": answer, "embedding": embedding}
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Request-ID": request_id},
+            method="POST",
+        )
+
+        with urlopen(req, timeout=10) as response:
+            duration = time.time() - start_time
+            gateway_cache_save_duration_seconds.observe(duration)
+
+            # Successfully saved (or acknowledged in stub mode)
+            logger.info(
+                "Cache service save successful",
+                context={"duration_seconds": round(duration, 3)},
+                request_id=request_id,
+            )
+
+    except (HTTPError, URLError) as e:
+        duration = time.time() - start_time
+        gateway_cache_save_duration_seconds.observe(duration)
+
+        # Cache save failure is non-critical, silently continue
+        logger.warning(
+            "Cache service save failed (non-critical)",
+            context={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "duration_seconds": round(duration, 3),
+            },
+            request_id=request_id,
         )
 
 
@@ -406,7 +806,7 @@ async def chat_completions(
     2. Phase 1 (Data Processing): Process and reformulate user input
        - Input Processor → Reformulator
     3. Phase 2 (Answer Retrieval): Get answer using cache and LLMs
-       - Embedding → Cache → Small LLM → [conditional] Large LLM
+       - Embedding → Cache → Small LLM → [conditional] Large LLM → Save
     4. Return answer in OpenAI format
 
     Returns OpenAI-compatible chat completion response.
@@ -432,7 +832,7 @@ async def chat_completions(
             )
 
         logger.info(
-            "Processing chat completion",
+            "Starting chat completion pipeline",
             context={
                 "model": request.model,
                 "user_message": user_message[:100],
@@ -441,22 +841,126 @@ async def chat_completions(
             request_id=request_id,
         )
 
-        # Phase 1: Data Processing (Input → Reformulated Query)
-        processing_result = await call_data_processing(user_message, "text", request_id)
-
-        # Phase 2: Answer Retrieval (Reformulated Query → Answer)
-        retrieval_result = await call_answer_retrieval(
-            processing_result["reformulated_query"], request_id
+        # ===== PHASE 1: DATA PROCESSING =====
+        logger.info(
+            "PHASE 1: Data Processing - Starting",
+            context={},
+            request_id=request_id,
         )
 
-        # Build OpenAI-compatible response
-        answer = retrieval_result["answer"]
+        # Step 1.1: Process input
+        input_result = await _process_input(user_message, "text", request_id)
+        processed_input = input_result["processed_input"]
+
+        # Step 1.2: Reformulate query
+        reformulate_result = await _reformulate_query(
+            processed_input, "text", request_id
+        )
+        reformulated_query = reformulate_result["reformulated_query"]
 
         logger.info(
-            "Chat completion successful",
+            "PHASE 1: Data Processing - Completed",
             context={
-                "answer_length": len(answer),
-                "source": retrieval_result.get("source", "unknown"),
+                "original_input": user_message[:100],
+                "reformulated_query": reformulated_query[:100],
+                "improvements_made": reformulate_result.get("improvements_made", []),
+            },
+            request_id=request_id,
+        )
+
+        # ===== PHASE 2: ANSWER RETRIEVAL =====
+        logger.info(
+            "PHASE 2: Answer Retrieval - Starting",
+            context={"query": reformulated_query[:100]},
+            request_id=request_id,
+        )
+
+        # Step 2.1: Embed the query
+        embedding = await _embed_query(reformulated_query, request_id)
+
+        # Step 2.2: Search cache for similar Q&A pairs
+        cached_results = await _search_cache(embedding, request_id)
+
+        # Step 2.3: Try Small LLM with cached results (or use exact match if found)
+        small_llm_response = await _query_small_llm(
+            reformulated_query, cached_results, request_id
+        )
+
+        # Step 2.4: Decision point - check if exact match
+        if (
+            small_llm_response.get("is_exact_match")
+            and small_llm_response.get("answer") is not None
+        ):
+            # Exact match found, return Small LLM answer (cached answer)
+            # Record cache hit
+            gateway_cache_hits_total.inc()
+
+            # Record confidence if available
+            confidence = small_llm_response.get("confidence")
+            if confidence is not None:
+                gateway_confidence.observe(confidence)
+
+            answer = small_llm_response["answer"]
+
+            logger.info(
+                "PHASE 2: Answer Retrieval - Completed (exact match from cache)",
+                context={
+                    "source": "cache",
+                    "used_cache": True,
+                    "confidence": confidence,
+                    "answer_length": len(answer),
+                    "answer_preview": answer[:100],
+                },
+                request_id=request_id,
+            )
+
+            logger.info(
+                "Chat completion pipeline successful",
+                context={
+                    "total_answer_length": len(answer),
+                    "source": "cache_exact_match",
+                },
+                request_id=request_id,
+            )
+
+            return ChatCompletionResponse(
+                id=f"chatcmpl-{uuid.uuid4().hex[:8]}",
+                created=int(time.time()),
+                model=request.model,
+                choices=[
+                    ChatCompletionChoice(
+                        index=0,
+                        message=ChatCompletionMessageResponse(content=answer),
+                        finish_reason="stop",
+                    )
+                ],
+            )
+
+        # Step 2.5: No exact match - call Large LLM
+        # Record cache miss and large LLM call
+        gateway_cache_misses_total.inc()
+
+        large_llm_answer = await _query_large_llm(reformulated_query, request_id)
+
+        # Step 2.6: Save Large LLM answer to cache
+        await _save_to_cache(reformulated_query, large_llm_answer, embedding, request_id)
+
+        logger.info(
+            "PHASE 2: Answer Retrieval - Completed (large LLM used)",
+            context={
+                "source": "large_llm",
+                "used_cache": False,
+                "answer_length": len(large_llm_answer),
+                "answer_preview": large_llm_answer[:100],
+            },
+            request_id=request_id,
+        )
+
+        logger.info(
+            "Chat completion pipeline successful",
+            context={
+                "total_answer_length": len(large_llm_answer),
+                "source": "large_llm",
             },
             request_id=request_id,
         )
@@ -468,7 +972,7 @@ async def chat_completions(
             choices=[
                 ChatCompletionChoice(
                     index=0,
-                    message=ChatCompletionMessageResponse(content=answer),
+                    message=ChatCompletionMessageResponse(content=large_llm_answer),
                     finish_reason="stop",
                 )
             ],
