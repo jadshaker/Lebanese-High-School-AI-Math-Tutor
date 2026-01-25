@@ -309,12 +309,12 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "increase(answer_retrieval_cache_hits_total[1m])",
+          "expr": "increase(gateway_cache_hits_total[1m])",
           "legendFormat": "Cache Hits",
           "refId": "A"
         },
         {
-          "expr": "increase(answer_retrieval_cache_misses_total[1m])",
+          "expr": "increase(gateway_cache_misses_total[1m])",
           "legendFormat": "Cache Misses",
           "refId": "B"
         }
@@ -422,12 +422,12 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "increase(answer_retrieval_llm_calls_total{llm_service=\"small_llm\"}[1m])",
+          "expr": "increase(gateway_llm_calls_total{llm_service=\"small_llm\"}[1m])",
           "legendFormat": "Small LLM",
           "refId": "A"
         },
         {
-          "expr": "increase(answer_retrieval_llm_calls_total{llm_service=\"large_llm\"}[1m])",
+          "expr": "increase(gateway_llm_calls_total{llm_service=\"large_llm\"}[1m])",
           "legendFormat": "Large LLM",
           "refId": "B"
         }
@@ -587,7 +587,7 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "up{job=~\"gateway|large-llm|embedding|cache|input-processor|small-llm|fine-tuned-model|reformulator|answer-retrieval|data-processing\"}",
+          "expr": "up{job=~\"gateway|large-llm|embedding|cache|input-processor|small-llm|fine-tuned-model|reformulator\"}",
           "legendFormat": "{{job}}",
           "refId": "A"
         }
@@ -664,17 +664,37 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, rate(gateway_data_processing_duration_seconds_bucket[1m]))",
-          "legendFormat": "Data Processing (P95)",
+          "expr": "histogram_quantile(0.95, rate(gateway_input_processor_duration_seconds_bucket[1m]))",
+          "legendFormat": "Input Processor (P95)",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, rate(gateway_answer_retrieval_duration_seconds_bucket[1m]))",
-          "legendFormat": "Answer Retrieval (P95)",
+          "expr": "histogram_quantile(0.95, rate(gateway_reformulator_duration_seconds_bucket[1m]))",
+          "legendFormat": "Reformulator (P95)",
           "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(gateway_embedding_duration_seconds_bucket[1m]))",
+          "legendFormat": "Embedding (P95)",
+          "refId": "C"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(gateway_cache_search_duration_seconds_bucket[1m]))",
+          "legendFormat": "Cache Search (P95)",
+          "refId": "D"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(gateway_small_llm_duration_seconds_bucket[1m]))",
+          "legendFormat": "Small LLM (P95)",
+          "refId": "E"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(gateway_large_llm_duration_seconds_bucket[1m]))",
+          "legendFormat": "Large LLM (P95)",
+          "refId": "F"
         }
       ],
-      "title": "Gateway Phase Duration (P95)",
+      "title": "Gateway Service Call Duration (P95)",
       "type": "timeseries"
     },
     {
@@ -769,5 +789,5 @@
   "timezone": "",
   "title": "Math Tutor Observability Dashboard",
   "uid": "math-tutor-dashboard",
-  "version": 1
+  "version": 2
 }
