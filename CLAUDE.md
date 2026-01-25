@@ -12,19 +12,19 @@ The application uses a **microservices architecture** with services communicatin
 
 ### Current Services
 
-- **Gateway** (Port 8000) - API Gateway that orchestrates requests to other services
-- **Large LLM** (Port 8001) - OpenAI GPT-4o-mini integration for complex math questions
+- **Gateway** (Port 8000) - API Gateway that orchestrates full two-phase pipeline
+- **Input Processor** (Port 8004) - Text/image processing service
+- **Reformulator** (Port 8007) - Query improvement via LLM service
 - **Embedding** (Port 8002) - OpenAI text-embedding-3-small for vector embeddings
 - **Cache** (Port 8003) - Vector storage with cosine similarity search (stub implementation)
 - **Small LLM** (Port 8005) - Ollama integration for efficient local inference (DeepSeek-R1 hosted on AUB HPC)
+- **Large LLM** (Port 8001) - OpenAI GPT-4o-mini integration for complex math questions
 - **Fine-Tuned Model** (Port 8006) - Ollama integration for fine-tuned model (TinyLlama hosted on AUB HPC)
-- **Answer Retrieval** (Port 8008) - Orchestrator service for Phase 2 answer retrieval flow with caching
 
-### Planned Services
+### Planned Features
 
-- Input Processor (Port 8004)
-- Reformulator (Port 8007)
 - Full cache implementation with vector database
+- UI service (Port 3000)
 
 ## Service Structure
 
@@ -223,26 +223,25 @@ Exception: Large LLM and Small LLM services use the official `openai` package (L
 
 ## Current Implementation Status
 
-✅ **Completed**:
+✅ **Completed** (8 services):
 
-- Gateway service with health checks and intelligent routing
-- Large LLM service with OpenAI GPT-4o-mini integration
+- Gateway service with full two-phase pipeline orchestration
+- Input Processor service with text processing and image stub
+- Reformulator service with LLM-powered query improvement
 - Embedding service with OpenAI text-embedding-3-small (1536 dimensions)
-- Cache service (stub) with similarity search, save, and tutoring endpoints
+- Cache service (stub) with similarity search and save endpoints
 - Small LLM service with Ollama integration (DeepSeek-R1 on AUB HPC)
+- Large LLM service with OpenAI GPT-4o-mini integration
 - Fine-Tuned Model service with Ollama integration (TinyLlama on AUB HPC)
-- Answer Retrieval service with Phase 2 orchestration: Embed → Cache → Small LLM → (conditional) Large LLM → Save
-- Gateway routing: defaults to small_llm, optional `use_large_llm` flag, automatic fallback
 - Docker Compose setup with all services
 - Code quality tooling (isort, black, mypy)
 - CI/CD pre-merge checks
 - VSCode tasks integration
 
-🚧 **In Progress**:
+🚧 **Planned**:
 
-- Input Processor service
-- Reformulator service
 - Full cache implementation with vector database
+- UI service (Port 3000)
 
 ## Adding New Services
 
