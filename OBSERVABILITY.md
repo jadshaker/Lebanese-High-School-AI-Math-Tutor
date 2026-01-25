@@ -10,7 +10,7 @@ The observability stack consists of three components:
 2. **Prometheus** - Metrics collection and storage
 3. **Grafana** - Metrics visualization and dashboards
 
-All 10 microservices are instrumented with comprehensive logging and metrics.
+All 8 microservices are instrumented with comprehensive logging and metrics.
 
 ---
 
@@ -96,9 +96,7 @@ tail -f .logs/gateway/app.log .logs/answer_retrieval/app.log
 ├── cache/app.log
 ├── input_processor/app.log
 ├── fine_tuned_model/app.log
-├── reformulator/app.log
-├── answer_retrieval/app.log
-└── data_processing/app.log
+└── reformulator/app.log
 ```
 
 #### Log Rotation
@@ -114,14 +112,12 @@ Request IDs flow through the entire pipeline:
 
 ```
 User Request → Gateway (req-abc123)
-  → Data Processing (req-abc123)
-    → Input Processor (req-abc123)
-    → Reformulator (req-abc123)
-  → Answer Retrieval (req-abc123)
-    → Embedding (req-abc123)
-    → Cache (req-abc123)
-    → Small LLM (req-abc123)
-    → Large LLM (req-abc123)
+  → Input Processor (req-abc123)
+  → Reformulator (req-abc123)
+  → Embedding (req-abc123)
+  → Cache (req-abc123)
+  → Small LLM (req-abc123)
+  → Large LLM (req-abc123)
 ```
 
 Search across all services:
@@ -165,18 +161,18 @@ rate(http_requests_total{status=~"5.."}[1m])
 #### Cache Hit Rate
 
 ```promql
-rate(answer_retrieval_cache_hits_total[1m]) /
-(rate(answer_retrieval_cache_hits_total[1m]) + rate(answer_retrieval_cache_misses_total[1m]))
+rate(gateway_cache_hits_total[1m]) /
+(rate(gateway_cache_hits_total[1m]) + rate(gateway_cache_misses_total[1m]))
 ```
 
 #### LLM Usage
 
 ```promql
 # Small LLM calls
-rate(answer_retrieval_llm_calls_total{llm_service="small_llm"}[1m])
+rate(gateway_llm_calls_total{llm_service="small_llm"}[1m])
 
 # Large LLM calls
-rate(answer_retrieval_llm_calls_total{llm_service="large_llm"}[1m])
+rate(gateway_llm_calls_total{llm_service="large_llm"}[1m])
 ```
 
 #### Token Usage (Cost Tracking)
@@ -199,27 +195,18 @@ rate(llm_tokens_total{type="completion"}[1m])
 
 #### Gateway
 
-- `gateway_data_processing_duration_seconds` - Phase 1 duration
-- `gateway_answer_retrieval_duration_seconds` - Phase 2 duration
+- `gateway_phase1_duration_seconds` - Phase 1 (data processing) duration
+- `gateway_phase2_duration_seconds` - Phase 2 (answer retrieval) duration
+- `gateway_llm_calls_total` - LLM usage (small/large)
+- `gateway_cache_hits_total` - Cache hits
+- `gateway_cache_misses_total` - Cache misses
 - `gateway_errors_total` - Error count by type
-
-#### Answer Retrieval
-
-- `answer_retrieval_llm_calls_total` - LLM usage (small/large)
-- `answer_retrieval_cache_hits_total` - Cache hits
-- `answer_retrieval_cache_misses_total` - Cache misses
-- `answer_retrieval_confidence` - Confidence score distribution
 
 #### LLM Services (small_llm, large_llm, fine_tuned_model)
 
 - `llm_requests_total` - Request count by model
 - `llm_tokens_total` - Token usage (prompt + completion)
 - `llm_latency_seconds` - LLM response time
-
-#### Data Processing
-
-- `data_processing_input_processor_duration_seconds` - Input processor duration
-- `data_processing_reformulator_duration_seconds` - Reformulator duration
 
 #### Embedding
 
@@ -246,8 +233,6 @@ Each service exposes metrics at `/metrics`:
 - Small LLM: http://localhost:8005/metrics
 - Fine-Tuned Model: http://localhost:8006/metrics
 - Reformulator: http://localhost:8007/metrics
-- Answer Retrieval: http://localhost:8008/metrics
-- Data Processing: http://localhost:8009/metrics
 
 ---
 
@@ -506,7 +491,7 @@ histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[1m]))
 rate(http_requests_total{status=~"5.."}[1m])
 
 # Cache hit rate
-rate(answer_retrieval_cache_hits_total[1m]) / (rate(answer_retrieval_cache_hits_total[1m]) + rate(answer_retrieval_cache_misses_total[1m]))
+rate(gateway_cache_hits_total[1m]) / (rate(gateway_cache_hits_total[1m]) + rate(gateway_cache_misses_total[1m]))
 ```
 
 ### Access Points
@@ -532,5 +517,5 @@ After deployment, verify:
 ---
 
 **Observability Stack Version**: 1.0
-**Last Updated**: 2026-01-24
-**Services Instrumented**: 10/10 ✅
+**Last Updated**: 2026-01-25
+**Services Instrumented**: 8/8 ✅
