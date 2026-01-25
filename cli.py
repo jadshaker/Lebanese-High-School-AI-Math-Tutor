@@ -57,12 +57,39 @@ def clean():
                 )
 
 
+def test():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("command", type=str, help="Command to run")
+    parser.add_argument("pytest_args", nargs="*", help="Arguments to pass to pytest")
+    args = parser.parse_args()
+
+    # Build pytest command
+    pytest_cmd = ["pytest", "-v"]
+
+    # Add any additional pytest arguments
+    if args.pytest_args:
+        pytest_cmd.extend(args.pytest_args)
+
+    subprocess.run(pytest_cmd)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("command", type=str, help="Command to run")
-    args = parser.parse_args()
+    parser.add_argument("pytest_args", nargs="*", help="Arguments to pass to pytest")
+    args, unknown = parser.parse_known_args()
+
     if args.command == "clean":
         clean()
+    elif args.command == "test":
+        # Build pytest command
+        pytest_cmd = ["pytest", "-v"]
+
+        # Add any additional pytest arguments from unknown args
+        if unknown:
+            pytest_cmd.extend(unknown)
+
+        subprocess.run(pytest_cmd)
     else:
         print("Invalid command")
 
