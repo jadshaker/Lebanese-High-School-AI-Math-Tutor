@@ -56,7 +56,9 @@ class Model(BaseModel):
     id: str = Field(..., description="Model identifier")
     object: Literal["model"] = Field(default="model")
     created: int = Field(..., description="Unix timestamp of creation")
-    owned_by: str = Field(default="math-tutor", description="Organization that owns the model")
+    owned_by: str = Field(
+        default="math-tutor", description="Organization that owns the model"
+    )
 
 
 class ModelListResponse(BaseModel):

@@ -12,10 +12,12 @@ services:
     environment:
       - DATA_PROCESSING_SERVICE_URL=http://data-processing:8009
       - ANSWER_RETRIEVAL_SERVICE_URL=http://answer-retrieval:8008
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload --no-access-log
     depends_on:
       - data-processing
       - answer-retrieval
+    volumes:
+      - ./.logs/gateway:/app/logs
     networks:
       - math-tutor-network
 
@@ -29,7 +31,9 @@ services:
       - '8001:8001'
     env_file:
       - .env
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload --no-access-log
+    volumes:
+      - ./.logs/large_llm:/app/logs
     networks:
       - math-tutor-network
 
@@ -46,9 +50,11 @@ services:
     environment:
       - SMALL_LLM_SERVICE_URL=http://host.docker.internal:11434
       - SMALL_LLM_MODEL_NAME=${SMALL_LLM_MODEL_NAME:-deepseek-r1:7b}
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8005 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8005 --reload --no-access-log
     extra_hosts:
       - 'host.docker.internal:host-gateway'
+    volumes:
+      - ./.logs/small_llm:/app/logs
     networks:
       - math-tutor-network
 
@@ -62,7 +68,9 @@ services:
       - '8002:8002'
     env_file:
       - .env
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8002 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8002 --reload --no-access-log
+    volumes:
+      - ./.logs/embedding:/app/logs
     networks:
       - math-tutor-network
 
@@ -76,7 +84,9 @@ services:
       - '8003:8003'
     env_file:
       - .env
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8003 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8003 --reload --no-access-log
+    volumes:
+      - ./.logs/cache:/app/logs
     networks:
       - math-tutor-network
 
@@ -90,7 +100,9 @@ services:
       - '8004:8004'
     env_file:
       - .env
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8004 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8004 --reload --no-access-log
+    volumes:
+      - ./.logs/input_processor:/app/logs
     networks:
       - math-tutor-network
 
@@ -107,9 +119,11 @@ services:
     environment:
       - FINE_TUNED_MODEL_SERVICE_URL=http://host.docker.internal:11434
       - FINE_TUNED_MODEL_NAME=${FINE_TUNED_MODEL_NAME:-tinyllama:latest}
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8006 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8006 --reload --no-access-log
     extra_hosts:
       - 'host.docker.internal:host-gateway'
+    volumes:
+      - ./.logs/fine_tuned_model:/app/logs
     networks:
       - math-tutor-network
 
@@ -125,9 +139,11 @@ services:
       - .env
     environment:
       - SMALL_LLM_SERVICE_URL=http://small-llm:8005
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8007 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8007 --reload --no-access-log
     depends_on:
       - small-llm
+    volumes:
+      - ./.logs/reformulator:/app/logs
     networks:
       - math-tutor-network
 
@@ -147,12 +163,14 @@ services:
       - SMALL_LLM_SERVICE_URL=http://small-llm:8005
       - LARGE_LLM_SERVICE_URL=http://large-llm:8001
       - CACHE_TOP_K=${CACHE_TOP_K:-5}
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8008 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8008 --reload --no-access-log
     depends_on:
       - embedding
       - cache
       - small-llm
       - large-llm
+    volumes:
+      - ./.logs/answer_retrieval:/app/logs
     networks:
       - math-tutor-network
 
@@ -169,10 +187,12 @@ services:
     environment:
       - INPUT_PROCESSOR_SERVICE_URL=http://input-processor:8004
       - REFORMULATOR_SERVICE_URL=http://reformulator:8007
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8009 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8009 --reload --no-access-log
     depends_on:
       - input-processor
       - reformulator
+    volumes:
+      - ./.logs/data_processing:/app/logs
     networks:
       - math-tutor-network
 
@@ -210,9 +230,45 @@ services:
       - open-webui-data:/app/backend/data
     restart: unless-stopped
 
+  # Prometheus - Metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: math-tutor-prometheus
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - math-tutor-network
+    restart: unless-stopped
+
+  # Grafana - Metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: math-tutor-grafana
+    ports:
+      - '3001:3000'
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - math-tutor-network
+    restart: unless-stopped
+
 networks:
   math-tutor-network:
     driver: bridge
 
 volumes:
   open-webui-data:
+  prometheus-data:
+  grafana-data:
