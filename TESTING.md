@@ -19,23 +19,19 @@ ssh -L 0.0.0.0:11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434
 Test each service is running and healthy:
 
 ```bash
-# Phase 2 Services
+# Gateway
+curl http://localhost:8000/health  # Gateway (orchestrates all services)
+
+# LLM Services
 curl http://localhost:8001/health  # Large LLM
-curl http://localhost:8002/health  # Embedding
-curl http://localhost:8003/health  # Cache
 curl http://localhost:8005/health  # Small LLM
 curl http://localhost:8006/health  # Fine-tuned Model
 
-# Phase 1 Services
+# Supporting Services
+curl http://localhost:8002/health  # Embedding
+curl http://localhost:8003/health  # Cache
 curl http://localhost:8004/health  # Input Processor
 curl http://localhost:8007/health  # Reformulator
-
-# Orchestrators
-curl http://localhost:8008/health  # Answer Retrieval Service
-curl http://localhost:8009/health  # Data Processing Service
-
-# Gateway
-curl http://localhost:8000/health  # Gateway
 ```
 
 **Expected:** All return `{"status": "healthy", ...}`
@@ -183,56 +179,9 @@ curl -X POST http://localhost:8001/query \
 
 ---
 
-## Layer 3: Orchestrator Services
+## Layer 3: End-to-End via Gateway ✅
 
-### Test Data Processing Service (8009)
-
-```bash
-curl -X POST http://localhost:8009/process-query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "input": "  what is derivative of x squared  ",
-    "type": "text"
-  }'
-```
-
-**Expected:**
-```json
-{
-  "reformulated_query": "What is the derivative of x^2?",
-  "original_input": "  what is derivative of x squared  ",
-  "input_type": "text",
-  "processing_metadata": {
-    "input_processor": {...},
-    "reformulator": {...}
-  }
-}
-```
-
-### Test Answer Retrieval Service (8008)
-
-```bash
-curl -X POST http://localhost:8008/retrieve-answer \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "What is the derivative of x^2?"
-  }'
-```
-
-**Expected:**
-```json
-{
-  "answer": "The derivative is 2x",
-  "source": "small_llm" | "large_llm",
-  "used_cache": true | false
-}
-```
-
----
-
-## Layer 4: End-to-End via Gateway ✅
-
-**Gateway is now updated and orchestrates the complete pipeline!**
+**Gateway orchestrates the complete two-phase pipeline directly!**
 
 ### Test 1: Simple Math Question (Text Input)
 
@@ -311,27 +260,13 @@ curl http://localhost:8000/health
 {
   "status": "healthy",
   "service": "gateway",
-  "services": {
-    "data_processing": {
-      "status": "healthy",
-      "details": {
-        "dependencies": {
-          "input_processor": "healthy",
-          "reformulator": "healthy"
-        }
-      }
-    },
-    "answer_retrieval": {
-      "status": "healthy",
-      "details": {
-        "dependencies": {
-          "embedding": "healthy",
-          "cache": "healthy",
-          "small_llm": "healthy",
-          "large_llm": "healthy"
-        }
-      }
-    }
+  "dependencies": {
+    "input_processor": "healthy",
+    "reformulator": "healthy",
+    "embedding": "healthy",
+    "cache": "healthy",
+    "small_llm": "healthy",
+    "large_llm": "healthy"
   }
 }
 ```
@@ -340,12 +275,11 @@ curl http://localhost:8000/health
 
 When you call Gateway `/query`, here's what happens:
 
-1. **Phase 1 - Data Processing (8009)**:
+1. **Phase 1 - Data Processing** (Gateway orchestrates directly):
    - Calls Input Processor (8004) → processes text/image
    - Calls Reformulator (8007) → improves question clarity
-   - Returns reformulated query
 
-2. **Phase 2 - Answer Retrieval (8008)**:
+2. **Phase 2 - Answer Retrieval** (Gateway orchestrates directly):
    - Calls Embedding (8002) → creates vector embedding
    - Calls Cache (8003) → searches for similar Q&A pairs
    - Calls Small LLM (8005) → attempts answer with cache context
@@ -366,9 +300,9 @@ When you call Gateway `/query`, here's what happens:
 docker compose logs -f
 
 # Specific service
-docker compose logs -f data-processing
-docker compose logs -f answer-retrieval
 docker compose logs -f gateway
+docker compose logs -f small-llm
+docker compose logs -f embedding
 ```
 
 ### Check service status:
@@ -412,7 +346,6 @@ docker stats
 
 ## Next Steps After Testing
 
-1. If individual services work → Test orchestrators
-2. If orchestrators work → Update Gateway (Task #85)
-3. If Gateway works → Build UI (Task #77)
-4. Full end-to-end testing with UI
+1. If individual services work → Test Gateway end-to-end
+2. If Gateway works → Build UI (Task #77)
+3. Full end-to-end testing with UI
