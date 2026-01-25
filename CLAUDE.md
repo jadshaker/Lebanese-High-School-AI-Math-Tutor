@@ -292,7 +292,47 @@ When creating a new service:
 
 5. **Add health check** endpoint in the new service
 
-## Testing
+## Testing Guidelines
+
+**ALWAYS write tests for new code:**
+- Add unit tests for new services or endpoints
+- Update tests when modifying existing functionality
+- Run tests before committing: `python3.14 cli.py test`
+
+**Test Types:**
+- **Unit tests** (`@pytest.mark.unit`): Fast, isolated, mock everything external
+- **Integration tests** (`@pytest.mark.integration`): Real services, Docker required
+- **E2E tests** (`@pytest.mark.e2e`): Full pipeline, HPC connection required
+
+**Before Committing:**
+1. Run code quality checks: `python3.14 cli.py clean`
+2. Run unit tests: `python3.14 cli.py test -- -m unit`
+3. Ensure all tests pass
+4. Check coverage if adding new code
+
+**HPC Connection Note:**
+- Integration and E2E tests may require SSH tunnel to AUB HPC for Ollama services
+- User should be notified if HPC connection is needed for testing
+- Unit tests do NOT require HPC (everything is mocked)
+
+**Quick Test Commands:**
+```bash
+# Run all tests
+python3.14 cli.py test
+
+# Run only unit tests (no external dependencies)
+python3.14 cli.py test -- -m unit
+
+# Run with coverage
+python3.14 cli.py test -- --cov=services --cov-report=html
+
+# Run specific test file
+python3.14 cli.py test -- tests/unit/test_services/test_gateway.py
+```
+
+See `TESTING.md` for comprehensive testing guidelines.
+
+## Manual Testing
 
 Test the gateway health check to verify all services are running:
 

@@ -376,6 +376,62 @@ This runs:
 2. **black** - Code formatting
 3. **mypy** - Type checking (per service)
 
+### Testing
+
+The project uses pytest for unit, integration, and end-to-end tests.
+
+#### Running Tests
+
+**Run all tests:**
+```bash
+python3.14 cli.py test
+```
+
+**Run specific test types:**
+```bash
+# Unit tests only (fast, no external dependencies)
+python3.14 cli.py test -- -m unit
+
+# Integration tests (requires all services running)
+python3.14 cli.py test -- -m integration
+
+# E2E tests (requires full stack + HPC connection)
+python3.14 cli.py test -- -m e2e
+```
+
+**Run tests with coverage:**
+```bash
+# Coverage for all services
+python3.14 cli.py test -- --cov=services --cov-report=html
+
+# View coverage report
+open htmlcov/index.html
+```
+
+**Run specific test file:**
+```bash
+python3.14 cli.py test -- tests/unit/test_services/test_gateway.py
+```
+
+#### Test Structure
+
+```
+tests/
+├── conftest.py          # Shared pytest fixtures
+├── unit/                # Fast isolated tests with mocked dependencies
+│   └── test_services/   # Tests for each service
+├── integration/         # Tests with real service calls (requires Docker)
+└── e2e/                 # Full pipeline tests (requires HPC connection)
+```
+
+#### Writing Tests
+
+- **Unit tests**: Mock all external dependencies (APIs, other services)
+- **Integration tests**: Use real Docker services, mock external APIs only
+- **E2E tests**: Full stack including HPC connection for Ollama services
+
+See `TESTING.md` for detailed guidelines.
+
 ### Project Configuration
 
 - **CLAUDE.md** - Instructions for Claude Code when working with this codebase
