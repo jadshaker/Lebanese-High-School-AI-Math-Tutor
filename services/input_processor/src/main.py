@@ -20,7 +20,8 @@ logger = StructuredLogger("input_processor")
 @app.middleware("http")
 async def logging_and_metrics_middleware(request: FastAPIRequest, call_next):
     """Middleware to log all HTTP requests and responses, and record metrics"""
-    request_id = generate_request_id()
+    incoming_request_id = request.headers.get("X-Request-ID")
+    request_id = incoming_request_id if incoming_request_id else generate_request_id()
     start_time = time.time()
 
     # Skip logging /metrics endpoint unless there's an error
