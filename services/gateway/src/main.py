@@ -23,7 +23,7 @@ from src.models.schemas import (
     Model,
     ModelListResponse,
 )
-from src.orchestrators import run_phase1, run_phase2
+from src.orchestrators import process_user_input, retrieve_answer
 
 app = FastAPI(title="Math Tutor API Gateway")
 logger = StructuredLogger("gateway")
@@ -217,14 +217,14 @@ async def chat_completions(
             request_id=request_id,
         )
 
-        # ===== PHASE 1: DATA PROCESSING =====
-        phase1_result = await run_phase1(user_message, request_id)
-        reformulated_query = phase1_result["reformulated_query"]
+        # ===== DATA PROCESSING =====
+        processing_result = await process_user_input(user_message, request_id)
+        reformulated_query = processing_result["reformulated_query"]
 
-        # ===== PHASE 2: ANSWER RETRIEVAL =====
-        phase2_result = await run_phase2(reformulated_query, request_id)
-        answer = phase2_result["answer"]
-        source = phase2_result["source"]
+        # ===== ANSWER RETRIEVAL =====
+        retrieval_result = await retrieve_answer(reformulated_query, request_id)
+        answer = retrieval_result["answer"]
+        source = retrieval_result["source"]
 
         logger.info(
             "Chat completion pipeline successful",

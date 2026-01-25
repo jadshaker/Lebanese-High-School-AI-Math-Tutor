@@ -29,11 +29,7 @@ async def _process_input(input_text: str, input_type: str, request_id: str) -> d
     """
     start_time = time.time()
     try:
-        logger.info(
-            "Phase 1.1: Calling Input Processor",
-            context={"input_type": input_type, "input_length": len(input_text)},
-            request_id=request_id,
-        )
+        logger.info("  → Input Processor", request_id=request_id)
 
         result = await call_service(
             f"{Config.SERVICES.INPUT_PROCESSOR_URL}/process",
@@ -45,12 +41,9 @@ async def _process_input(input_text: str, input_type: str, request_id: str) -> d
         duration = time.time() - start_time
         gateway_input_processor_duration_seconds.observe(duration)
 
+        preview = result.get("processed_input", "")[:50]
         logger.info(
-            "Input Processor responded",
-            context={
-                "processed_input": result.get("processed_input", "")[:100],
-                "duration_seconds": round(duration, 3),
-            },
+            f"  ✓ Input Processor ({duration:.1f}s): {preview}...",
             request_id=request_id,
         )
         return result
@@ -61,8 +54,7 @@ async def _process_input(input_text: str, input_type: str, request_id: str) -> d
         gateway_errors_total.labels(error_type="input_processor_error").inc()
 
         logger.error(
-            "Input Processor service error",
-            context={"error": str(e), "duration_seconds": round(duration, 3)},
+            f"Input Processor service error ({duration:.1f}s): {str(e)}",
             request_id=request_id,
         )
         raise
@@ -87,11 +79,7 @@ async def _reformulate_query(
     """
     start_time = time.time()
     try:
-        logger.info(
-            "Phase 1.2: Calling Reformulator",
-            context={"processed_input": processed_input[:100]},
-            request_id=request_id,
-        )
+        logger.info("  → Reformulator", request_id=request_id)
 
         result = await call_service(
             f"{Config.SERVICES.REFORMULATOR_URL}/reformulate",
@@ -103,13 +91,10 @@ async def _reformulate_query(
         duration = time.time() - start_time
         gateway_reformulator_duration_seconds.observe(duration)
 
+        preview = result.get("reformulated_query", "")[:50]
+        improvements = result.get("improvements_made", [])
         logger.info(
-            "Reformulator responded",
-            context={
-                "reformulated_query": result.get("reformulated_query", "")[:100],
-                "improvements_made": result.get("improvements_made", []),
-                "duration_seconds": round(duration, 3),
-            },
+            f"  ✓ Reformulator ({duration:.1f}s): {preview}... [{len(improvements)} improvements]",
             request_id=request_id,
         )
         return result
@@ -120,16 +105,15 @@ async def _reformulate_query(
         gateway_errors_total.labels(error_type="reformulator_error").inc()
 
         logger.error(
-            "Reformulator service error",
-            context={"error": str(e), "duration_seconds": round(duration, 3)},
+            f"Reformulator service error ({duration:.1f}s): {str(e)}",
             request_id=request_id,
         )
         raise
 
 
-async def run_phase1(user_message: str, request_id: str) -> dict:
+async def process_user_input(user_message: str, request_id: str) -> dict:
     """
-    Execute Phase 1: Data Processing pipeline
+    Execute Data Processing pipeline
 
     Flow:
         1. Process input (Input Processor)
@@ -148,27 +132,18 @@ async def run_phase1(user_message: str, request_id: str) -> dict:
     Raises:
         HTTPException: If any service in the pipeline fails
     """
-    logger.info(
-        "PHASE 1: Data Processing - Starting",
-        context={},
-        request_id=request_id,
-    )
+    logger.info("Data Processing Pipeline: Started", request_id=request_id)
 
-    # Step 1.1: Process input
+    # Step 1: Process input
     input_result = await _process_input(user_message, "text", request_id)
     processed_input = input_result["processed_input"]
 
-    # Step 1.2: Reformulate query
+    # Step 2: Reformulate query
     reformulate_result = await _reformulate_query(processed_input, "text", request_id)
     reformulated_query = reformulate_result["reformulated_query"]
 
     logger.info(
-        "PHASE 1: Data Processing - Completed",
-        context={
-            "original_input": user_message[:100],
-            "reformulated_query": reformulated_query[:100],
-            "improvements_made": reformulate_result.get("improvements_made", []),
-        },
+        f"Data Processing Pipeline: Completed - Query reformulated",
         request_id=request_id,
     )
 

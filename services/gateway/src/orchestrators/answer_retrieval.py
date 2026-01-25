@@ -36,11 +36,7 @@ async def _embed_query(query: str, request_id: str) -> list[float]:
     """
     start_time = time.time()
     try:
-        logger.info(
-            "Phase 2.1: Calling Embedding service",
-            context={"query_length": len(query)},
-            request_id=request_id,
-        )
+        logger.info("  → Embedding Service", request_id=request_id)
 
         result = await call_service(
             f"{Config.SERVICES.EMBEDDING_URL}/embed",
@@ -52,12 +48,9 @@ async def _embed_query(query: str, request_id: str) -> list[float]:
         duration = time.time() - start_time
         gateway_embedding_duration_seconds.observe(duration)
 
+        dim = len(result["embedding"])
         logger.info(
-            "Embedding service responded",
-            context={
-                "embedding_dimension": len(result["embedding"]),
-                "duration_seconds": round(duration, 3),
-            },
+            f"  ✓ Embedding Service ({duration:.1f}s): {dim}D vector",
             request_id=request_id,
         )
         return result["embedding"]
@@ -68,12 +61,7 @@ async def _embed_query(query: str, request_id: str) -> list[float]:
         gateway_errors_total.labels(error_type="embedding_error").inc()
 
         logger.error(
-            "Embedding service failed",
-            context={
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "duration_seconds": round(duration, 3),
-            },
+            f"Embedding service failed ({duration:.1f}s): {str(e)}",
             request_id=request_id,
         )
         raise
@@ -95,11 +83,7 @@ async def _search_cache(embedding: list[float], request_id: str) -> list[dict]:
     """
     start_time = time.time()
     try:
-        logger.info(
-            "Phase 2.2: Calling Cache service",
-            context={"top_k": Config.CACHE_TOP_K},
-            request_id=request_id,
-        )
+        logger.info("  → Cache Search", request_id=request_id)
 
         result = await call_service(
             f"{Config.SERVICES.CACHE_URL}/search",
@@ -112,15 +96,9 @@ async def _search_cache(embedding: list[float], request_id: str) -> list[dict]:
         duration = time.time() - start_time
         gateway_cache_search_duration_seconds.observe(duration)
 
+        top_sim = results[0].get("similarity_score", 0) if results else 0
         logger.info(
-            "Cache service responded",
-            context={
-                "results_count": len(results),
-                "top_similarity": (
-                    results[0].get("similarity_score", 0) if results else 0
-                ),
-                "duration_seconds": round(duration, 3),
-            },
+            f"  ✓ Cache Search ({duration:.2f}s): {len(results)} results, top similarity: {top_sim:.2f}",
             request_id=request_id,
         )
         return results
@@ -131,12 +109,7 @@ async def _search_cache(embedding: list[float], request_id: str) -> list[dict]:
 
         # Cache failure is non-critical, return empty results
         logger.warning(
-            "Cache service failed (non-critical)",
-            context={
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "duration_seconds": round(duration, 3),
-            },
+            f"Cache search failed ({duration:.2f}s): {str(e)} (non-critical)",
             request_id=request_id,
         )
         return []
@@ -167,13 +140,9 @@ async def _query_small_llm(
                 if cached.get("similarity_score", 0) >= 0.95:
                     # Found exact match, return cached answer
                     duration = time.time() - start_time
+                    similarity = cached["similarity_score"]
                     logger.info(
-                        "Phase 2.3: Exact match found in cache (skipping Small LLM)",
-                        context={
-                            "similarity_score": cached["similarity_score"],
-                            "cached_question": cached.get("question", "")[:100],
-                            "duration_seconds": round(duration, 3),
-                        },
+                        f"  ✓ Exact cache match found ({duration:.2f}s): similarity {similarity:.3f}",
                         request_id=request_id,
                     )
                     return {
@@ -198,15 +167,12 @@ async def _query_small_llm(
         # Add user message
         messages.append({"role": "user", "content": query})
 
-        logger.info(
-            "Phase 2.3: Calling Small LLM service",
-            context={
-                "has_cached_context": len(cached_results) > 0,
-                "cached_count": len(cached_results),
-                "query": query[:100],
-            },
-            request_id=request_id,
+        cached_info = (
+            f"with {len(cached_results)} cached examples"
+            if cached_results
+            else "no cache context"
         )
+        logger.info(f"  → Small LLM ({cached_info})", request_id=request_id)
 
         # Call Small LLM with OpenAI format
         result = await call_service(
@@ -233,14 +199,7 @@ async def _query_small_llm(
         gateway_confidence.observe(confidence)
 
         logger.info(
-            "Small LLM service responded",
-            context={
-                "answer_length": len(answer),
-                "answer_preview": answer[:100],
-                "confidence": confidence,
-                "is_exact_match": False,
-                "duration_seconds": round(duration, 3),
-            },
+            f"  ✓ Small LLM ({duration:.1f}s): {len(answer)} chars, confidence {confidence:.1f}",
             request_id=request_id,
         )
 
@@ -256,12 +215,7 @@ async def _query_small_llm(
         gateway_errors_total.labels(error_type="small_llm_error").inc()
 
         logger.error(
-            "Small LLM service failed",
-            context={
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "duration_seconds": round(duration, 3),
-            },
+            f"Small LLM service failed ({duration:.1f}s): {str(e)}",
             request_id=request_id,
         )
         raise
@@ -283,11 +237,7 @@ async def _query_large_llm(query: str, request_id: str) -> str:
     """
     start_time = time.time()
     try:
-        logger.info(
-            "Phase 2.4: Calling Large LLM service (no exact match from cache/small LLM)",
-            context={"query_length": len(query), "query": query[:100]},
-            request_id=request_id,
-        )
+        logger.info("  → Large LLM [cache miss]", request_id=request_id)
 
         # Build OpenAI messages format
         messages = [
@@ -316,12 +266,7 @@ async def _query_large_llm(query: str, request_id: str) -> str:
         gateway_llm_calls_total.labels(llm_service="large_llm").inc()
 
         logger.info(
-            "Large LLM service responded",
-            context={
-                "answer_length": len(answer),
-                "answer_preview": answer[:100],
-                "duration_seconds": round(duration, 3),
-            },
+            f"  ✓ Large LLM ({duration:.1f}s): {len(answer)} chars",
             request_id=request_id,
         )
         return answer
@@ -332,12 +277,7 @@ async def _query_large_llm(query: str, request_id: str) -> str:
         gateway_errors_total.labels(error_type="large_llm_error").inc()
 
         logger.error(
-            "Large LLM service failed",
-            context={
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "duration_seconds": round(duration, 3),
-            },
+            f"Large LLM service failed ({duration:.1f}s): {str(e)}",
             request_id=request_id,
         )
         raise
@@ -357,11 +297,7 @@ async def _save_to_cache(
     """
     start_time = time.time()
     try:
-        logger.info(
-            "Phase 2.5: Saving to Cache service",
-            context={"query_length": len(query), "answer_length": len(answer)},
-            request_id=request_id,
-        )
+        logger.info("  → Cache Save", request_id=request_id)
 
         await call_service(
             f"{Config.SERVICES.CACHE_URL}/save",
@@ -375,8 +311,7 @@ async def _save_to_cache(
 
         # Successfully saved (or acknowledged in stub mode)
         logger.info(
-            "Cache service save successful",
-            context={"duration_seconds": round(duration, 3)},
+            f"  ✓ Cache Save ({duration:.2f}s)",
             request_id=request_id,
         )
 
@@ -386,19 +321,14 @@ async def _save_to_cache(
 
         # Cache save failure is non-critical, silently continue
         logger.warning(
-            "Cache service save failed (non-critical)",
-            context={
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "duration_seconds": round(duration, 3),
-            },
+            f"Cache save failed ({duration:.2f}s): {str(e)} (non-critical)",
             request_id=request_id,
         )
 
 
-async def run_phase2(query: str, request_id: str) -> dict:
+async def retrieve_answer(query: str, request_id: str) -> dict:
     """
-    Execute Phase 2: Answer Retrieval pipeline
+    Execute Answer Retrieval pipeline
 
     Flow:
         1. Embed query (Embedding Service)
@@ -408,7 +338,7 @@ async def run_phase2(query: str, request_id: str) -> dict:
         5. Save to cache
 
     Args:
-        query: Reformulated query from Phase 1
+        query: Reformulated query from Data Processing pipeline
         request_id: Request ID for tracing
 
     Returns:
@@ -421,22 +351,18 @@ async def run_phase2(query: str, request_id: str) -> dict:
     Raises:
         HTTPException: If critical services fail
     """
-    logger.info(
-        "PHASE 2: Answer Retrieval - Starting",
-        context={"query": query[:100]},
-        request_id=request_id,
-    )
+    logger.info("Answer Retrieval Pipeline: Started", request_id=request_id)
 
-    # Step 2.1: Embed the query
+    # Step 1: Embed the query
     embedding = await _embed_query(query, request_id)
 
-    # Step 2.2: Search cache for similar Q&A pairs
+    # Step 2: Search cache for similar Q&A pairs
     cached_results = await _search_cache(embedding, request_id)
 
-    # Step 2.3: Try Small LLM with cached results (or use exact match if found)
+    # Step 3: Try Small LLM with cached results (or use exact match if found)
     small_llm_response = await _query_small_llm(query, cached_results, request_id)
 
-    # Step 2.4: Decision point - check if exact match
+    # Step 4: Decision point - check if exact match
     if (
         small_llm_response.get("is_exact_match")
         and small_llm_response.get("answer") is not None
@@ -453,14 +379,7 @@ async def run_phase2(query: str, request_id: str) -> dict:
         answer = small_llm_response["answer"]
 
         logger.info(
-            "PHASE 2: Answer Retrieval - Completed (exact match from cache)",
-            context={
-                "source": "cache",
-                "used_cache": True,
-                "confidence": confidence,
-                "answer_length": len(answer),
-                "answer_preview": answer[:100],
-            },
+            f"Answer Retrieval Pipeline: Completed - Exact cache match ({len(answer)} chars)",
             request_id=request_id,
         )
 
@@ -471,23 +390,17 @@ async def run_phase2(query: str, request_id: str) -> dict:
             "used_cache": True,
         }
 
-    # Step 2.5: No exact match - call Large LLM
+    # Step 5: No exact match - call Large LLM
     # Record cache miss and large LLM call
     gateway_cache_misses_total.inc()
 
     large_llm_answer = await _query_large_llm(query, request_id)
 
-    # Step 2.6: Save Large LLM answer to cache
+    # Step 6: Save Large LLM answer to cache
     await _save_to_cache(query, large_llm_answer, embedding, request_id)
 
     logger.info(
-        "PHASE 2: Answer Retrieval - Completed (large LLM used)",
-        context={
-            "source": "large_llm",
-            "used_cache": False,
-            "answer_length": len(large_llm_answer),
-            "answer_preview": large_llm_answer[:100],
-        },
+        f"Answer Retrieval Pipeline: Completed - Large LLM used ({len(large_llm_answer)} chars)",
         request_id=request_id,
     )
 
