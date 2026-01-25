@@ -1,21 +1,18 @@
-import sys
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-# Add service to path
-service_path = Path(__file__).parent.parent.parent.parent / "services" / "gateway"
-sys.path.insert(0, str(service_path))
 
-# Mock StructuredLogger to avoid file system issues
-with patch("src.logging_utils.StructuredLogger") as mock_logger:
-    mock_logger_instance = MagicMock()
-    mock_logger.return_value = mock_logger_instance
-    from src.main import app
 
-client = TestClient(app)
+# Module-level setup - load app and create client
+@pytest.fixture(scope="module", autouse=True)
+def setup_module(gateway_app):
+    """Set up module-level client for gateway service"""
+    global client
+    client = TestClient(gateway_app)
+
+
 
 
 @pytest.mark.unit
@@ -43,11 +40,13 @@ def test_health_endpoint_all_healthy(mock_urlopen):
 def test_health_endpoint_degraded(mock_urlopen):
     """Test health check when some services are unhealthy"""
     # Mock service health checks with one failure
-    def mock_health_side_effect(*args, **kwargs):
-        mock_response = MagicMock()
-        # Simulate one service failing
-        if "large_llm" in str(args[0]):
+    def mock_health_side_effect(request, *args, **kwargs):
+        # Check the URL from the Request object
+        url = request.full_url if hasattr(request, 'full_url') else str(request)
+        if "large-llm" in url:
             raise Exception("Service unavailable")
+
+        mock_response = MagicMock()
         mock_response.read.return_value = b'{"status": "healthy"}'
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=False)
@@ -79,17 +78,13 @@ def test_models_endpoint():
 @pytest.mark.unit
 @patch("src.main.process_user_input")
 @patch("src.main.retrieve_answer")
-def test_chat_completions_success(mock_retrieve, mock_process):
+async def test_chat_completions_success(mock_retrieve, mock_process):
     """Test successful chat completion through full pipeline"""
     # Mock processing phase
-    mock_process.return_value = AsyncMock(
-        return_value={"reformulated_query": "What is the derivative of x^2?"}
-    )()
+    mock_process.return_value = {"reformulated_query": "What is the derivative of x^2?"}
 
     # Mock retrieval phase
-    mock_retrieve.return_value = AsyncMock(
-        return_value={"answer": "The derivative of x^2 is 2x", "source": "small_llm"}
-    )()
+    mock_retrieve.return_value = {"answer": "The derivative of x^2 is 2x", "source": "small_llm"}
 
     request_data = {
         "model": "math-tutor",
@@ -131,17 +126,13 @@ def test_chat_completions_missing_messages():
 @pytest.mark.unit
 @patch("src.main.process_user_input")
 @patch("src.main.retrieve_answer")
-def test_chat_completions_extracts_last_user_message(mock_retrieve, mock_process):
+async def test_chat_completions_extracts_last_user_message(mock_retrieve, mock_process):
     """Test that chat completion extracts the last user message from conversation"""
     # Mock processing phase
-    mock_process.return_value = AsyncMock(
-        return_value={"reformulated_query": "Is 4 correct?"}
-    )()
+    mock_process.return_value = {"reformulated_query": "Is 4 correct?"}
 
     # Mock retrieval phase
-    mock_retrieve.return_value = AsyncMock(
-        return_value={"answer": "Yes, 4 is correct", "source": "small_llm"}
-    )()
+    mock_retrieve.return_value = {"answer": "Yes, 4 is correct", "source": "small_llm"}
 
     request_data = {
         "model": "math-tutor",
@@ -181,12 +172,10 @@ def test_chat_completions_processing_error(mock_process):
 @pytest.mark.unit
 @patch("src.main.process_user_input")
 @patch("src.main.retrieve_answer")
-def test_chat_completions_retrieval_error(mock_retrieve, mock_process):
+async def test_chat_completions_retrieval_error(mock_retrieve, mock_process):
     """Test chat completion when retrieval phase fails"""
     # Mock processing phase success
-    mock_process.return_value = AsyncMock(
-        return_value={"reformulated_query": "test"}
-    )()
+    mock_process.return_value = {"reformulated_query": "test"}
 
     # Mock retrieval phase failure
     mock_retrieve.side_effect = Exception("Retrieval failed")
@@ -204,15 +193,13 @@ def test_chat_completions_retrieval_error(mock_retrieve, mock_process):
 @pytest.mark.unit
 @patch("src.main.process_user_input")
 @patch("src.main.retrieve_answer")
-def test_chat_completions_missing_answer_key(mock_retrieve, mock_process):
+async def test_chat_completions_missing_answer_key(mock_retrieve, mock_process):
     """Test chat completion when retrieval returns unexpected format"""
     # Mock processing phase success
-    mock_process.return_value = AsyncMock(
-        return_value={"reformulated_query": "test"}
-    )()
+    mock_process.return_value = {"reformulated_query": "test"}
 
     # Mock retrieval phase with missing key
-    mock_retrieve.return_value = AsyncMock(return_value={"source": "small_llm"})()
+    mock_retrieve.return_value = {"source": "small_llm"}
 
     request_data = {
         "model": "math-tutor",
@@ -242,17 +229,13 @@ def test_track_request_endpoint():
 @pytest.mark.unit
 @patch("src.main.process_user_input")
 @patch("src.main.retrieve_answer")
-def test_chat_completions_special_characters(mock_retrieve, mock_process):
+async def test_chat_completions_special_characters(mock_retrieve, mock_process):
     """Test chat completion with special characters and unicode"""
     # Mock processing phase
-    mock_process.return_value = AsyncMock(
-        return_value={"reformulated_query": "What is ∫ x² dx?"}
-    )()
+    mock_process.return_value = {"reformulated_query": "What is ∫ x² dx?"}
 
     # Mock retrieval phase
-    mock_retrieve.return_value = AsyncMock(
-        return_value={"answer": "∫ x² dx = x³/3 + C", "source": "large_llm"}
-    )()
+    mock_retrieve.return_value = {"answer": "∫ x² dx = x³/3 + C", "source": "large_llm"}
 
     request_data = {
         "model": "math-tutor",
@@ -269,17 +252,13 @@ def test_chat_completions_special_characters(mock_retrieve, mock_process):
 @pytest.mark.unit
 @patch("src.main.process_user_input")
 @patch("src.main.retrieve_answer")
-def test_chat_completions_long_message(mock_retrieve, mock_process):
+async def test_chat_completions_long_message(mock_retrieve, mock_process):
     """Test chat completion with very long user message"""
     # Mock processing phase
-    mock_process.return_value = AsyncMock(
-        return_value={"reformulated_query": "long query"}
-    )()
+    mock_process.return_value = {"reformulated_query": "long query"}
 
     # Mock retrieval phase
-    mock_retrieve.return_value = AsyncMock(
-        return_value={"answer": "answer", "source": "small_llm"}
-    )()
+    mock_retrieve.return_value = {"answer": "answer", "source": "small_llm"}
 
     long_message = "a" * 10000
     request_data = {
@@ -295,17 +274,13 @@ def test_chat_completions_long_message(mock_retrieve, mock_process):
 @pytest.mark.unit
 @patch("src.main.process_user_input")
 @patch("src.main.retrieve_answer")
-def test_chat_completions_response_structure(mock_retrieve, mock_process):
+async def test_chat_completions_response_structure(mock_retrieve, mock_process):
     """Test that chat completion response has correct OpenAI-compatible structure"""
     # Mock processing phase
-    mock_process.return_value = AsyncMock(
-        return_value={"reformulated_query": "test"}
-    )()
+    mock_process.return_value = {"reformulated_query": "test"}
 
     # Mock retrieval phase
-    mock_retrieve.return_value = AsyncMock(
-        return_value={"answer": "test answer", "source": "small_llm"}
-    )()
+    mock_retrieve.return_value = {"answer": "test answer", "source": "small_llm"}
 
     request_data = {
         "model": "math-tutor",

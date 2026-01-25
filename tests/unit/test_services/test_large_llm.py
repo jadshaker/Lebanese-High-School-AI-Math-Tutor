@@ -1,21 +1,18 @@
-import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-# Add service to path
-service_path = Path(__file__).parent.parent.parent.parent / "services" / "large_llm"
-sys.path.insert(0, str(service_path))
 
-# Mock StructuredLogger to avoid file system issues
-with patch("src.logging_utils.StructuredLogger") as mock_logger:
-    mock_logger_instance = MagicMock()
-    mock_logger.return_value = mock_logger_instance
-    from src.main import app
 
-client = TestClient(app)
+# Module-level setup - load app and create client
+@pytest.fixture(scope="module", autouse=True)
+def setup_module(large_llm_app):
+    """Set up module-level client for large_llm service"""
+    global client
+    client = TestClient(large_llm_app)
+
+
 
 
 @pytest.mark.unit

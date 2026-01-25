@@ -1,21 +1,15 @@
-import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
 import pytest
 from fastapi.testclient import TestClient
 
-# Add service to path
-service_path = Path(__file__).parent.parent.parent.parent / "services" / "cache"
-sys.path.insert(0, str(service_path))
 
-# Mock StructuredLogger to avoid file system issues
-with patch("src.logging_utils.StructuredLogger") as mock_logger:
-    mock_logger_instance = MagicMock()
-    mock_logger.return_value = mock_logger_instance
-    from src.main import app
 
-client = TestClient(app)
+# Module-level setup - load app and create client
+@pytest.fixture(scope="module", autouse=True)
+def setup_module(cache_app):
+    """Set up module-level client for cache service"""
+    global client
+    client = TestClient(cache_app)
+
 
 
 @pytest.mark.unit

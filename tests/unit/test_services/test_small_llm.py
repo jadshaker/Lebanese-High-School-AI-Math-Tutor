@@ -1,21 +1,18 @@
-import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-# Add service to path
-service_path = Path(__file__).parent.parent.parent.parent / "services" / "small_llm"
-sys.path.insert(0, str(service_path))
 
-# Mock StructuredLogger to avoid file system issues
-with patch("src.logging_utils.StructuredLogger") as mock_logger:
-    mock_logger_instance = MagicMock()
-    mock_logger.return_value = mock_logger_instance
-    from src.main import app
 
-client = TestClient(app)
+# Module-level setup - load app and create client
+@pytest.fixture(scope="module", autouse=True)
+def setup_module(small_llm_app):
+    """Set up module-level client for small_llm service"""
+    global client
+    client = TestClient(small_llm_app)
+
+
 
 
 @pytest.mark.unit
@@ -76,6 +73,7 @@ def test_chat_completions_success(mock_openai_client):
     mock_response.usage = mock_usage
     mock_response.model_dump.return_value = {
         "id": "chatcmpl-123",
+        "object": "chat.completion",
         "created": 1234567890,
         "model": "deepseek-r1:7b",
         "choices": [
@@ -132,7 +130,7 @@ def test_chat_completions_service_error(mock_openai_client):
 @pytest.mark.unit
 @patch("src.main.client")
 def test_chat_completions_default_model(mock_openai_client):
-    """Test chat completion uses default model when not specified"""
+    """Test chat completion with explicit model (model field is required)"""
     # Mock Ollama response
     mock_message = MagicMock()
     mock_message.content = "Response"
@@ -147,6 +145,7 @@ def test_chat_completions_default_model(mock_openai_client):
     mock_response.usage = None
     mock_response.model_dump.return_value = {
         "id": "chatcmpl-123",
+        "object": "chat.completion",
         "created": 1234567890,
         "model": "deepseek-r1:7b",
         "choices": [
@@ -161,6 +160,7 @@ def test_chat_completions_default_model(mock_openai_client):
     mock_openai_client.chat.completions.create.return_value = mock_response
 
     request_data = {
+        "model": "deepseek-r1:7b",
         "messages": [{"role": "user", "content": "test"}],
     }
 
@@ -187,6 +187,7 @@ def test_chat_completions_long_conversation(mock_openai_client):
     mock_response.usage = None
     mock_response.model_dump.return_value = {
         "id": "chatcmpl-123",
+        "object": "chat.completion",
         "created": 1234567890,
         "model": "deepseek-r1:7b",
         "choices": [
@@ -233,6 +234,7 @@ def test_chat_completions_special_characters(mock_openai_client):
     mock_response.usage = None
     mock_response.model_dump.return_value = {
         "id": "chatcmpl-123",
+        "object": "chat.completion",
         "created": 1234567890,
         "model": "deepseek-r1:7b",
         "choices": [

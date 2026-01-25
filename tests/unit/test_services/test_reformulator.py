@@ -1,21 +1,19 @@
-import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-# Add service to path
-service_path = Path(__file__).parent.parent.parent.parent / "services" / "reformulator"
-sys.path.insert(0, str(service_path))
 
-# Mock StructuredLogger to avoid file system issues
-with patch("src.logging_utils.StructuredLogger") as mock_logger:
-    mock_logger_instance = MagicMock()
-    mock_logger.return_value = mock_logger_instance
-    from src.main import app
 
-client = TestClient(app)
+# Module-level setup - load app and create client
+@pytest.fixture(scope="module", autouse=True)
+def setup_module(reformulator_app):
+    """Set up module-level client for reformulator service"""
+    global client
+    client = TestClient(reformulator_app)
+
+
 
 
 @pytest.mark.unit
@@ -86,7 +84,7 @@ def test_reformulate_success(mock_urlopen):
         ]
     }
     mock_response = MagicMock()
-    mock_response.read.return_value = str(llm_response).replace("'", '"').encode("utf-8")
+    mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
     mock_response.__enter__ = MagicMock(return_value=mock_response)
     mock_response.__exit__ = MagicMock(return_value=False)
     mock_urlopen.return_value = mock_response
@@ -146,7 +144,7 @@ def test_reformulate_removes_think_tags(mock_urlopen):
         ]
     }
     mock_response = MagicMock()
-    mock_response.read.return_value = str(llm_response).replace("'", '"').encode("utf-8")
+    mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
     mock_response.__enter__ = MagicMock(return_value=mock_response)
     mock_response.__exit__ = MagicMock(return_value=False)
     mock_urlopen.return_value = mock_response
@@ -181,7 +179,7 @@ def test_reformulate_removes_quotes(mock_urlopen):
         ]
     }
     mock_response = MagicMock()
-    mock_response.read.return_value = str(llm_response).replace("'", '"').encode("utf-8")
+    mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
     mock_response.__enter__ = MagicMock(return_value=mock_response)
     mock_response.__exit__ = MagicMock(return_value=False)
     mock_urlopen.return_value = mock_response
@@ -215,7 +213,7 @@ def test_reformulate_empty_response_fallback(mock_urlopen):
         ]
     }
     mock_response = MagicMock()
-    mock_response.read.return_value = str(llm_response).replace("'", '"').encode("utf-8")
+    mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
     mock_response.__enter__ = MagicMock(return_value=mock_response)
     mock_response.__exit__ = MagicMock(return_value=False)
     mock_urlopen.return_value = mock_response
@@ -249,7 +247,7 @@ def test_reformulate_special_characters(mock_urlopen):
         ]
     }
     mock_response = MagicMock()
-    mock_response.read.return_value = str(llm_response).replace("'", '"').encode("utf-8")
+    mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
     mock_response.__enter__ = MagicMock(return_value=mock_response)
     mock_response.__exit__ = MagicMock(return_value=False)
     mock_urlopen.return_value = mock_response
@@ -283,7 +281,7 @@ def test_reformulate_detects_improvements(mock_urlopen):
         ]
     }
     mock_response = MagicMock()
-    mock_response.read.return_value = str(llm_response).replace("'", '"').encode("utf-8")
+    mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
     mock_response.__enter__ = MagicMock(return_value=mock_response)
     mock_response.__exit__ = MagicMock(return_value=False)
     mock_urlopen.return_value = mock_response
