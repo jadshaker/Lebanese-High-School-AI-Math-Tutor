@@ -6,6 +6,27 @@ FILES_TO_CLEAN = ["services", "cli.py"]
 
 
 def clean():
+    # Install service dependencies for type checking
+    print("Installing service dependencies...")
+    services_dir = "services"
+    if os.path.exists(services_dir):
+        for service in os.listdir(services_dir):
+            service_path = os.path.join(services_dir, service)
+            requirements_path = os.path.join(service_path, "requirements.txt")
+            if os.path.isfile(requirements_path):
+                print(f"Installing dependencies for {service}...")
+                subprocess.run(
+                    [
+                        "python3.14",
+                        "-m",
+                        "pip",
+                        "install",
+                        "-q",
+                        "-r",
+                        requirements_path,
+                    ]
+                )
+
     # Format all files
     subprocess.run(
         [
@@ -25,7 +46,6 @@ def clean():
     subprocess.run(["mypy", "cli.py"])
 
     # Type check each service from within its directory
-    services_dir = "services"
     if os.path.exists(services_dir):
         for service in os.listdir(services_dir):
             service_path = os.path.join(services_dir, service)
