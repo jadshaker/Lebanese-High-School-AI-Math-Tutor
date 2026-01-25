@@ -7,14 +7,6 @@ scrape_configs:
     static_configs:
       - targets: ['gateway:8000']
 
-  - job_name: 'data-processing'
-    static_configs:
-      - targets: ['data-processing:8009']
-
-  - job_name: 'answer-retrieval'
-    static_configs:
-      - targets: ['answer-retrieval:8008']
-
   - job_name: 'input-processor'
     static_configs:
       - targets: ['input-processor:8004']

@@ -1,5 +1,5 @@
 services:
-  # API Gateway - Main entry point
+  # API Gateway - Main entry point (Orchestrates all services directly)
   gateway:
     build:
       context: services/gateway
@@ -10,12 +10,21 @@ services:
     env_file:
       - .env
     environment:
-      - DATA_PROCESSING_SERVICE_URL=http://data-processing:8009
-      - ANSWER_RETRIEVAL_SERVICE_URL=http://answer-retrieval:8008
+      - INPUT_PROCESSOR_SERVICE_URL=http://input-processor:8004
+      - REFORMULATOR_SERVICE_URL=http://reformulator:8007
+      - EMBEDDING_SERVICE_URL=http://embedding:8002
+      - CACHE_SERVICE_URL=http://cache:8003
+      - SMALL_LLM_SERVICE_URL=http://small-llm:8005
+      - LARGE_LLM_SERVICE_URL=http://large-llm:8001
+      - CACHE_TOP_K=${CACHE_TOP_K:-5}
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload --no-access-log
     depends_on:
-      - data-processing
-      - answer-retrieval
+      - input-processor
+      - reformulator
+      - embedding
+      - cache
+      - small-llm
+      - large-llm
     volumes:
       - ./.logs/gateway:/app/logs
     networks:
@@ -144,55 +153,6 @@ services:
       - small-llm
     volumes:
       - ./.logs/reformulator:/app/logs
-    networks:
-      - math-tutor-network
-
-  # Answer Retrieval Service (Orchestrator for Phase 2)
-  answer-retrieval:
-    build:
-      context: services/answer_retrieval
-      dockerfile: Dockerfile
-    container_name: math-tutor-answer-retrieval
-    ports:
-      - '8008:8008'
-    env_file:
-      - .env
-    environment:
-      - EMBEDDING_SERVICE_URL=http://embedding:8002
-      - CACHE_SERVICE_URL=http://cache:8003
-      - SMALL_LLM_SERVICE_URL=http://small-llm:8005
-      - LARGE_LLM_SERVICE_URL=http://large-llm:8001
-      - CACHE_TOP_K=${CACHE_TOP_K:-5}
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8008 --reload --no-access-log
-    depends_on:
-      - embedding
-      - cache
-      - small-llm
-      - large-llm
-    volumes:
-      - ./.logs/answer_retrieval:/app/logs
-    networks:
-      - math-tutor-network
-
-  # Data Processing Service (Orchestrator for Phase 1)
-  data-processing:
-    build:
-      context: services/data_processing
-      dockerfile: Dockerfile
-    container_name: math-tutor-data-processing
-    ports:
-      - '8009:8009'
-    env_file:
-      - .env
-    environment:
-      - INPUT_PROCESSOR_SERVICE_URL=http://input-processor:8004
-      - REFORMULATOR_SERVICE_URL=http://reformulator:8007
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8009 --reload --no-access-log
-    depends_on:
-      - input-processor
-      - reformulator
-    volumes:
-      - ./.logs/data_processing:/app/logs
     networks:
       - math-tutor-network
 
