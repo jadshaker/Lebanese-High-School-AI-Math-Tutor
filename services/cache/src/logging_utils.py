@@ -6,6 +6,39 @@ from pathlib import Path
 from typing import Any, Optional
 
 
+class ColoredFormatter(logging.Formatter):
+    """
+    Custom formatter that adds ANSI color codes for ERROR and WARNING levels.
+    Only used for console output - file logs remain plain text.
+    """
+
+    RED = "\033[91m"
+    YELLOW = "\033[93m"
+    RESET = "\033[0m"
+
+    def format(self, record):
+        # Store original values
+        original_levelname = record.levelname
+        original_msg = record.msg
+
+        # Apply colors based on level
+        if record.levelname == "ERROR":
+            record.levelname = f"{self.RED}{record.levelname}{self.RESET}"
+            record.msg = f"{self.RED}{record.msg}{self.RESET}"
+        elif record.levelname == "WARNING":
+            record.levelname = f"{self.YELLOW}{record.levelname}{self.RESET}"
+            record.msg = f"{self.YELLOW}{record.msg}{self.RESET}"
+
+        # Format the message
+        result = super().format(record)
+
+        # Restore original values to avoid affecting other handlers
+        record.levelname = original_levelname
+        record.msg = original_msg
+
+        return result
+
+
 class StructuredLogger:
     """
     Structured logger that outputs logs in uvicorn-style format for readability.
@@ -24,9 +57,9 @@ class StructuredLogger:
         # Remove existing handlers to avoid duplicates
         self.logger.handlers.clear()
 
-        # Console handler (for Docker logs)
+        # Console handler (for Docker logs) - with colored output
         console_handler = logging.StreamHandler()
-        console_handler.setFormatter(logging.Formatter("%(message)s"))
+        console_handler.setFormatter(ColoredFormatter("%(message)s"))
         self.logger.addHandler(console_handler)
 
         # File handler (for persistent logs with daily rotation)
