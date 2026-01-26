@@ -1,0 +1,36 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'gateway'
+    static_configs:
+      - targets: ['gateway:8000']
+
+  - job_name: 'input-processor'
+    static_configs:
+      - targets: ['input-processor:8004']
+
+  - job_name: 'reformulator'
+    static_configs:
+      - targets: ['reformulator:8007']
+
+  - job_name: 'embedding'
+    static_configs:
+      - targets: ['embedding:8002']
+
+  - job_name: 'cache'
+    static_configs:
+      - targets: ['cache:8003']
+
+  - job_name: 'small-llm'
+    static_configs:
+      - targets: ['small-llm:8005']
+
+  - job_name: 'large-llm'
+    static_configs:
+      - targets: ['large-llm:8001']
+
+  - job_name: 'fine-tuned-model'
+    static_configs:
+      - targets: ['fine-tuned-model:8006']

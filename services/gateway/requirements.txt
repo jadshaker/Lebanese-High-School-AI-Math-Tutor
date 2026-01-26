@@ -5,6 +5,7 @@ click==8.3.0
 fastapi==0.120.4
 h11==0.16.0
 idna==3.11
+prometheus-client==0.24.1
 pydantic==2.12.3
 pydantic_core==2.41.4
 python-dotenv==1.2.1

@@ -1,0 +1,272 @@
+name: Run Tests with RunPod
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-with-runpod:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create RunPod Pod
+        id: create-pod
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+        run: |
+          echo "Creating RunPod A40 pod with ollama/ollama image..."
+
+          # Create pod using REST API
+          RESPONSE=$(curl -s -X POST "https://rest.runpod.io/v1/pods" \
+            -H "Authorization: Bearer $RUNPOD_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "cloudType": "SECURE",
+              "gpuCount": 1,
+              "gpuTypeIds": ["NVIDIA A40"],
+              "name": "ci-test-pod",
+              "templateId": "q5rqanpolz"
+            }')
+
+          echo "Response: $RESPONSE"
+
+          # Extract pod ID from response
+          POD_ID=$(echo "$RESPONSE" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+          if [ -z "$POD_ID" ]; then
+            echo "✗ Failed to create pod"
+            echo "Response: $RESPONSE"
+            exit 1
+          fi
+
+          echo "✓ Pod created with ID: $POD_ID"
+          echo "pod_id=$POD_ID" >> $GITHUB_OUTPUT
+
+      - name: Wait for Ollama Ready
+        env:
+          POD_ID: ${{ steps.create-pod.outputs.pod_id }}
+        run: |
+          OLLAMA_URL="https://${POD_ID}-11434.proxy.runpod.net"
+          echo "Waiting for Ollama at: $OLLAMA_URL"
+
+          TIMEOUT=180
+          ELAPSED=0
+          INTERVAL=10
+
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$OLLAMA_URL/api/tags" || echo "000")
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✓ Ollama is responding"
+              break
+            fi
+
+            echo "Waiting for Ollama (HTTP $HTTP_CODE)..."
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+
+          if [ $ELAPSED -ge $TIMEOUT ]; then
+            echo "✗ Timeout waiting for Ollama"
+            exit 1
+          fi
+
+      - name: Pull and Load Models
+        env:
+          POD_ID: ${{ steps.create-pod.outputs.pod_id }}
+        run: |
+          OLLAMA_URL="https://${POD_ID}-11434.proxy.runpod.net"
+          echo "Loading models on: $OLLAMA_URL"
+
+          # Pull deepseek-r1:7b (may take a while to download)
+          echo "Pulling deepseek-r1:7b..."
+          curl -X POST "$OLLAMA_URL/api/pull" \
+            -H "Content-Type: application/json" \
+            -d '{"name": "deepseek-r1:7b"}' \
+            --max-time 600
+
+          if [ $? -eq 0 ]; then
+            echo "✓ deepseek-r1:7b pulled"
+          else
+            echo "✗ Failed to pull deepseek-r1:7b"
+            exit 1
+          fi
+
+          # Load deepseek-r1:7b with keep_alive
+          echo "Loading deepseek-r1:7b into memory..."
+          curl -X POST "$OLLAMA_URL/api/generate" \
+            -H "Content-Type: application/json" \
+            -d '{"model": "deepseek-r1:7b", "prompt": "Hello", "stream": false, "keep_alive": -1}' \
+            --max-time 300 > /dev/null
+
+          if [ $? -eq 0 ]; then
+            echo "✓ deepseek-r1:7b loaded"
+          else
+            echo "✗ Failed to load deepseek-r1:7b"
+            exit 1
+          fi
+
+          # Pull tinyllama:latest
+          echo "Pulling tinyllama:latest..."
+          curl -X POST "$OLLAMA_URL/api/pull" \
+            -H "Content-Type: application/json" \
+            -d '{"name": "tinyllama:latest"}' \
+            --max-time 300
+
+          if [ $? -eq 0 ]; then
+            echo "✓ tinyllama:latest pulled"
+          else
+            echo "✗ Failed to pull tinyllama:latest"
+            exit 1
+          fi
+
+          # Load tinyllama:latest with keep_alive
+          echo "Loading tinyllama:latest into memory..."
+          curl -X POST "$OLLAMA_URL/api/generate" \
+            -H "Content-Type: application/json" \
+            -d '{"model": "tinyllama:latest", "prompt": "Hello", "stream": false, "keep_alive": -1}' \
+            --max-time 120 > /dev/null
+
+          if [ $? -eq 0 ]; then
+            echo "✓ tinyllama:latest loaded"
+          else
+            echo "✗ Failed to load tinyllama:latest"
+            exit 1
+          fi
+
+          echo ""
+          echo "✓ All models loaded successfully"
+
+      - name: Create .env file for Docker Compose
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          POD_ID: ${{ steps.create-pod.outputs.pod_id }}
+        run: |
+          OLLAMA_URL="https://${POD_ID}-11434.proxy.runpod.net"
+
+          cat > .env << EOF
+          # Environment variables for CI
+          OPENAI_API_KEY=$OPENAI_API_KEY
+
+          # Small LLM Service Configuration (Ollama)
+          SMALL_LLM_SERVICE_URL=$OLLAMA_URL
+          SMALL_LLM_MODEL_NAME=deepseek-r1:7b
+
+          # Embedding Service Configuration
+          EMBEDDING_MODEL=text-embedding-3-small
+          EMBEDDING_DIMENSIONS=1536
+
+          # Fine-Tuned Model Service Configuration (Ollama)
+          FINE_TUNED_MODEL_SERVICE_URL=$OLLAMA_URL
+          FINE_TUNED_MODEL_NAME=tinyllama:latest
+
+          # Answer Retrieval Service Configuration
+          CACHE_TOP_K=5
+
+          # Data Processing Service Configuration (Phase 1)
+          INPUT_PROCESSOR_SERVICE_URL=http://input-processor:8004
+          REFORMULATOR_SERVICE_URL=http://reformulator:8007
+          EOF
+
+          echo "✓ .env file created with RunPod URL: $OLLAMA_URL"
+
+      - name: Start Docker Services
+        run: |
+          docker compose up -d
+          echo "Waiting for services to start..."
+          sleep 10
+
+      - name: Check Service Health
+        run: |
+          echo "Waiting for all services to become healthy..."
+
+          SERVICES=(
+            "gateway:8000"
+            "large-llm:8001"
+            "embedding:8002"
+            "cache:8003"
+            "input-processor:8004"
+            "small-llm:8005"
+            "fine-tuned-model:8006"
+            "reformulator:8007"
+          )
+
+          TIMEOUT=120
+          INTERVAL=5
+
+          for service in "${SERVICES[@]}"; do
+            name="${service%:*}"
+            port="${service#*:}"
+            echo "Waiting for $name..."
+
+            ELAPSED=0
+            while [ $ELAPSED -lt $TIMEOUT ]; do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port/health" || echo "000")
+
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "  ✓ $name is healthy (HTTP $HTTP_CODE)"
+                break
+              fi
+
+              echo "  Waiting for $name (HTTP $HTTP_CODE, elapsed: ${ELAPSED}s)..."
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            done
+
+            if [ $ELAPSED -ge $TIMEOUT ]; then
+              echo "  ✗ Timeout waiting for $name to become healthy"
+              echo "Service logs:"
+              docker compose logs --tail=50 "$name"
+              exit 1
+            fi
+          done
+
+          echo ""
+          echo "✓ All services are healthy"
+
+      - name: Run All Tests
+        env:
+          POD_ID: ${{ steps.create-pod.outputs.pod_id }}
+          SMALL_LLM_SERVICE_URL: https://${{ steps.create-pod.outputs.pod_id }}-11434.proxy.runpod.net
+          FINE_TUNED_MODEL_SERVICE_URL: https://${{ steps.create-pod.outputs.pod_id }}-11434.proxy.runpod.net
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          echo "Running all tests with RunPod..."
+          python3.14 cli.py test
+
+      - name: Stop Docker Services
+        if: always()
+        run: |
+          docker compose down
+
+      - name: Terminate RunPod Pod
+        if: always()
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          POD_ID: ${{ steps.create-pod.outputs.pod_id }}
+        run: |
+          if [ -n "$POD_ID" ]; then
+            echo "Terminating RunPod pod: $POD_ID"
+
+            # Terminate pod using REST API
+            curl -s -X DELETE "https://rest.runpod.io/v1/pods/$POD_ID" \
+              -H "Authorization: Bearer $RUNPOD_API_KEY"
+
+            echo ""
+            echo "✓ Pod terminated"
+          else
+            echo "No pod ID found, skipping cleanup"
+          fi

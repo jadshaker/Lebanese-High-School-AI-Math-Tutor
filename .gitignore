@@ -212,3 +212,7 @@ splits/
 latex/
 json/
 solutions/
+
+# Service logs
+.logs/**/*.log
+.logs/**/*.log.*

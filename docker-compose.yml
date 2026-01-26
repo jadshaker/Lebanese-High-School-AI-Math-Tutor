@@ -1,5 +1,5 @@
 services:
-  # API Gateway - Main entry point
+  # API Gateway - Main entry point (Orchestrates all services directly)
   gateway:
     build:
       context: services/gateway
@@ -10,14 +10,23 @@ services:
     env_file:
       - .env
     environment:
-      - LARGE_LLM_SERVICE_URL=http://large-llm:8001
-      - SMALL_LLM_SERVICE_URL=http://small-llm:8005
+      - INPUT_PROCESSOR_SERVICE_URL=http://input-processor:8004
+      - REFORMULATOR_SERVICE_URL=http://reformulator:8007
       - EMBEDDING_SERVICE_URL=http://embedding:8002
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+      - CACHE_SERVICE_URL=http://cache:8003
+      - SMALL_LLM_SERVICE_URL=http://small-llm:8005
+      - LARGE_LLM_SERVICE_URL=http://large-llm:8001
+      - CACHE_TOP_K=${CACHE_TOP_K:-5}
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload --no-access-log
     depends_on:
-      - large-llm
-      - small-llm
+      - input-processor
+      - reformulator
       - embedding
+      - cache
+      - small-llm
+      - large-llm
+    volumes:
+      - ./.logs/gateway:/app/logs
     networks:
       - math-tutor-network
 
@@ -31,7 +40,9 @@ services:
       - '8001:8001'
     env_file:
       - .env
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload --no-access-log
+    volumes:
+      - ./.logs/large_llm:/app/logs
     networks:
       - math-tutor-network
 
@@ -45,12 +56,11 @@ services:
       - '8005:8005'
     env_file:
       - .env
-    environment:
-      - OLLAMA_SERVICE_URL=http://host.docker.internal:11434
-      - OLLAMA_MODEL_NAME=${OLLAMA_MODEL_NAME:-deepseek-r1:7b}
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8005 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8005 --reload --no-access-log
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - ./.logs/small_llm:/app/logs
     networks:
       - math-tutor-network
 
@@ -64,10 +74,155 @@ services:
       - '8002:8002'
     env_file:
       - .env
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8002 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8002 --reload --no-access-log
+    volumes:
+      - ./.logs/embedding:/app/logs
     networks:
       - math-tutor-network
+
+  # Cache Service (Stub)
+  cache:
+    build:
+      context: services/cache
+      dockerfile: Dockerfile
+    container_name: math-tutor-cache
+    ports:
+      - '8003:8003'
+    env_file:
+      - .env
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8003 --reload --no-access-log
+    volumes:
+      - ./.logs/cache:/app/logs
+    networks:
+      - math-tutor-network
+
+  # Input Processor Service
+  input-processor:
+    build:
+      context: services/input_processor
+      dockerfile: Dockerfile
+    container_name: math-tutor-input-processor
+    ports:
+      - '8004:8004'
+    env_file:
+      - .env
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8004 --reload --no-access-log
+    volumes:
+      - ./.logs/input_processor:/app/logs
+    networks:
+      - math-tutor-network
+
+  # Fine-Tuned Model Service (Ollama)
+  fine-tuned-model:
+    build:
+      context: services/fine_tuned_model
+      dockerfile: Dockerfile
+    container_name: math-tutor-fine-tuned-model
+    ports:
+      - '8006:8006'
+    env_file:
+      - .env
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8006 --reload --no-access-log
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - ./.logs/fine_tuned_model:/app/logs
+    networks:
+      - math-tutor-network
+
+  # Reformulator Service
+  reformulator:
+    build:
+      context: services/reformulator
+      dockerfile: Dockerfile
+    container_name: math-tutor-reformulator
+    ports:
+      - '8007:8007'
+    env_file:
+      - .env
+    environment:
+      - SMALL_LLM_SERVICE_URL=http://small-llm:8005
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8007 --reload --no-access-log
+    depends_on:
+      - small-llm
+    volumes:
+      - ./.logs/reformulator:/app/logs
+    networks:
+      - math-tutor-network
+
+  # Open WebUI - User-facing frontend
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: math-tutor-ui
+    ports:
+      - '3000:8080'
+    environment:
+      # API Configuration
+      - OPENAI_API_BASE_URLS=http://gateway:8000/v1
+      - OPENAI_API_KEYS=dummy-key
+
+      # OLLAMA Configuration
+      - ENABLE_OLLAMA_API=False
+
+      # Branding
+      - WEBUI_NAME=Lebanese High School Math Tutor
+      - DEFAULT_LOCALE=en-US
+
+      # User Management
+      - ENABLE_SIGNUP=True
+      - ENABLE_LOGIN_FORM=True
+      - DEFAULT_USER_ROLE=user
+
+      # UI Customization
+      - SHOW_ADMIN_DETAILS=True
+      - ENABLE_COMMUNITY_SHARING=False
+    depends_on:
+      - gateway
+    networks:
+      - math-tutor-network
+    volumes:
+      - open-webui-data:/app/backend/data
+    restart: unless-stopped
+
+  # Prometheus - Metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: math-tutor-prometheus
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - math-tutor-network
+    restart: unless-stopped
+
+  # Grafana - Metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: math-tutor-grafana
+    ports:
+      - '3001:3000'
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - math-tutor-network
+    restart: unless-stopped
 
 networks:
   math-tutor-network:
     driver: bridge
+
+volumes:
+  open-webui-data:
+  prometheus-data:
+  grafana-data:
