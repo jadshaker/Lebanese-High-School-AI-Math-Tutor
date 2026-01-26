@@ -160,11 +160,25 @@ jobs:
           cat > .env << EOF
           # Environment variables for CI
           OPENAI_API_KEY=$OPENAI_API_KEY
+
+          # Small LLM Service Configuration (Ollama)
           SMALL_LLM_SERVICE_URL=$OLLAMA_URL
-          FINE_TUNED_MODEL_SERVICE_URL=$OLLAMA_URL
           SMALL_LLM_MODEL_NAME=deepseek-r1:7b
+
+          # Embedding Service Configuration
+          EMBEDDING_MODEL=text-embedding-3-small
+          EMBEDDING_DIMENSIONS=1536
+
+          # Fine-Tuned Model Service Configuration (Ollama)
+          FINE_TUNED_MODEL_SERVICE_URL=$OLLAMA_URL
           FINE_TUNED_MODEL_NAME=tinyllama:latest
+
+          # Answer Retrieval Service Configuration
           CACHE_TOP_K=5
+
+          # Data Processing Service Configuration (Phase 1)
+          INPUT_PROCESSOR_SERVICE_URL=http://input-processor:8004
+          REFORMULATOR_SERVICE_URL=http://reformulator:8007
           EOF
 
           echo "✓ .env file created with RunPod URL: $OLLAMA_URL"
