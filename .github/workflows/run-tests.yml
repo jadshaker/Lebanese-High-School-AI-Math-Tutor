@@ -7,11 +7,6 @@ on:
       - completed
     branches: [main]
   workflow_dispatch:
-    inputs:
-      pod_id:
-        description: 'RunPod Pod ID (optional - will use secret if not provided)'
-        required: false
-        type: string
 
 jobs:
   test-with-runpod:
@@ -32,38 +27,51 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Start RunPod Pod
-        id: start-pod
+      - name: Start Docker Services
+        run: |
+          docker compose up -d
+          echo "Waiting for services to start..."
+          sleep 10
+
+      - name: Create RunPod Pod
+        id: create-pod
         env:
           RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
-          RUNPOD_POD_ID: ${{ inputs.pod_id || secrets.RUNPOD_POD_ID }}
         run: |
-          echo "Starting RunPod pod: $RUNPOD_POD_ID"
+          echo "Creating RunPod A40 pod with ollama/ollama image..."
 
-          # Resume/start pod using GraphQL API
+          # Create pod using GraphQL API
           RESPONSE=$(curl -s -X POST \
             "https://api.runpod.io/graphql?api_key=$RUNPOD_API_KEY" \
             -H "Content-Type: application/json" \
             -d '{
-              "query": "mutation { podResume(input: {podId: \"'"$RUNPOD_POD_ID"'\"}) { id desiredStatus } }"
+              "query": "mutation { podFindAndDeployOnDemand(input: { cloudType: SECURE, gpuTypeId: \"NVIDIA A40\", name: \"ci-test-pod\", imageName: \"ollama/ollama\", dockerArgs: \"\", ports: \"11434/http\", volumeInGb: 50, containerDiskInGb: 50, env: [{ key: \"OLLAMA_HOST\", value: \"0.0.0.0\" }] }) { id imageName env machineId machine { podHostId } } }"
             }')
 
           echo "Response: $RESPONSE"
 
-          # Save pod ID for cleanup
-          echo "pod_id=$RUNPOD_POD_ID" >> $GITHUB_OUTPUT
-          echo "Pod start initiated"
+          # Extract pod ID from response
+          POD_ID=$(echo "$RESPONSE" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+          if [ -z "$POD_ID" ]; then
+            echo "✗ Failed to create pod"
+            echo "Response: $RESPONSE"
+            exit 1
+          fi
+
+          echo "✓ Pod created with ID: $POD_ID"
+          echo "pod_id=$POD_ID" >> $GITHUB_OUTPUT
 
       - name: Wait for Pod Ready
         env:
           RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
-          RUNPOD_POD_ID: ${{ steps.start-pod.outputs.pod_id }}
+          POD_ID: ${{ steps.create-pod.outputs.pod_id }}
         run: |
-          echo "Waiting for pod to be ready..."
+          echo "Waiting for pod $POD_ID to be ready..."
 
-          TIMEOUT=300
+          TIMEOUT=600
           ELAPSED=0
-          INTERVAL=10
+          INTERVAL=15
 
           while [ $ELAPSED -lt $TIMEOUT ]; do
             # Check pod status
@@ -71,17 +79,21 @@ jobs:
               "https://api.runpod.io/graphql?api_key=$RUNPOD_API_KEY" \
               -H "Content-Type: application/json" \
               -d '{
-                "query": "query { pod(input: {podId: \"'"$RUNPOD_POD_ID"'\"}) { id desiredStatus runtime { uptimeInSeconds } } }"
+                "query": "query { pod(input: {podId: \"'"$POD_ID"'\"}) { id desiredStatus runtime { uptimeInSeconds } } }"
               }')
 
             STATUS=$(echo "$RESPONSE" | grep -o '"desiredStatus":"[^"]*"' | cut -d'"' -f4)
 
+            echo "Status: $STATUS (elapsed: ${ELAPSED}s)"
+
             if [ "$STATUS" = "RUNNING" ]; then
-              echo "✓ Pod is running!"
-              break
+              RUNTIME=$(echo "$RESPONSE" | grep -o '"uptimeInSeconds":[0-9]*' | cut -d':' -f2)
+              if [ -n "$RUNTIME" ] && [ "$RUNTIME" -gt 0 ]; then
+                echo "✓ Pod is running (uptime: ${RUNTIME}s)"
+                break
+              fi
             fi
 
-            echo "Status: $STATUS - waiting..."
             sleep $INTERVAL
             ELAPSED=$((ELAPSED + INTERVAL))
           done
@@ -91,24 +103,26 @@ jobs:
             exit 1
           fi
 
-      - name: Check Ollama Running
+      - name: Wait for Ollama Ready
         env:
-          RUNPOD_POD_ID: ${{ steps.start-pod.outputs.pod_id }}
+          POD_ID: ${{ steps.create-pod.outputs.pod_id }}
         run: |
-          OLLAMA_URL="https://${RUNPOD_POD_ID}-11434.proxy.runpod.net"
-          echo "Checking Ollama at: $OLLAMA_URL"
+          OLLAMA_URL="https://${POD_ID}-11434.proxy.runpod.net"
+          echo "Waiting for Ollama at: $OLLAMA_URL"
 
-          TIMEOUT=120
+          TIMEOUT=180
           ELAPSED=0
-          INTERVAL=5
+          INTERVAL=10
 
           while [ $ELAPSED -lt $TIMEOUT ]; do
-            if curl -s -f "$OLLAMA_URL/api/tags" > /dev/null 2>&1; then
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$OLLAMA_URL/api/tags" || echo "000")
+
+            if [ "$HTTP_CODE" = "200" ]; then
               echo "✓ Ollama is responding"
               break
             fi
 
-            echo "Waiting for Ollama..."
+            echo "Waiting for Ollama (HTTP $HTTP_CODE)..."
             sleep $INTERVAL
             ELAPSED=$((ELAPSED + INTERVAL))
           done
@@ -118,23 +132,33 @@ jobs:
             exit 1
           fi
 
-      - name: Load Models
+      - name: Pull and Load Models
         env:
-          RUNPOD_POD_ID: ${{ steps.start-pod.outputs.pod_id }}
+          POD_ID: ${{ steps.create-pod.outputs.pod_id }}
         run: |
-          OLLAMA_URL="https://${RUNPOD_POD_ID}-11434.proxy.runpod.net"
+          OLLAMA_URL="https://${POD_ID}-11434.proxy.runpod.net"
           echo "Loading models on: $OLLAMA_URL"
 
-          # Load deepseek-r1:7b
-          echo "Loading deepseek-r1:7b..."
-          curl -s -X POST "$OLLAMA_URL/api/generate" \
+          # Pull deepseek-r1:7b (may take a while to download)
+          echo "Pulling deepseek-r1:7b..."
+          curl -X POST "$OLLAMA_URL/api/pull" \
             -H "Content-Type: application/json" \
-            -d '{
-              "model": "deepseek-r1:7b",
-              "prompt": "Hello",
-              "stream": false,
-              "keep_alive": -1
-            }' > /dev/null
+            -d '{"name": "deepseek-r1:7b"}' \
+            --max-time 600
+
+          if [ $? -eq 0 ]; then
+            echo "✓ deepseek-r1:7b pulled"
+          else
+            echo "✗ Failed to pull deepseek-r1:7b"
+            exit 1
+          fi
+
+          # Load deepseek-r1:7b with keep_alive
+          echo "Loading deepseek-r1:7b into memory..."
+          curl -X POST "$OLLAMA_URL/api/generate" \
+            -H "Content-Type: application/json" \
+            -d '{"model": "deepseek-r1:7b", "prompt": "Hello", "stream": false, "keep_alive": -1}' \
+            --max-time 300 > /dev/null
 
           if [ $? -eq 0 ]; then
             echo "✓ deepseek-r1:7b loaded"
@@ -143,16 +167,26 @@ jobs:
             exit 1
           fi
 
-          # Load tinyllama:latest
-          echo "Loading tinyllama:latest..."
-          curl -s -X POST "$OLLAMA_URL/api/generate" \
+          # Pull tinyllama:latest
+          echo "Pulling tinyllama:latest..."
+          curl -X POST "$OLLAMA_URL/api/pull" \
             -H "Content-Type: application/json" \
-            -d '{
-              "model": "tinyllama:latest",
-              "prompt": "Hello",
-              "stream": false,
-              "keep_alive": -1
-            }' > /dev/null
+            -d '{"name": "tinyllama:latest"}' \
+            --max-time 300
+
+          if [ $? -eq 0 ]; then
+            echo "✓ tinyllama:latest pulled"
+          else
+            echo "✗ Failed to pull tinyllama:latest"
+            exit 1
+          fi
+
+          # Load tinyllama:latest with keep_alive
+          echo "Loading tinyllama:latest into memory..."
+          curl -X POST "$OLLAMA_URL/api/generate" \
+            -H "Content-Type: application/json" \
+            -d '{"model": "tinyllama:latest", "prompt": "Hello", "stream": false, "keep_alive": -1}' \
+            --max-time 120 > /dev/null
 
           if [ $? -eq 0 ]; then
             echo "✓ tinyllama:latest loaded"
@@ -164,19 +198,11 @@ jobs:
           echo ""
           echo "✓ All models loaded successfully"
 
-      - name: Start Docker Services
-        run: |
-          docker compose up -d
-
-          # Wait for services to be ready
-          echo "Waiting for services to start..."
-          sleep 10
-
       - name: Run Integration Tests
         env:
-          RUNPOD_POD_ID: ${{ steps.start-pod.outputs.pod_id }}
-          SMALL_LLM_SERVICE_URL: https://${{ steps.start-pod.outputs.pod_id }}-11434.proxy.runpod.net
-          FINE_TUNED_MODEL_SERVICE_URL: https://${{ steps.start-pod.outputs.pod_id }}-11434.proxy.runpod.net
+          POD_ID: ${{ steps.create-pod.outputs.pod_id }}
+          SMALL_LLM_SERVICE_URL: https://${{ steps.create-pod.outputs.pod_id }}-11434.proxy.runpod.net
+          FINE_TUNED_MODEL_SERVICE_URL: https://${{ steps.create-pod.outputs.pod_id }}-11434.proxy.runpod.net
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           echo "Running integration tests with RunPod..."
@@ -184,9 +210,9 @@ jobs:
 
       - name: Run E2E Tests
         env:
-          RUNPOD_POD_ID: ${{ steps.start-pod.outputs.pod_id }}
-          SMALL_LLM_SERVICE_URL: https://${{ steps.start-pod.outputs.pod_id }}-11434.proxy.runpod.net
-          FINE_TUNED_MODEL_SERVICE_URL: https://${{ steps.start-pod.outputs.pod_id }}-11434.proxy.runpod.net
+          POD_ID: ${{ steps.create-pod.outputs.pod_id }}
+          SMALL_LLM_SERVICE_URL: https://${{ steps.create-pod.outputs.pod_id }}-11434.proxy.runpod.net
+          FINE_TUNED_MODEL_SERVICE_URL: https://${{ steps.create-pod.outputs.pod_id }}-11434.proxy.runpod.net
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           echo "Running E2E tests with RunPod..."
@@ -197,24 +223,24 @@ jobs:
         run: |
           docker compose down
 
-      - name: Stop RunPod Pod
+      - name: Terminate RunPod Pod
         if: always()
         env:
           RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
-          RUNPOD_POD_ID: ${{ steps.start-pod.outputs.pod_id }}
+          POD_ID: ${{ steps.create-pod.outputs.pod_id }}
         run: |
-          if [ -n "$RUNPOD_POD_ID" ]; then
-            echo "Stopping RunPod pod: $RUNPOD_POD_ID"
+          if [ -n "$POD_ID" ]; then
+            echo "Terminating RunPod pod: $POD_ID"
 
             curl -s -X POST \
               "https://api.runpod.io/graphql?api_key=$RUNPOD_API_KEY" \
               -H "Content-Type: application/json" \
               -d '{
-                "query": "mutation { podStop(input: {podId: \"'"$RUNPOD_POD_ID"'\"}) { id desiredStatus } }"
+                "query": "mutation { podTerminate(input: {podId: \"'"$POD_ID"'\"}) }"
               }'
 
             echo ""
-            echo "✓ Pod stop initiated"
+            echo "✓ Pod terminated"
           else
             echo "No pod ID found, skipping cleanup"
           fi
