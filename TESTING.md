@@ -51,37 +51,36 @@ python3.14 cli.py test -- -m integration
 python3.14 cli.py test -- -m e2e
 ```
 
-### Mocking External APIs
+### API Mocking Status
 
-**By default, integration and E2E tests use mocked APIs** to avoid requiring:
-- OpenAI API keys
-- HPC connection for Ollama models
-- GPU usage
+**Current Implementation:**
+-  **Unit tests**: ✅ Fully mocked, no external dependencies required
+- **Integration tests**: ⚠️ Require Docker services + real APIs (OpenAI keys + HPC connection)
+- **E2E tests**: ⚠️ Require Docker services + real APIs (OpenAI keys + HPC connection)
 
-This makes tests:
-- ✅ **Fast** - no real API calls or LLM inference
-- ✅ **Free** - no API costs or GPU time
-- ✅ **CI-friendly** - run in GitHub Actions without secrets
-- ✅ **Reliable** - no network or HPC connection issues
+**Why integration/E2E tests still need real APIs:**
+Integration and E2E tests run against Docker services, which make API calls in separate processes.
+The `responses` library can only mock HTTP calls in the same Python process, so it cannot
+intercept API calls made by Docker containers.
 
-**Toggle mocking with pytest flag:**
+**Planned Enhancement (TODO):**
+To enable mocking for integration/E2E tests, we need to add TEST_MODE support to services:
+1. Add `TEST_MODE` environment variable to docker-compose.yml
+2. Modify services (Large LLM, Embedding, Small LLM, Reformulator, Fine-Tuned Model) to check TEST_MODE
+3. When TEST_MODE=true, services return mock responses instead of calling real APIs
 
+**Current Workaround:**
+Integration and E2E tests require:
 ```bash
-# Use mocked APIs (default - fast, no external dependencies)
+# Ensure Docker services are running
+docker compose up -d
+
+# Ensure HPC SSH tunnel is active (for Ollama services)
+ssh -L 0.0.0.0:11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 node_name
+
+# Run tests
 python3.14 cli.py test -- -m integration
-
-# Use REAL APIs (requires OpenAI keys + HPC connection)
-python3.14 cli.py test -- -m integration --use-real-apis
 ```
-
-**What gets mocked:**
-- OpenAI Embedding API (text-embedding-3-small)
-- OpenAI Large LLM (GPT-4o-mini)
-- Ollama Small LLM (DeepSeek-R1:7b)
-- Ollama Reformulator
-- Ollama Fine-Tuned Model (TinyLlama)
-- Input Processor service
-- Cache service (search and save)
 
 **Run tests with coverage:**
 ```bash

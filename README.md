@@ -413,49 +413,48 @@ open htmlcov/index.html
 python3.14 cli.py test -- tests/unit/test_services/test_gateway.py
 ```
 
-#### Mocked vs Real APIs
+#### Testing Against Real vs Mock APIs
 
-**By default, integration and E2E tests use mocked APIs** for:
-- ✅ **Speed**: No real API calls or LLM inference
-- ✅ **Cost**: No OpenAI API costs or GPU usage
-- ✅ **Reliability**: No network/HPC dependencies
-- ✅ **CI/CD**: Runs in GitHub Actions without secrets
+**Current Status:**
+- ✅ **Unit tests** (83 tests): Fully mocked, no external dependencies
+- ⚠️ **Integration tests** (5 tests): Require Docker + real APIs (OpenAI + HPC)
+- ⚠️ **E2E tests** (5 tests): Require Docker + real APIs (OpenAI + HPC)
 
-**To test against real APIs** (requires OpenAI API keys + HPC connection):
+**Why integration/E2E tests need real APIs:**
+These tests run against Docker services, which make API calls in separate processes that cannot be mocked with standard Python mocking libraries.
+
+**Planned Enhancement:**
+Add `TEST_MODE` environment variable to services to return mock responses when enabled. This will allow integration/E2E tests to run without OpenAI keys or HPC connection.
+
+**For now, to run integration/E2E tests:**
 ```bash
-# Integration tests with real APIs
-python3.14 cli.py test -- -m integration --use-real-apis
+# Start all services
+docker compose up -d
 
-# E2E tests with real APIs
-python3.14 cli.py test -- -m e2e --use-real-apis
+# Ensure HPC tunnel is active (for Ollama services)
+ssh -L 0.0.0.0:11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 node_name
+
+# Run tests
+python3.14 cli.py test -- -m integration
+python3.14 cli.py test -- -m e2e
 ```
-
-**What gets mocked:**
-- OpenAI Embedding API (text-embedding-3-small)
-- OpenAI Large LLM (GPT-4o-mini)
-- Ollama Small LLM (DeepSeek-R1:7b)
-- Ollama Reformulator
-- Ollama Fine-Tuned Model (TinyLlama)
 
 #### Test Structure
 
 ```
 tests/
-├── conftest.py          # Shared pytest fixtures (includes mock_external_apis)
+├── conftest.py          # Shared pytest fixtures
 ├── unit/                # 83 tests - Fast isolated tests with mocked dependencies
 │   └── test_services/   # Tests for each service (Gateway, LLMs, Cache, etc.)
-├── integration/         # 5 tests - Real service calls with mocked external APIs
-└── e2e/                 # 5 tests - Full pipeline with mocked external APIs
+├── integration/         # 5 tests - Service interaction tests (requires Docker + APIs)
+└── e2e/                 # 5 tests - Full pipeline tests (requires Docker + APIs)
 ```
 
 #### Writing Tests
 
-- **Unit tests**: Mock all external dependencies (APIs, other services)
-- **Integration tests**: Use real Docker services, mock external APIs (OpenAI, Ollama) by default
-- **E2E tests**: Full pipeline orchestration with mocked external APIs by default
-
-**Mocking in tests:**
-All integration and E2E tests automatically use the `mock_external_apis` fixture which provides realistic mock responses for all external services.
+- **Unit tests**: Mock all external dependencies (APIs, other services) - no Docker or APIs needed
+- **Integration tests**: Test service-to-service communication (requires Docker + OpenAI keys + HPC)
+- **E2E tests**: Full pipeline validation (requires Docker + OpenAI keys + HPC)
 
 See `TESTING.md` for detailed guidelines and examples.
 

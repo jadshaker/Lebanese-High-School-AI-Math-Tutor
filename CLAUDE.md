@@ -300,45 +300,40 @@ When creating a new service:
 - Run tests before committing: `python3.14 cli.py test`
 
 **Test Types (93 total: 83 unit + 5 integration + 5 E2E):**
-- **Unit tests** (`@pytest.mark.unit`): Fast, isolated, mock everything external
-- **Integration tests** (`@pytest.mark.integration`): Real Docker services, mocked external APIs by default
-- **E2E tests** (`@pytest.mark.e2e`): Full pipeline orchestration, mocked external APIs by default
+- **Unit tests** (`@pytest.mark.unit`): Fast, isolated, mock everything external - NO external dependencies
+- **Integration tests** (`@pytest.mark.integration`): Real Docker services - REQUIRES Docker + OpenAI keys + HPC
+- **E2E tests** (`@pytest.mark.e2e`): Full pipeline - REQUIRES Docker + OpenAI keys + HPC
 
-**Mocked vs Real APIs:**
-- **By default**: Integration and E2E tests use mocked APIs (fast, no external dependencies)
-- **With `--use-real-apis` flag**: Tests use real OpenAI APIs and HPC Ollama services
-- **Unit tests**: Always use mocks (no flag needed)
+**Current Limitation:**
+Integration and E2E tests require real APIs because they run against Docker services,
+which make API calls in separate processes that cannot be mocked with Python libraries.
 
 **Before Committing:**
 1. Run code quality checks: `python3.14 cli.py clean`
 2. Run unit tests: `python3.14 cli.py test -- -m unit`
-3. Ensure all tests pass
+3. Ensure unit tests pass (83 tests)
 4. Check coverage if adding new code
 
-**API Mocking System:**
-- Integration and E2E tests automatically use the `mock_external_apis` fixture
-- Mocks OpenAI APIs (Embedding, Large LLM) and Ollama services (Small LLM, Reformulator, Fine-Tuned Model)
-- To test against real APIs: add `--use-real-apis` flag (requires API keys + HPC connection)
+**Integration/E2E Tests:**
+- Require Docker services running: `docker compose up -d`
+- Require HPC SSH tunnel for Ollama services
+- Require valid OPENAI_API_KEY in `.env`
+- Should be run manually before major releases
+
+**Planned Enhancement:**
+Add TEST_MODE environment variable to services to enable mocking in Docker.
+This will allow integration/E2E tests to run without external APIs.
 
 **Quick Test Commands:**
 ```bash
-# Run all tests (with mocked APIs)
-python3.14 cli.py test
-
-# Run only unit tests (no external dependencies, always mocked)
+# Run only unit tests (fast, no external dependencies)
 python3.14 cli.py test -- -m unit
 
-# Run integration tests with mocked APIs (default, fast)
+# Run integration tests (requires Docker + OpenAI keys + HPC)
 python3.14 cli.py test -- -m integration
 
-# Run integration tests with REAL APIs (requires OpenAI keys + HPC)
-python3.14 cli.py test -- -m integration --use-real-apis
-
-# Run E2E tests with mocked APIs (default, fast)
+# Run E2E tests (requires Docker + OpenAI keys + HPC)
 python3.14 cli.py test -- -m e2e
-
-# Run E2E tests with REAL APIs (requires OpenAI keys + HPC)
-python3.14 cli.py test -- -m e2e --use-real-apis
 
 # Run with coverage
 python3.14 cli.py test -- --cov=services --cov-report=html
@@ -347,9 +342,10 @@ python3.14 cli.py test -- --cov=services --cov-report=html
 python3.14 cli.py test -- tests/unit/test_services/test_gateway.py
 ```
 
-**When to Use Real APIs vs Mocked:**
-- **Mocked (default)**: For development, CI/CD, and general testing
-- **Real APIs (`--use-real-apis`)**: Before major releases, when debugging API issues, or validating LLM response quality
+**Recommended Testing Workflow:**
+1. During development: Only run unit tests (`-m unit`)
+2. Before committing: Run unit tests + code quality checks
+3. Before major releases: Run full test suite including integration/E2E
 
 See `TESTING.md` for comprehensive testing guidelines.
 
