@@ -29,27 +29,17 @@ jobs:
         run: |
           echo "Creating RunPod A40 pod with ollama/ollama image..."
 
-          # Create GraphQL query with variables using template
-          cat > pod_request.json << 'EOF'
-          {
-            "query": "mutation createPod($input: PodFindAndDeployOnDemandInput!) { podFindAndDeployOnDemand(input: $input) { id imageName costPerHr desiredStatus machineId machine { podHostId } } }",
-            "variables": {
-              "input": {
-                "cloudType": "SECURE",
-                "gpuCount": 1,
-                "gpuTypeId": "NVIDIA A40",
-                "name": "ci-test-pod",
-                "templateId": "q5rqanpolz"
-              }
-            }
-          }
-          EOF
-
-          # Create pod using GraphQL API
-          RESPONSE=$(curl -s -X POST \
-            "https://api.runpod.io/graphql?api_key=$RUNPOD_API_KEY" \
+          # Create pod using REST API
+          RESPONSE=$(curl -s -X POST "https://rest.runpod.io/v1/pods" \
+            -H "Authorization: Bearer $RUNPOD_API_KEY" \
             -H "Content-Type: application/json" \
-            -d @pod_request.json)
+            -d '{
+              "cloudType": "SECURE",
+              "gpuCount": 1,
+              "gpuTypeIds": ["NVIDIA A40"],
+              "name": "ci-test-pod",
+              "templateId": "q5rqanpolz"
+            }')
 
           echo "Response: $RESPONSE"
 
@@ -64,56 +54,6 @@ jobs:
 
           echo "✓ Pod created with ID: $POD_ID"
           echo "pod_id=$POD_ID" >> $GITHUB_OUTPUT
-
-      - name: Wait for Pod Ready
-        env:
-          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
-          POD_ID: ${{ steps.create-pod.outputs.pod_id }}
-        run: |
-          echo "Waiting for pod $POD_ID to be ready..."
-
-          TIMEOUT=600
-          ELAPSED=0
-          INTERVAL=15
-
-          while [ $ELAPSED -lt $TIMEOUT ]; do
-            # Check pod status using GraphQL variables
-            cat > pod_status_request.json << EOF
-          {
-            "query": "query getPod(\$input: PodInput!) { pod(input: \$input) { id desiredStatus runtime { uptimeInSeconds } } }",
-            "variables": {
-              "input": {
-                "podId": "$POD_ID"
-              }
-            }
-          }
-          EOF
-
-            RESPONSE=$(curl -s -X POST \
-              "https://api.runpod.io/graphql?api_key=$RUNPOD_API_KEY" \
-              -H "Content-Type: application/json" \
-              -d @pod_status_request.json)
-
-            STATUS=$(echo "$RESPONSE" | grep -o '"desiredStatus":"[^"]*"' | cut -d'"' -f4)
-
-            echo "Status: $STATUS (elapsed: ${ELAPSED}s)"
-
-            if [ "$STATUS" = "RUNNING" ]; then
-              RUNTIME=$(echo "$RESPONSE" | grep -o '"uptimeInSeconds":[0-9]*' | cut -d':' -f2)
-              if [ -n "$RUNTIME" ] && [ "$RUNTIME" -gt 0 ]; then
-                echo "✓ Pod is running (uptime: ${RUNTIME}s)"
-                break
-              fi
-            fi
-
-            sleep $INTERVAL
-            ELAPSED=$((ELAPSED + INTERVAL))
-          done
-
-          if [ $ELAPSED -ge $TIMEOUT ]; then
-            echo "✗ Timeout waiting for pod to start"
-            exit 1
-          fi
 
       - name: Wait for Ollama Ready
         env:
@@ -269,22 +209,9 @@ jobs:
           if [ -n "$POD_ID" ]; then
             echo "Terminating RunPod pod: $POD_ID"
 
-            # Create termination request with GraphQL variables
-            cat > pod_terminate_request.json << EOF
-          {
-            "query": "mutation terminatePod(\$input: PodTerminateInput!) { podTerminate(input: \$input) }",
-            "variables": {
-              "input": {
-                "podId": "$POD_ID"
-              }
-            }
-          }
-          EOF
-
-            curl -s -X POST \
-              "https://api.runpod.io/graphql?api_key=$RUNPOD_API_KEY" \
-              -H "Content-Type: application/json" \
-              -d @pod_terminate_request.json
+            # Terminate pod using REST API
+            curl -s -X DELETE "https://rest.runpod.io/v1/pods/$POD_ID" \
+              -H "Authorization: Bearer $RUNPOD_API_KEY"
 
             echo ""
             echo "✓ Pod terminated"
