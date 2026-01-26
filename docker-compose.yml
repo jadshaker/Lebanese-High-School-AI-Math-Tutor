@@ -56,9 +56,6 @@ services:
       - '8005:8005'
     env_file:
       - .env
-    environment:
-      - SMALL_LLM_SERVICE_URL=${SMALL_LLM_SERVICE_URL:-http://host.docker.internal:11434}
-      - SMALL_LLM_MODEL_NAME=${SMALL_LLM_MODEL_NAME:-deepseek-r1:7b}
     command: uvicorn src.main:app --host 0.0.0.0 --port 8005 --reload --no-access-log
     extra_hosts:
       - 'host.docker.internal:host-gateway'
@@ -125,9 +122,6 @@ services:
       - '8006:8006'
     env_file:
       - .env
-    environment:
-      - FINE_TUNED_MODEL_SERVICE_URL=${FINE_TUNED_MODEL_SERVICE_URL:-http://host.docker.internal:11434}
-      - FINE_TUNED_MODEL_NAME=${FINE_TUNED_MODEL_NAME:-tinyllama:latest}
     command: uvicorn src.main:app --host 0.0.0.0 --port 8006 --reload --no-access-log
     extra_hosts:
       - 'host.docker.internal:host-gateway'
