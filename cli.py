@@ -1,11 +1,14 @@
 import argparse
 import os
 import subprocess
+import sys
 
 
 def clean():
     """Run code quality checks on all services, tests, and cli.py"""
     services_dir = "services"
+    failures = []
+    successes = []
 
     # Process each service individually
     if os.path.exists(services_dir):
@@ -22,10 +25,12 @@ def clean():
             print(f"Processing {service} service...")
             print(f"{'='*60}")
 
+            service_failed = False
+
             # Step 1: Install dependencies
             if os.path.isfile(requirements_path):
                 print(f"📦 Installing dependencies for {service}...")
-                subprocess.run(
+                result = subprocess.run(
                     [
                         "python3.14",
                         "-m",
@@ -36,10 +41,13 @@ def clean():
                         requirements_path,
                     ]
                 )
+                if result.returncode != 0:
+                    failures.append(f"{service}: dependency installation failed")
+                    service_failed = True
 
             # Step 2: Format code
             print(f"🧹 Formatting {service}...")
-            subprocess.run(
+            result = subprocess.run(
                 [
                     "autoflake",
                     "--remove-all-unused-imports",
@@ -50,25 +58,44 @@ def clean():
                     "--exclude=__init__.py",
                 ]
             )
-            subprocess.run(
+            if result.returncode != 0:
+                failures.append(f"{service}: autoflake failed")
+                service_failed = True
+
+            result = subprocess.run(
                 ["isort", service_path, "--profile", "black"],
                 stdout=subprocess.DEVNULL,
             )
-            subprocess.run(["black", service_path], stdout=subprocess.DEVNULL)
+            if result.returncode != 0:
+                failures.append(f"{service}: isort failed")
+                service_failed = True
+
+            result = subprocess.run(["black", service_path], stdout=subprocess.DEVNULL)
+            if result.returncode != 0:
+                failures.append(f"{service}: black failed")
+                service_failed = True
 
             # Step 3: Type check
             print(f"🔍 Type checking {service}...")
-            subprocess.run(
+            result = subprocess.run(
                 ["mypy", "src", "--explicit-package-bases"], cwd=service_path
             )
+            if result.returncode != 0:
+                failures.append(f"{service}: mypy type check failed")
+                service_failed = True
+
+            if not service_failed:
+                successes.append(service)
 
     # Process tests directory
     print(f"\n{'='*60}")
     print(f"Processing tests...")
     print(f"{'='*60}")
+    tests_failed = False
+
     if os.path.exists("tests"):
         print("🧹 Formatting tests...")
-        subprocess.run(
+        result = subprocess.run(
             [
                 "autoflake",
                 "--remove-all-unused-imports",
@@ -79,17 +106,33 @@ def clean():
                 "--exclude=__init__.py",
             ]
         )
-        subprocess.run(
+        if result.returncode != 0:
+            failures.append("tests: autoflake failed")
+            tests_failed = True
+
+        result = subprocess.run(
             ["isort", "tests", "--profile", "black"], stdout=subprocess.DEVNULL
         )
-        subprocess.run(["black", "tests"], stdout=subprocess.DEVNULL)
+        if result.returncode != 0:
+            failures.append("tests: isort failed")
+            tests_failed = True
+
+        result = subprocess.run(["black", "tests"], stdout=subprocess.DEVNULL)
+        if result.returncode != 0:
+            failures.append("tests: black failed")
+            tests_failed = True
+
+    if not tests_failed:
+        successes.append("tests")
 
     # Process cli.py
     print(f"\n{'='*60}")
     print(f"Processing cli.py...")
     print(f"{'='*60}")
+    cli_failed = False
+
     print("🧹 Formatting cli.py...")
-    subprocess.run(
+    result = subprocess.run(
         [
             "autoflake",
             "--remove-all-unused-imports",
@@ -98,15 +141,53 @@ def clean():
             "-i",
         ]
     )
-    subprocess.run(["isort", "cli.py", "--profile", "black"], stdout=subprocess.DEVNULL)
-    subprocess.run(["black", "cli.py"], stdout=subprocess.DEVNULL)
+    if result.returncode != 0:
+        failures.append("cli.py: autoflake failed")
+        cli_failed = True
+
+    result = subprocess.run(
+        ["isort", "cli.py", "--profile", "black"], stdout=subprocess.DEVNULL
+    )
+    if result.returncode != 0:
+        failures.append("cli.py: isort failed")
+        cli_failed = True
+
+    result = subprocess.run(["black", "cli.py"], stdout=subprocess.DEVNULL)
+    if result.returncode != 0:
+        failures.append("cli.py: black failed")
+        cli_failed = True
 
     print("🔍 Type checking cli.py...")
-    subprocess.run(["mypy", "cli.py"])
+    result = subprocess.run(["mypy", "cli.py"])
+    if result.returncode != 0:
+        failures.append("cli.py: mypy type check failed")
+        cli_failed = True
+
+    if not cli_failed:
+        successes.append("cli.py")
+
+    # Print summary
+    print(f"\n{'='*60}")
+    print("📊 SUMMARY")
+    print(f"{'='*60}")
+    print(f"✅ Successful: {len(successes)}")
+    for item in successes:
+        print(f"   ✓ {item}")
+
+    if failures:
+        print(f"\n❌ Failed: {len(failures)}")
+        for failure in failures:
+            print(f"   ✗ {failure}")
 
     print(f"\n{'='*60}")
-    print("✅ All done!")
-    print(f"{'='*60}")
+    if failures:
+        print("❌ Code quality checks FAILED")
+        print(f"{'='*60}")
+        sys.exit(1)
+    else:
+        print("✅ All code quality checks PASSED")
+        print(f"{'='*60}")
+        sys.exit(0)
 
 
 def test():
@@ -122,7 +203,8 @@ def test():
     if args.pytest_args:
         pytest_cmd.extend(args.pytest_args)
 
-    subprocess.run(pytest_cmd)
+    result = subprocess.run(pytest_cmd)
+    sys.exit(result.returncode)
 
 
 def main():
@@ -141,9 +223,11 @@ def main():
         if unknown:
             pytest_cmd.extend(unknown)
 
-        subprocess.run(pytest_cmd)
+        result = subprocess.run(pytest_cmd)
+        sys.exit(result.returncode)
     else:
         print("Invalid command")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
