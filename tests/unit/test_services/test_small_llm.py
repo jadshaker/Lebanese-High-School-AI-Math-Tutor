@@ -1,8 +1,7 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-
 
 
 # Module-level setup - load app and create client
@@ -11,8 +10,6 @@ def setup_module(small_llm_app):
     """Set up module-level client for small_llm service"""
     global client
     client = TestClient(small_llm_app)
-
-
 
 
 @pytest.mark.unit
@@ -79,7 +76,10 @@ def test_chat_completions_success(mock_openai_client):
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": "The derivative of x^2 is 2x"},
+                "message": {
+                    "role": "assistant",
+                    "content": "The derivative of x^2 is 2x",
+                },
                 "finish_reason": "stop",
             }
         ],
@@ -114,7 +114,9 @@ def test_chat_completions_missing_messages():
 @patch("src.main.client")
 def test_chat_completions_service_error(mock_openai_client):
     """Test chat completion when Ollama returns error"""
-    mock_openai_client.chat.completions.create.side_effect = Exception("Connection error")
+    mock_openai_client.chat.completions.create.side_effect = Exception(
+        "Connection error"
+    )
 
     request_data = {
         "model": "deepseek-r1:7b",

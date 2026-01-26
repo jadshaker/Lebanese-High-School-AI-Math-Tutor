@@ -1,9 +1,8 @@
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-
 
 
 # Module-level setup - load app and create client
@@ -12,8 +11,6 @@ def setup_module(reformulator_app):
     """Set up module-level client for reformulator service"""
     global client
     client = TestClient(reformulator_app)
-
-
 
 
 @pytest.mark.unit
@@ -75,13 +72,7 @@ def test_reformulate_success(mock_urlopen):
     """Test successful reformulation via LLM"""
     # Mock Small LLM response
     llm_response = {
-        "choices": [
-            {
-                "message": {
-                    "content": "What is the derivative of x^2?"
-                }
-            }
-        ]
+        "choices": [{"message": {"content": "What is the derivative of x^2?"}}]
     }
     mock_response = MagicMock()
     mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
@@ -170,13 +161,7 @@ def test_reformulate_removes_quotes(mock_urlopen):
     """Test that reformulation removes surrounding quotes"""
     # Mock Small LLM response with quotes
     llm_response = {
-        "choices": [
-            {
-                "message": {
-                    "content": '"What is the derivative of x^2?"'
-                }
-            }
-        ]
+        "choices": [{"message": {"content": '"What is the derivative of x^2?"'}}]
     }
     mock_response = MagicMock()
     mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
@@ -203,15 +188,7 @@ def test_reformulate_removes_quotes(mock_urlopen):
 def test_reformulate_empty_response_fallback(mock_urlopen):
     """Test that reformulation falls back to original when LLM returns empty"""
     # Mock Small LLM response with empty content
-    llm_response = {
-        "choices": [
-            {
-                "message": {
-                    "content": ""
-                }
-            }
-        ]
-    }
+    llm_response = {"choices": [{"message": {"content": ""}}]}
     mock_response = MagicMock()
     mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
     mock_response.__enter__ = MagicMock(return_value=mock_response)
@@ -237,15 +214,7 @@ def test_reformulate_empty_response_fallback(mock_urlopen):
 def test_reformulate_special_characters(mock_urlopen):
     """Test reformulation with special characters and unicode"""
     # Mock Small LLM response
-    llm_response = {
-        "choices": [
-            {
-                "message": {
-                    "content": "What is ∫ x² dx?"
-                }
-            }
-        ]
-    }
+    llm_response = {"choices": [{"message": {"content": "What is ∫ x² dx?"}}]}
     mock_response = MagicMock()
     mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
     mock_response.__enter__ = MagicMock(return_value=mock_response)
@@ -272,13 +241,7 @@ def test_reformulate_detects_improvements(mock_urlopen):
     """Test that reformulation detects specific improvements made"""
     # Mock Small LLM response with multiple improvements
     llm_response = {
-        "choices": [
-            {
-                "message": {
-                    "content": "What is the derivative of x^2?"
-                }
-            }
-        ]
+        "choices": [{"message": {"content": "What is the derivative of x^2?"}}]
     }
     mock_response = MagicMock()
     mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")

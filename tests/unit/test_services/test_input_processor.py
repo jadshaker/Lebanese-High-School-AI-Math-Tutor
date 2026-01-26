@@ -1,8 +1,5 @@
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
 from fastapi.testclient import TestClient
-
 
 
 # Module-level setup - load app and create client
@@ -11,8 +8,6 @@ def setup_module(input_processor_app):
     """Set up module-level client for input_processor service"""
     global client
     client = TestClient(input_processor_app)
-
-
 
 
 @pytest.mark.unit

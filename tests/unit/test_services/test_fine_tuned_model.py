@@ -1,8 +1,7 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-
 
 
 # Module-level setup - load app and create client
@@ -11,8 +10,6 @@ def setup_module(fine_tuned_model_app):
     """Set up module-level client for fine_tuned_model service"""
     global client
     client = TestClient(fine_tuned_model_app)
-
-
 
 
 @pytest.mark.unit
@@ -114,7 +111,9 @@ def test_chat_completions_missing_messages():
 @patch("src.main.client")
 def test_chat_completions_service_error(mock_openai_client):
     """Test chat completion when Ollama returns error"""
-    mock_openai_client.chat.completions.create.side_effect = Exception("Connection error")
+    mock_openai_client.chat.completions.create.side_effect = Exception(
+        "Connection error"
+    )
 
     request_data = {
         "model": "tinyllama:latest",

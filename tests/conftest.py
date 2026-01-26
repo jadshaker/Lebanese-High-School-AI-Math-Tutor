@@ -1,7 +1,4 @@
-import time
-
 import pytest
-import responses
 
 
 def pytest_addoption(parser):

@@ -31,7 +31,7 @@ def test_data_processing_pipeline(mock_external_apis):
         f"{INPUT_PROCESSOR_URL}/process",
         json={"input": user_input, "type": "text"},
         headers={"X-Request-ID": request_id},
-        timeout=10
+        timeout=10,
     )
 
     assert response.status_code == 200, f"Input Processor failed: {response.text}"
@@ -50,7 +50,7 @@ def test_data_processing_pipeline(mock_external_apis):
         f"{REFORMULATOR_URL}/reformulate",
         json={"processed_input": processed_input, "input_type": "text"},
         headers={"X-Request-ID": request_id},
-        timeout=30
+        timeout=30,
     )
 
     assert response.status_code == 200, f"Reformulator failed: {response.text}"
@@ -93,7 +93,7 @@ def test_answer_retrieval_pipeline(mock_external_apis):
         f"{EMBEDDING_URL}/embed",
         json={"text": query},
         headers={"X-Request-ID": request_id},
-        timeout=10
+        timeout=10,
     )
 
     assert response.status_code == 200, f"Embedding failed: {response.text}"
@@ -108,7 +108,7 @@ def test_answer_retrieval_pipeline(mock_external_apis):
         f"{CACHE_URL}/search",
         json={"embedding": embedding, "top_k": 5},
         headers={"X-Request-ID": request_id},
-        timeout=10
+        timeout=10,
     )
 
     assert response.status_code == 200, f"Cache search failed: {response.text}"
@@ -120,20 +120,22 @@ def test_answer_retrieval_pipeline(mock_external_apis):
     # Cache stub returns results with ~0.85 similarity (not exact match)
     if results:
         top_similarity = results[0]["similarity_score"]
-        assert top_similarity < 0.95, "Cache should not return exact match for this test"
+        assert (
+            top_similarity < 0.95
+        ), "Cache should not return exact match for this test"
 
     # Step 3: Call Small LLM with cache context
     # Build messages format
     messages = [
         {"role": "system", "content": "You are a math tutor."},
-        {"role": "user", "content": query}
+        {"role": "user", "content": query},
     ]
 
     response = requests.post(
         f"{SMALL_LLM_URL}/v1/chat/completions",
         json={"model": "deepseek-r1:7b", "messages": messages},
         headers={"X-Request-ID": request_id},
-        timeout=60
+        timeout=60,
     )
 
     assert response.status_code == 200, f"Small LLM failed: {response.text}"
@@ -149,7 +151,7 @@ def test_answer_retrieval_pipeline(mock_external_apis):
         f"{LARGE_LLM_URL}/v1/chat/completions",
         json={"model": "gpt-4o-mini", "messages": messages},
         headers={"X-Request-ID": request_id},
-        timeout=60
+        timeout=60,
     )
 
     assert response.status_code == 200, f"Large LLM failed: {response.text}"
@@ -163,13 +165,9 @@ def test_answer_retrieval_pipeline(mock_external_apis):
     # Step 5: Save to cache
     response = requests.post(
         f"{CACHE_URL}/save",
-        json={
-            "question": query,
-            "answer": large_llm_answer,
-            "embedding": embedding
-        },
+        json={"question": query, "answer": large_llm_answer, "embedding": embedding},
         headers={"X-Request-ID": request_id},
-        timeout=10
+        timeout=10,
     )
 
     assert response.status_code == 200, f"Cache save failed: {response.text}"
@@ -179,7 +177,11 @@ def test_answer_retrieval_pipeline(mock_external_apis):
 
     print(f"\n✓ Answer Retrieval Pipeline:")
     print(f"  Query: {query}")
-    print(f"  Cache results: {len(results)} (top similarity: {results[0]['similarity_score']:.2f})" if results else "  Cache results: None")
+    print(
+        f"  Cache results: {len(results)} (top similarity: {results[0]['similarity_score']:.2f})"
+        if results
+        else "  Cache results: None"
+    )
     print(f"  Small LLM answer length: {len(small_llm_answer)}")
     print(f"  Large LLM answer length: {len(large_llm_answer)}")
     print(f"  Saved to cache: Yes")
@@ -204,10 +206,10 @@ def test_full_pipeline_simple_question(mock_external_apis):
         f"{GATEWAY_URL}/v1/chat/completions",
         json={
             "model": "math-tutor",
-            "messages": [{"role": "user", "content": "What is 2+2?"}]
+            "messages": [{"role": "user", "content": "What is 2+2?"}],
         },
         headers={"X-Request-ID": request_id},
-        timeout=120  # Increased timeout for full pipeline
+        timeout=120,  # Increased timeout for full pipeline
     )
 
     assert response.status_code == 200, f"Gateway failed: {response.text}"
@@ -269,7 +271,7 @@ def test_request_id_propagation(mock_external_apis):
         f"{INPUT_PROCESSOR_URL}/process",
         json={"input": "test query for logging", "type": "text"},
         headers={"X-Request-ID": request_id},
-        timeout=10
+        timeout=10,
     )
 
     assert response.status_code == 200, f"Input Processor failed: {response.text}"
@@ -279,16 +281,13 @@ def test_request_id_propagation(mock_external_apis):
         f"{EMBEDDING_URL}/embed",
         json={"text": "test query for logging"},
         headers={"X-Request-ID": request_id},
-        timeout=10
+        timeout=10,
     )
 
     assert response.status_code == 200, f"Embedding failed: {response.text}"
 
     # Call /track/{request_id} on Gateway
-    response = requests.get(
-        f"{GATEWAY_URL}/track/{request_id}",
-        timeout=10
-    )
+    response = requests.get(f"{GATEWAY_URL}/track/{request_id}", timeout=10)
 
     assert response.status_code == 200, f"Track request failed: {response.text}"
     data = response.json()
@@ -344,18 +343,15 @@ def test_metrics_are_recorded(mock_external_apis):
         f"{GATEWAY_URL}/v1/chat/completions",
         json={
             "model": "math-tutor",
-            "messages": [{"role": "user", "content": "What is 5+3?"}]
+            "messages": [{"role": "user", "content": "What is 5+3?"}],
         },
-        timeout=120
+        timeout=120,
     )
 
     assert response.status_code == 200, f"Gateway failed: {response.text}"
 
     # Check Gateway's /metrics endpoint
-    response = requests.get(
-        f"{GATEWAY_URL}/metrics",
-        timeout=10
-    )
+    response = requests.get(f"{GATEWAY_URL}/metrics", timeout=10)
 
     assert response.status_code == 200, f"Metrics endpoint failed"
     metrics_text = response.text
@@ -367,15 +363,16 @@ def test_metrics_are_recorded(mock_external_apis):
     # Verify expected metrics exist
     # We should have at least one of these metrics
     has_cache_metric = (
-        "gateway_cache_misses_total" in metrics_text or
-        "gateway_cache_hits_total" in metrics_text
+        "gateway_cache_misses_total" in metrics_text
+        or "gateway_cache_hits_total" in metrics_text
     )
     has_llm_metric = "gateway_llm_calls_total" in metrics_text
     has_http_metric = "http_requests_total" in metrics_text
 
-    assert has_cache_metric or has_llm_metric or has_http_metric, (
-        "Expected metrics not found. Available metrics:\n" +
-        "\n".join([line for line in metrics_text.split("\n") if not line.startswith("#")][:20])
+    assert (
+        has_cache_metric or has_llm_metric or has_http_metric
+    ), "Expected metrics not found. Available metrics:\n" + "\n".join(
+        [line for line in metrics_text.split("\n") if not line.startswith("#")][:20]
     )
 
     print(f"\n✓ Metrics Recording:")
@@ -384,7 +381,9 @@ def test_metrics_are_recorded(mock_external_apis):
     print(f"  HTTP metrics: {'Yes' if has_http_metric else 'No'}")
 
     # Print sample metrics (first 10 non-comment lines)
-    metric_lines = [line for line in metrics_text.split("\n") if line and not line.startswith("#")]
+    metric_lines = [
+        line for line in metrics_text.split("\n") if line and not line.startswith("#")
+    ]
     print(f"  Sample metrics ({len(metric_lines)} total):")
     for line in metric_lines[:10]:
         print(f"    {line}")

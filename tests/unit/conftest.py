@@ -27,7 +27,7 @@ def isolate_imports():
     # (modules starting with 'src.' that were added during the test)
     new_modules = set(sys.modules.keys()) - original_modules
     for module_name in new_modules:
-        if module_name.startswith('src.') or module_name == 'src':
+        if module_name.startswith("src.") or module_name == "src":
             del sys.modules[module_name]
 
 

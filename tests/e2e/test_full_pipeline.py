@@ -64,8 +64,8 @@ def test_simple_math_question(mock_external_apis):
     assert len(answer) > 10, "Answer should be more than just a few characters"
 
     # Verify request ID is in response headers
-    request_id_header = (
-        response.headers.get("X-Request-ID") or response.headers.get("x-request-id")
+    request_id_header = response.headers.get("X-Request-ID") or response.headers.get(
+        "x-request-id"
     )
     assert request_id_header is not None, "Request ID should be in response headers"
 
@@ -292,28 +292,22 @@ def test_request_tracking_end_to_end(mock_external_apis):
         f"{GATEWAY_URL}/v1/chat/completions",
         json={
             "model": "math-tutor",
-            "messages": [
-                {"role": "user", "content": "Explain the quadratic formula"}
-            ],
+            "messages": [{"role": "user", "content": "Explain the quadratic formula"}],
         },
         timeout=180,
     )
 
-    assert (
-        response.status_code == 200
-    ), f"Chat completion failed: {response.text}"
+    assert response.status_code == 200, f"Chat completion failed: {response.text}"
 
     # Get the request ID from response headers (gateway generates it)
-    request_id = (
-        response.headers.get("X-Request-ID") or response.headers.get("x-request-id")
+    request_id = response.headers.get("X-Request-ID") or response.headers.get(
+        "x-request-id"
     )
     assert request_id is not None, "Request ID should be in response headers"
 
     # Call tracking endpoint
     track_response = requests.get(f"{GATEWAY_URL}/track/{request_id}", timeout=10)
-    assert (
-        track_response.status_code == 200
-    ), f"Tracking failed: {track_response.text}"
+    assert track_response.status_code == 200, f"Tracking failed: {track_response.text}"
 
     track_data = track_response.json()
 
@@ -346,9 +340,7 @@ def test_request_tracking_end_to_end(mock_external_apis):
     # Verify timeline is sorted chronologically
     # Extract timestamps from log lines (format: YYYY-MM-DD HH:MM:SS.fff)
     timestamps = [entry["log"][:23] for entry in timeline if len(entry["log"]) >= 23]
-    assert timestamps == sorted(
-        timestamps
-    ), "Timeline should be sorted chronologically"
+    assert timestamps == sorted(timestamps), "Timeline should be sorted chronologically"
 
     print(f"\n✓ Request Tracking End-to-End Test:")
     print(f"  Request ID: {request_id}")
@@ -407,9 +399,7 @@ def test_all_services_healthy():
         ), f"Service {service_name} should be in health check"
 
         service_health = services[service_name]
-        assert (
-            "status" in service_health
-        ), f"Service {service_name} should have status"
+        assert "status" in service_health, f"Service {service_name} should have status"
 
         # Service should be healthy (warn if not, but don't fail test)
         if service_health["status"] != "healthy":
@@ -429,6 +419,7 @@ def test_all_services_healthy():
         print(f"    {symbol} {service_name}: {status}")
 
     # Verify at least gateway is healthy
-    assert (
-        data["status"] in ["healthy", "degraded"]
-    ), f"Gateway should be operational, got: {data['status']}"
+    assert data["status"] in [
+        "healthy",
+        "degraded",
+    ], f"Gateway should be operational, got: {data['status']}"

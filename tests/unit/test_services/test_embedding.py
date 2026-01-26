@@ -1,8 +1,7 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-
 
 
 # Module-level setup - load app and create client
@@ -11,8 +10,6 @@ def setup_module(embedding_app):
     """Set up module-level client for embedding service"""
     global client
     client = TestClient(embedding_app)
-
-
 
 
 @pytest.mark.unit

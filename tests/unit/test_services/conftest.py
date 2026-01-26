@@ -5,7 +5,6 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi.testclient import TestClient
 from prometheus_client import REGISTRY
 
 
@@ -25,7 +24,9 @@ def load_service_app_for_module(service_name: str) -> Any:
         The FastAPI app instance
     """
     # Get absolute path to service
-    service_path = Path(__file__).parent.parent.parent.parent / "services" / service_name
+    service_path = (
+        Path(__file__).parent.parent.parent.parent / "services" / service_name
+    )
     service_parent = str(service_path)
 
     # Add service's parent directory to sys.path
@@ -44,10 +45,10 @@ def load_service_app_for_module(service_name: str) -> Any:
     mock_logging_utils.get_logs_by_request_id = MagicMock(return_value=[])
 
     # Inject mocks BEFORE importing
-    sys.modules['src.logging_utils'] = mock_logging_utils
+    sys.modules["src.logging_utils"] = mock_logging_utils
 
     # Import the main module - this stays in sys.modules for the test module duration
-    src_main = importlib.import_module('src.main')
+    src_main = importlib.import_module("src.main")
     app = src_main.app
 
     return app
@@ -56,13 +57,13 @@ def load_service_app_for_module(service_name: str) -> Any:
 def cleanup_service_modules():
     """Clean up service modules from sys.modules, sys.path, and Prometheus registry."""
     modules_to_remove = [
-        'src.main',
-        'src.config',
-        'src.logging_utils',
-        'src.metrics',
-        'src.models',
-        'src.models.schemas',
-        'src',
+        "src.main",
+        "src.config",
+        "src.logging_utils",
+        "src.metrics",
+        "src.models",
+        "src.models.schemas",
+        "src",
     ]
 
     for module_name in modules_to_remove:

@@ -2,14 +2,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-
 # Module-level setup - load app and create client
 @pytest.fixture(scope="module", autouse=True)
 def setup_module(cache_app):
     """Set up module-level client for cache service"""
     global client
     client = TestClient(cache_app)
-
 
 
 @pytest.mark.unit

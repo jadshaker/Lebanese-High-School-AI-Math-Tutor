@@ -1,8 +1,7 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-
 
 
 # Module-level setup - load app and create client
@@ -11,8 +10,6 @@ def setup_module(gateway_app):
     """Set up module-level client for gateway service"""
     global client
     client = TestClient(gateway_app)
-
-
 
 
 @pytest.mark.unit
@@ -39,10 +36,11 @@ def test_health_endpoint_all_healthy(mock_urlopen):
 @patch("src.main.urlopen")
 def test_health_endpoint_degraded(mock_urlopen):
     """Test health check when some services are unhealthy"""
+
     # Mock service health checks with one failure
     def mock_health_side_effect(request, *args, **kwargs):
         # Check the URL from the Request object
-        url = request.full_url if hasattr(request, 'full_url') else str(request)
+        url = request.full_url if hasattr(request, "full_url") else str(request)
         if "large-llm" in url:
             raise Exception("Service unavailable")
 
@@ -84,7 +82,10 @@ async def test_chat_completions_success(mock_retrieve, mock_process):
     mock_process.return_value = {"reformulated_query": "What is the derivative of x^2?"}
 
     # Mock retrieval phase
-    mock_retrieve.return_value = {"answer": "The derivative of x^2 is 2x", "source": "small_llm"}
+    mock_retrieve.return_value = {
+        "answer": "The derivative of x^2 is 2x",
+        "source": "small_llm",
+    }
 
     request_data = {
         "model": "math-tutor",
