@@ -92,15 +92,14 @@ async def track_request(request_id: str):
     Returns logs from all services that contain this request ID,
     providing a complete trace of the request's journey through the system.
     """
-    all_services = {
+    # Only query services that have /logs endpoint (Python FastAPI services)
+    # Ollama services (small-llm, reformulator, fine-tuned-model) don't have this endpoint
+    services_with_logs = {
         "gateway": Config.SERVICES.GATEWAY_URL,
         "input-processor": Config.SERVICES.INPUT_PROCESSOR_URL,
-        "reformulator": Config.SERVICES.REFORMULATOR_URL,
         "embedding": Config.SERVICES.EMBEDDING_URL,
         "cache": Config.SERVICES.CACHE_URL,
-        "small-llm": Config.SERVICES.SMALL_LLM_URL,
         "large-llm": Config.SERVICES.LARGE_LLM_URL,
-        "fine-tuned-model": Config.SERVICES.FINE_TUNED_MODEL_URL,
     }
 
     trace: dict[str, Any] = {
@@ -120,7 +119,7 @@ async def track_request(request_id: str):
             trace["timeline"].append({"service": "gateway", "log": log})
 
     # Query each service for logs with this request ID
-    for service_name, service_url in all_services.items():
+    for service_name, service_url in services_with_logs.items():
         if service_name == "gateway":
             continue  # Already added above
 
