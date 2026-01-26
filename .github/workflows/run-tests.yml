@@ -182,8 +182,8 @@ jobs:
           FINE_TUNED_MODEL_SERVICE_URL: https://${{ steps.create-pod.outputs.pod_id }}-11434.proxy.runpod.net
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          echo "Running all integration and E2E tests with RunPod..."
-          python3 cli.py test tests/integration/ tests/e2e/ --use-real-apis -v
+          echo "Running all tests with RunPod..."
+          python3.14 cli.py test
 
       - name: Stop Docker Services
         if: always()
