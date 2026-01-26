@@ -5,7 +5,6 @@ on:
     workflows: ["Pre Merge Checks"]
     types:
       - completed
-    branches: [main]
   workflow_dispatch:
 
 jobs:
