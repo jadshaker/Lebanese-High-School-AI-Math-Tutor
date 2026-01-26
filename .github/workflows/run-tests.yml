@@ -184,9 +184,10 @@ jobs:
             "large-llm:8001"
             "embedding:8002"
             "cache:8003"
+            "input-processor:8004"
             "small-llm:8005"
             "fine-tuned-model:8006"
-            "answer-retrieval:8008"
+            "reformulator:8007"
           )
 
           TIMEOUT=120
