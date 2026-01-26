@@ -1,19 +1,14 @@
 name: Run Tests with RunPod
 
 on:
-  workflow_run:
-    workflows: ["Pre Merge Checks"]
-    types:
-      - completed
+  push:
     branches: [main]
-  workflow_dispatch:
+  pull_request:
+    branches: [main]
 
 jobs:
   test-with-runpod:
     runs-on: ubuntu-latest
-    # Only run if pre-merge checks succeeded (or manual trigger)
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-
     steps:
       - uses: actions/checkout@v4
 
