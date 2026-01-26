@@ -1,0 +1,20 @@
+name: Test Trigger
+
+on:
+  workflow_run:
+    workflows: ["Pre Merge Checks"]
+    types:
+      - completed
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Test message
+        run: |
+          echo "✓ Test workflow triggered successfully!"
+          echo "Source workflow: ${{ github.event.workflow_run.name }}"
+          echo "Conclusion: ${{ github.event.workflow_run.conclusion }}"
+          echo "Branch: ${{ github.event.workflow_run.head_branch }}"
