@@ -205,15 +205,6 @@ def chat_completions(
             request_id=request_id,
         )
 
-        # Build optional parameters
-        extra_params = {}
-        if request.temperature is not None:
-            extra_params["temperature"] = request.temperature
-        if request.max_tokens is not None:
-            extra_params["max_tokens"] = request.max_tokens
-        if request.stream is not None:
-            extra_params["stream"] = request.stream
-
         logger.info(
             "Calling Ollama via OpenAI SDK",
             context={"model": model_name},
@@ -221,15 +212,27 @@ def chat_completions(
         )
 
         # Call Ollama using OpenAI SDK
+        # Build the call parameters explicitly to satisfy mypy's type checking
+        from typing import Any
+
         llm_start_time = time.time()
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[
+        call_params: dict[str, Any] = {
+            "model": model_name,
+            "messages": [
                 {"role": msg.role, "content": msg.content} for msg in request.messages
             ],
-            extra_body={"keep_alive": -1},  # Ollama-specific parameter
-            **extra_params,
-        )
+            "extra_body": {"keep_alive": -1},  # Ollama-specific parameter
+        }
+
+        # Add optional parameters only if they're set
+        if request.temperature is not None:
+            call_params["temperature"] = request.temperature
+        if request.max_tokens is not None:
+            call_params["max_tokens"] = request.max_tokens
+        if request.stream is not None:
+            call_params["stream"] = request.stream
+
+        response = client.chat.completions.create(**call_params)  # type: ignore[arg-type]
         llm_duration = time.time() - llm_start_time
 
         # Record LLM metrics
