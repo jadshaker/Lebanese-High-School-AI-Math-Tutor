@@ -1,7 +1,13 @@
+import sys
 import uuid
+from pathlib import Path
 
 import pytest
 import requests
+
+# Add tests directory to path to import conftest helpers
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from conftest import wait_for_logs, wait_for_metrics
 
 GATEWAY_URL = "http://localhost:8000"
 
@@ -153,13 +159,8 @@ def test_cache_behavior_on_repeated_question(mock_external_apis):
     answer_2 = data_2["choices"][0]["message"]["content"]
     assert len(answer_2) > 0
 
-    # Check metrics endpoint to verify cache activity
-    metrics_response = requests.get(f"{GATEWAY_URL}/metrics", timeout=10)
-    assert (
-        metrics_response.status_code == 200
-    ), f"Metrics endpoint failed: {metrics_response.text}"
-
-    metrics_text = metrics_response.text
+    # Wait for metrics to be available (handles Prometheus aggregation delay)
+    metrics_text = wait_for_metrics(GATEWAY_URL, timeout=3.0)
 
     # Verify cache-related metrics exist (either hits or misses)
     has_cache_metric = (
@@ -305,11 +306,8 @@ def test_request_tracking_end_to_end(mock_external_apis):
     )
     assert request_id is not None, "Request ID should be in response headers"
 
-    # Call tracking endpoint
-    track_response = requests.get(f"{GATEWAY_URL}/track/{request_id}", timeout=10)
-    assert track_response.status_code == 200, f"Tracking failed: {track_response.text}"
-
-    track_data = track_response.json()
+    # Wait for logs to be written (handles async log collection race condition)
+    track_data = wait_for_logs(GATEWAY_URL, request_id, timeout=5.0, min_services=2)
 
     # Verify tracking response structure
     assert "request_id" in track_data
