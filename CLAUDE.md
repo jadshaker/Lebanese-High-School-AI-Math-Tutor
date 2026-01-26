@@ -299,10 +299,15 @@ When creating a new service:
 - Update tests when modifying existing functionality
 - Run tests before committing: `python3.14 cli.py test`
 
-**Test Types:**
+**Test Types (93 total: 83 unit + 5 integration + 5 E2E):**
 - **Unit tests** (`@pytest.mark.unit`): Fast, isolated, mock everything external
-- **Integration tests** (`@pytest.mark.integration`): Real services, Docker required
-- **E2E tests** (`@pytest.mark.e2e`): Full pipeline, HPC connection required
+- **Integration tests** (`@pytest.mark.integration`): Real Docker services, mocked external APIs by default
+- **E2E tests** (`@pytest.mark.e2e`): Full pipeline orchestration, mocked external APIs by default
+
+**Mocked vs Real APIs:**
+- **By default**: Integration and E2E tests use mocked APIs (fast, no external dependencies)
+- **With `--use-real-apis` flag**: Tests use real OpenAI APIs and HPC Ollama services
+- **Unit tests**: Always use mocks (no flag needed)
 
 **Before Committing:**
 1. Run code quality checks: `python3.14 cli.py clean`
@@ -310,18 +315,30 @@ When creating a new service:
 3. Ensure all tests pass
 4. Check coverage if adding new code
 
-**HPC Connection Note:**
-- Integration and E2E tests may require SSH tunnel to AUB HPC for Ollama services
-- User should be notified if HPC connection is needed for testing
-- Unit tests do NOT require HPC (everything is mocked)
+**API Mocking System:**
+- Integration and E2E tests automatically use the `mock_external_apis` fixture
+- Mocks OpenAI APIs (Embedding, Large LLM) and Ollama services (Small LLM, Reformulator, Fine-Tuned Model)
+- To test against real APIs: add `--use-real-apis` flag (requires API keys + HPC connection)
 
 **Quick Test Commands:**
 ```bash
-# Run all tests
+# Run all tests (with mocked APIs)
 python3.14 cli.py test
 
-# Run only unit tests (no external dependencies)
+# Run only unit tests (no external dependencies, always mocked)
 python3.14 cli.py test -- -m unit
+
+# Run integration tests with mocked APIs (default, fast)
+python3.14 cli.py test -- -m integration
+
+# Run integration tests with REAL APIs (requires OpenAI keys + HPC)
+python3.14 cli.py test -- -m integration --use-real-apis
+
+# Run E2E tests with mocked APIs (default, fast)
+python3.14 cli.py test -- -m e2e
+
+# Run E2E tests with REAL APIs (requires OpenAI keys + HPC)
+python3.14 cli.py test -- -m e2e --use-real-apis
 
 # Run with coverage
 python3.14 cli.py test -- --cov=services --cov-report=html
@@ -329,6 +346,10 @@ python3.14 cli.py test -- --cov=services --cov-report=html
 # Run specific test file
 python3.14 cli.py test -- tests/unit/test_services/test_gateway.py
 ```
+
+**When to Use Real APIs vs Mocked:**
+- **Mocked (default)**: For development, CI/CD, and general testing
+- **Real APIs (`--use-real-apis`)**: Before major releases, when debugging API issues, or validating LLM response quality
 
 See `TESTING.md` for comprehensive testing guidelines.
 

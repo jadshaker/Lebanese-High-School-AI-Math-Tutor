@@ -14,12 +14,12 @@ LARGE_LLM_URL = "http://localhost:8001"
 
 
 @pytest.mark.integration
-def test_data_processing_pipeline():
+def test_data_processing_pipeline(mock_external_apis):
     """
     Test: Input Processor → Reformulator flow
 
     This test verifies:
-    - Real HTTP calls to both services
+    - HTTP calls to both services (mocked by default, use --use-real-apis for real APIs)
     - Request ID propagation through headers
     - Query reformulation improves the input
     """
@@ -76,13 +76,13 @@ def test_data_processing_pipeline():
 
 @pytest.mark.integration
 @pytest.mark.slow
-def test_answer_retrieval_pipeline():
+def test_answer_retrieval_pipeline(mock_external_apis):
     """
     Test: Embed → Cache → Small LLM → Large LLM flow
 
     This test verifies:
     - Cache returns 0.85 similarity (not exact match)
-    - Both Small LLM and Large LLM are called
+    - Both Small LLM and Large LLM are called (mocked by default, use --use-real-apis for real APIs)
     - Answer is saved to cache
     """
     request_id = f"test-{uuid.uuid4().hex[:8]}"
@@ -187,16 +187,16 @@ def test_answer_retrieval_pipeline():
 
 @pytest.mark.integration
 @pytest.mark.slow
-def test_full_pipeline_simple_question():
+def test_full_pipeline_simple_question(mock_external_apis):
     """
     Test: Complete flow from user input to final answer
 
     This test verifies:
-    - Gateway's /v1/chat/completions endpoint works end-to-end
+    - Gateway's /v1/chat/completions endpoint works end-to-end (mocked by default)
     - Response structure matches OpenAI format
     - Answer exists (don't validate exact content)
 
-    WARNING: This will take 30-60 seconds due to real LLM calls
+    Use --use-real-apis flag for real LLM calls (takes 30-60 seconds)
     """
     request_id = f"test-{uuid.uuid4().hex[:8]}"
 
@@ -249,7 +249,7 @@ def test_full_pipeline_simple_question():
 
 
 @pytest.mark.integration
-def test_request_id_propagation():
+def test_request_id_propagation(mock_external_apis):
     """
     Test: Request ID flows through services that support /logs endpoint
 
@@ -260,6 +260,7 @@ def test_request_id_propagation():
 
     NOTE: We only check for logs from Gateway, Input Processor, Embedding, Cache, Large LLM
           because Ollama services (Small LLM, Fine-Tuned Model) and Reformulator don't have /logs endpoint
+    Use --use-real-apis flag to test against real services.
     """
     request_id = f"test-{uuid.uuid4().hex[:8]}"
 
@@ -327,16 +328,16 @@ def test_request_id_propagation():
 
 @pytest.mark.integration
 @pytest.mark.slow
-def test_metrics_are_recorded():
+def test_metrics_are_recorded(mock_external_apis):
     """
     Test: Prometheus metrics are recorded correctly
 
     This test verifies:
-    - Request to Gateway generates metrics
+    - Request to Gateway generates metrics (mocked by default)
     - /metrics endpoint returns Prometheus format
     - Expected metrics exist (cache, LLM calls, HTTP requests)
 
-    WARNING: This may take 30-60 seconds due to LLM calls
+    Use --use-real-apis flag for real LLM calls (takes 30-60 seconds)
     """
     # Make a request to generate metrics
     response = requests.post(

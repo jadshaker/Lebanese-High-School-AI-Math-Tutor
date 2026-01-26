@@ -51,6 +51,38 @@ python3.14 cli.py test -- -m integration
 python3.14 cli.py test -- -m e2e
 ```
 
+### Mocking External APIs
+
+**By default, integration and E2E tests use mocked APIs** to avoid requiring:
+- OpenAI API keys
+- HPC connection for Ollama models
+- GPU usage
+
+This makes tests:
+- ✅ **Fast** - no real API calls or LLM inference
+- ✅ **Free** - no API costs or GPU time
+- ✅ **CI-friendly** - run in GitHub Actions without secrets
+- ✅ **Reliable** - no network or HPC connection issues
+
+**Toggle mocking with pytest flag:**
+
+```bash
+# Use mocked APIs (default - fast, no external dependencies)
+python3.14 cli.py test -- -m integration
+
+# Use REAL APIs (requires OpenAI keys + HPC connection)
+python3.14 cli.py test -- -m integration --use-real-apis
+```
+
+**What gets mocked:**
+- OpenAI Embedding API (text-embedding-3-small)
+- OpenAI Large LLM (GPT-4o-mini)
+- Ollama Small LLM (DeepSeek-R1:7b)
+- Ollama Reformulator
+- Ollama Fine-Tuned Model (TinyLlama)
+- Input Processor service
+- Cache service (search and save)
+
 **Run tests with coverage:**
 ```bash
 # Coverage for all services
@@ -94,36 +126,57 @@ Unit tests mock all external services and APIs, so they can run anywhere without
 
 ### Integration Tests
 
-**Requirements:**
+**With Mocked APIs (Default - Recommended):**
 
 1. Start all services:
 ```bash
 docker compose up --build
 ```
 
-2. Ensure services are healthy:
+2. Run tests (automatically uses mocks):
 ```bash
-curl http://localhost:8000/health
+python3.14 cli.py test -- -m integration
 ```
 
-### E2E Tests
+**With Real APIs (--use-real-apis flag):**
 
-**Requirements:**
+1. Start all services (same as above)
 
-1. Start all services (same as integration tests)
-
-2. Ensure HPC SSH tunnel is active (for Small LLM and Fine-tuned Model):
+2. Ensure HPC SSH tunnel is active:
 ```bash
 ssh -L 0.0.0.0:11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 node_name
 ```
 
-3. Verify models are loaded on HPC:
+3. Verify OpenAI API key is set in `.env`:
+```bash
+OPENAI_API_KEY=sk-...
+```
+
+4. Verify models are loaded on HPC:
 ```bash
 # On the HPC node
 module load ollama
 ollama run deepseek-r1:7b --keepalive -1m
 ollama run tinyllama:latest --keepalive -1m
 ```
+
+5. Run tests with real APIs:
+```bash
+python3.14 cli.py test -- -m integration --use-real-apis
+```
+
+### E2E Tests
+
+**With Mocked APIs (Default - Recommended):**
+
+Same as integration tests - just run:
+```bash
+python3.14 cli.py test -- -m e2e
+```
+
+**With Real APIs (--use-real-apis flag):**
+
+Same as integration tests with real APIs (see above).
 
 ---
 
@@ -208,14 +261,30 @@ docker compose up --build -d
 curl http://localhost:8000/health
 ```
 
-### HPC Connection Requirements for Ollama Services
+### Mocking External APIs in Integration Tests
 
-Integration tests that use `small_llm` or `fine_tuned_model` services require:
+**By default, integration tests mock all external API calls** (OpenAI and Ollama) to:
+- Run without OpenAI API keys
+- Run without HPC connection
+- Execute quickly (no real LLM inference)
+- Work in CI/CD environments
 
+**The `mock_external_apis` fixture automatically mocks:**
+- OpenAI Embedding API responses
+- OpenAI Large LLM (GPT-4o-mini) responses
+- Ollama Small LLM (DeepSeek-R1) responses
+- Ollama Reformulator responses
+- Ollama Fine-Tuned Model (TinyLlama) responses
+
+**To test against real APIs**, use the `--use-real-apis` flag:
+```bash
+python3.14 cli.py test -- -m integration --use-real-apis
+```
+
+This requires:
 1. **SSH tunnel to HPC** (see Prerequisites section above)
 2. **Models loaded in Ollama** on the HPC node
-
-**Alternative**: Mock Ollama responses in integration tests to avoid HPC dependency.
+3. **Valid OpenAI API key** in `.env`
 
 ### Example Integration Test
 
@@ -260,18 +329,44 @@ Write E2E tests for:
 - **High-value scenarios**: Common question types, edge cases
 - **Regression protection**: Verify that major features continue to work
 
-### Full Stack Requirements
+### Mocking in E2E Tests
 
-E2E tests require:
+**By default, E2E tests use mocked APIs** (same as integration tests) to:
+- Test full pipeline orchestration without external dependencies
+- Run quickly in CI/CD
+- Avoid API costs and GPU usage
+
+**E2E tests with mocked APIs verify:**
+- Request routing through all services
+- Response format correctness
+- Error handling across the pipeline
+- Request tracking and logging
+
+**To test with real APIs**, use the `--use-real-apis` flag:
+```bash
+python3.14 cli.py test -- -m e2e --use-real-apis
+```
+
+### Full Stack Requirements (Real APIs)
+
+When running E2E tests with real APIs (`--use-real-apis` flag), you need:
 
 1. All services running in Docker
 2. HPC SSH tunnel active
 3. Ollama models loaded on HPC
 4. Valid OpenAI API key
 
-### Note About HPC SSH Tunnel Requirement
+### Recommendation
 
-E2E tests are the only test type that require HPC access because they test the full pipeline including Ollama models. Unit and integration tests can run without HPC by mocking Ollama responses.
+**For most testing:**
+- Use mocked APIs (default) for speed and reliability
+- Mocks are sufficient to verify pipeline orchestration and logic
+
+**Use real APIs when:**
+- Testing actual LLM response quality
+- Debugging HPC connection issues
+- Validating end-to-end latency
+- Before major releases (manual verification)
 
 ### Example E2E Test
 

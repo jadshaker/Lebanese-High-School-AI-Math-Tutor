@@ -8,15 +8,17 @@ GATEWAY_URL = "http://localhost:8000"
 
 @pytest.mark.e2e
 @pytest.mark.slow
-def test_simple_math_question():
+def test_simple_math_question(mock_external_apis):
     """
     Test asking a simple math question through the complete pipeline.
 
     This test verifies:
-    - Complete user journey: Data Processing → Answer Retrieval
+    - Complete user journey: Data Processing → Answer Retrieval (mocked by default)
     - Response contains reasonable answer
     - OpenAI-compatible format is correct
     - Request tracking works end-to-end
+
+    Use --use-real-apis flag to test against real services (requires HPC connection & API keys).
     """
     request_id = f"e2e-test-{uuid.uuid4().hex[:8]}"
 
@@ -94,15 +96,17 @@ def test_simple_math_question():
 
 @pytest.mark.e2e
 @pytest.mark.slow
-def test_cache_behavior_on_repeated_question():
+def test_cache_behavior_on_repeated_question(mock_external_apis):
     """
     Test cache behavior when asking the same question twice.
 
     This test verifies:
-    - First request completes successfully
+    - First request completes successfully (mocked by default)
     - Second request completes successfully
     - Both requests get answers (cache stub returns 0.85 similarity)
     - Metrics show cache searches happened
+
+    Use --use-real-apis flag to test against real services.
     """
     # Use a unique question to avoid interference from other tests
     question = f"What is the integral of {uuid.uuid4().hex[:4]}x dx?"
@@ -271,15 +275,17 @@ def test_invalid_input_handling():
 
 @pytest.mark.e2e
 @pytest.mark.slow
-def test_request_tracking_end_to_end():
+def test_request_tracking_end_to_end(mock_external_apis):
     """
     Test request tracking across the complete pipeline.
 
     This test verifies:
-    - Request ID propagates through all services
+    - Request ID propagates through all services (mocked by default)
     - Timeline shows services that support /logs endpoint
     - Logs from multiple services are collected
     - Timeline is sorted chronologically
+
+    Use --use-real-apis flag to test against real services.
     """
     # Make a complete request through the pipeline
     response = requests.post(
