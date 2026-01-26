@@ -177,7 +177,7 @@ jobs:
 
       - name: Check Service Health
         run: |
-          echo "Checking health endpoints..."
+          echo "Waiting for all services to become healthy..."
 
           SERVICES=(
             "gateway:8000"
@@ -189,19 +189,32 @@ jobs:
             "answer-retrieval:8008"
           )
 
+          TIMEOUT=120
+          INTERVAL=5
+
           for service in "${SERVICES[@]}"; do
             name="${service%:*}"
             port="${service#*:}"
-            echo -n "Checking $name... "
+            echo "Waiting for $name..."
 
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port/health" || echo "000")
+            ELAPSED=0
+            while [ $ELAPSED -lt $TIMEOUT ]; do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port/health" || echo "000")
 
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "✓ healthy (HTTP $HTTP_CODE)"
-            else
-              echo "✗ unhealthy (HTTP $HTTP_CODE)"
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "  ✓ $name is healthy (HTTP $HTTP_CODE)"
+                break
+              fi
+
+              echo "  Waiting for $name (HTTP $HTTP_CODE, elapsed: ${ELAPSED}s)..."
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            done
+
+            if [ $ELAPSED -ge $TIMEOUT ]; then
+              echo "  ✗ Timeout waiting for $name to become healthy"
               echo "Service logs:"
-              docker compose logs --tail=20 "$name"
+              docker compose logs --tail=50 "$name"
               exit 1
             fi
           done
