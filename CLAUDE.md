@@ -128,7 +128,8 @@ All environment variables are defined in `.env` at the project root:
 OPENAI_API_KEY=sk-...
 
 # Small LLM Service Configuration (Ollama)
-SMALL_LLM_SERVICE_URL=http://localhost:11434
+# Note: Use host.docker.internal for Docker, localhost for direct access
+SMALL_LLM_SERVICE_URL=http://host.docker.internal:11434
 SMALL_LLM_MODEL_NAME=deepseek-r1:7b
 
 # Embedding Service Configuration
@@ -136,7 +137,8 @@ EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
 
 # Fine-Tuned Model Service Configuration (Ollama)
-FINE_TUNED_MODEL_SERVICE_URL=http://localhost:11434
+# Note: Use host.docker.internal for Docker, localhost for direct access
+FINE_TUNED_MODEL_SERVICE_URL=http://host.docker.internal:11434
 FINE_TUNED_MODEL_NAME=tinyllama:latest
 
 # Answer Retrieval Service Configuration
@@ -145,7 +147,10 @@ CACHE_TOP_K=5
 
 Docker Compose loads these via the `env_file` directive.
 
-**Note**: Both `small_llm` and `fine_tuned_model` services connect to the same Ollama instance on the HPC. When running in Docker, the service URLs are overridden to `http://host.docker.internal:11434` to access Ollama via SSH tunnel from the host machine. The services differentiate by using different model names.
+**Note**: Both `small_llm` and `fine_tuned_model` services connect to the same Ollama instance:
+- **Local Development**: Use `http://host.docker.internal:11434` to access HPC via SSH tunnel from host machine
+- **CI (GitHub Actions)**: Use `https://POD_ID-11434.proxy.runpod.net` to access RunPod GPU pod
+- Services differentiate by using different model names (deepseek-r1:7b vs tinyllama:latest)
 
 ## Code Quality Tools
 
@@ -170,7 +175,8 @@ Configuration:
 - `.env` - Environment variables (not committed)
 - `.env.example` - Example environment variables
 - `.vscode/tasks.json` - VSCode tasks for development
-- `.github/workflows/pre-merge-checks.yml` - CI/CD checks
+- `.github/workflows/pre-merge-checks.yml` - CI/CD code quality and unit tests
+- `.github/workflows/run-tests.yml` - CI/CD integration/E2E tests with RunPod GPU pods
 
 ## API Guidelines
 

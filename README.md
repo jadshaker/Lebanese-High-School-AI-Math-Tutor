@@ -60,7 +60,8 @@ OPENAI_API_KEY=your_openai_api_key_here
 MINERU_API_KEY=your_mineru_api_key_here
 
 # Small LLM Service Configuration (Ollama)
-SMALL_LLM_SERVICE_URL=http://localhost:11434
+# Note: Use host.docker.internal for Docker, localhost for direct access
+SMALL_LLM_SERVICE_URL=http://host.docker.internal:11434
 SMALL_LLM_MODEL_NAME=deepseek-r1:7b
 
 # Embedding Service Configuration
@@ -68,7 +69,8 @@ EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
 
 # Fine-Tuned Model Service Configuration (Ollama)
-FINE_TUNED_MODEL_SERVICE_URL=http://localhost:11434
+# Note: Use host.docker.internal for Docker, localhost for direct access
+FINE_TUNED_MODEL_SERVICE_URL=http://host.docker.internal:11434
 FINE_TUNED_MODEL_NAME=tinyllama:latest
 
 # Answer Retrieval Service Configuration
@@ -457,6 +459,29 @@ tests/
 - **E2E tests**: Full pipeline validation (requires Docker + OpenAI keys + HPC)
 
 See `TESTING.md` for detailed guidelines and examples.
+
+### CI/CD
+
+The project uses GitHub Actions for continuous integration:
+
+**Pre-merge Checks** (`.github/workflows/pre-merge-checks.yml`):
+- Runs on every push and pull request
+- Executes code quality checks (isort, black, mypy)
+- Runs unit tests (fast, no external dependencies)
+
+**Integration/E2E Tests** (`.github/workflows/run-tests.yml`):
+- Runs on push to main and pull requests
+- Creates RunPod GPU pod with Ollama (NVIDIA A40)
+- Pulls and loads both models (deepseek-r1:7b and tinyllama:latest)
+- Starts all Docker services
+- Runs full test suite against real Ollama models
+- Automatically terminates pod after tests complete
+
+**RunPod Integration:**
+- Uses RunPod REST API to dynamically create/terminate GPU pods
+- Models accessible via proxy URL: `https://POD_ID-11434.proxy.runpod.net`
+- Eliminates need for persistent infrastructure
+- Tests run with real LLM inference on GPU
 
 ### Project Configuration
 
