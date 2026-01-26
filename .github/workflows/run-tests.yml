@@ -175,6 +175,40 @@ jobs:
           echo "Waiting for services to start..."
           sleep 10
 
+      - name: Check Service Health
+        run: |
+          echo "Checking health endpoints..."
+
+          SERVICES=(
+            "gateway:8000"
+            "large-llm:8001"
+            "embedding:8002"
+            "cache:8003"
+            "small-llm:8005"
+            "fine-tuned-model:8006"
+            "answer-retrieval:8008"
+          )
+
+          for service in "${SERVICES[@]}"; do
+            name="${service%:*}"
+            port="${service#*:}"
+            echo -n "Checking $name... "
+
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port/health" || echo "000")
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✓ healthy (HTTP $HTTP_CODE)"
+            else
+              echo "✗ unhealthy (HTTP $HTTP_CODE)"
+              echo "Service logs:"
+              docker compose logs --tail=20 "$name"
+              exit 1
+            fi
+          done
+
+          echo ""
+          echo "✓ All services are healthy"
+
       - name: Run All Tests
         env:
           POD_ID: ${{ steps.create-pod.outputs.pod_id }}
