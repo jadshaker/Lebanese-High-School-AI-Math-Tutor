@@ -26,7 +26,7 @@ We follow the test pyramid approach:
 
 - **Many unit tests**: Fast, isolated, mock everything external
 - **Fewer integration tests**: Test service interactions, require Docker
-- **Few E2E tests**: Full pipeline validation, require HPC connection
+- **Few E2E tests**: Full pipeline validation, require real APIs
 
 ---
 
@@ -47,7 +47,7 @@ python3.14 cli.py test -- -m unit
 # Integration tests (requires all services running via Docker)
 python3.14 cli.py test -- -m integration
 
-# E2E tests (requires full stack + HPC connection)
+# E2E tests (requires full stack + real APIs)
 python3.14 cli.py test -- -m e2e
 ```
 
@@ -55,27 +55,21 @@ python3.14 cli.py test -- -m e2e
 
 **Current Implementation:**
 -  **Unit tests**: ✅ Fully mocked, no external dependencies required
-- **Integration tests**: ⚠️ Require Docker services + real APIs (OpenAI keys + HPC connection)
-- **E2E tests**: ⚠️ Require Docker services + real APIs (OpenAI keys + HPC connection)
+- **Integration tests**: ⚠️ Require Docker services + real APIs (OpenAI keys + Ollama)
+- **E2E tests**: ⚠️ Require Docker services + real APIs (OpenAI keys + Ollama)
 
-**Why integration/E2E tests still need real APIs:**
-Integration and E2E tests run against Docker services, which make API calls in separate processes.
-The `responses` library can only mock HTTP calls in the same Python process, so it cannot
-intercept API calls made by Docker containers.
+**Why integration/E2E tests need real APIs:**
+These tests run against Docker services, which make API calls in separate processes
+that cannot be mocked with standard Python mocking libraries.
 
-**Planned Enhancement (TODO):**
-To enable mocking for integration/E2E tests, we need to add TEST_MODE support to services:
-1. Add `TEST_MODE` environment variable to docker-compose.yml
-2. Modify services (Large LLM, Embedding, Small LLM, Reformulator, Fine-Tuned Model) to check TEST_MODE
-3. When TEST_MODE=true, services return mock responses instead of calling real APIs
+**CI runs these automatically** using RunPod GPU pods (see `.github/workflows/run-tests.yml`).
 
-**Current Workaround:**
-Integration and E2E tests require:
+**For local runs:**
 ```bash
 # Ensure Docker services are running
 docker compose up -d
 
-# Ensure HPC SSH tunnel is active (for Ollama services)
+# Ensure Ollama is accessible (HPC SSH tunnel or local Ollama)
 ssh -L 0.0.0.0:11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 node_name
 
 # Run tests
@@ -111,7 +105,7 @@ Tests are marked with pytest markers to categorize them:
 
 - `@pytest.mark.unit`: Fast, isolated unit tests with mocked dependencies
 - `@pytest.mark.integration`: Tests requiring Docker services
-- `@pytest.mark.e2e`: Full pipeline tests requiring HPC connection
+- `@pytest.mark.e2e`: Full pipeline tests requiring real APIs
 
 ---
 
@@ -548,12 +542,9 @@ with patch('openai.ChatCompletion.create') as mock_create:
 
 **5. Tests pass locally but fail in CI**
 
-**Cause**: CI doesn't have access to Docker or HPC.
+**Cause**: CI environment differs from local (e.g., missing env vars, RunPod connectivity).
 
-**Fix**: Only run unit tests in CI (see `.github/workflows/pre-merge-checks.yml`):
-```bash
-python3.14 cli.py test -- -m unit
-```
+**Fix**: Check `.github/workflows/run-tests.yml` for CI-specific environment setup. Pre-merge checks only run unit tests.
 
 ### HPC Connection Issues
 
@@ -932,5 +923,4 @@ docker stats
 ## Next Steps After Testing
 
 1. If individual services work → Test Gateway end-to-end
-2. If Gateway works → Build UI (Task #77)
-3. Full end-to-end testing with UI
+2. If Gateway works → Test via Open WebUI at `http://localhost:3000`
