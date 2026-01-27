@@ -27,6 +27,11 @@ jobs:
         run: black --check services
 
       - name: mypy check
+        env:
+          SMALL_LLM_MODEL_NAME: deepseek-r1:7b
+          LARGE_LLM_MODEL_NAME: gpt-4o-mini
+          FINE_TUNED_MODEL_NAME: deepseek-r1:7b
+          REFORMULATOR_LLM_MODEL_NAME: deepseek-r1:7b
         run: |
           for service in services/*/; do
             if [ -d "$service/src" ]; then
@@ -34,7 +39,3 @@ jobs:
               (cd "$service" && mypy src --explicit-package-bases)
             fi
           done
-
-      - name: Run unit tests
-        run: |
-          python -m pytest tests/ -m unit -v

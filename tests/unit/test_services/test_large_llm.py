@@ -3,6 +3,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from services.large_llm.src.config import Config
+
+MODEL_NAME = Config.LARGE_LLM_MODEL_NAME
+
 
 # Module-level setup - load app and create client
 @pytest.fixture(scope="module", autouse=True)
@@ -20,7 +24,7 @@ def test_health_endpoint():
     data = response.json()
     assert data["status"] == "healthy"
     assert data["service"] == "large_llm"
-    assert data["model"] == "gpt-4o-mini"
+    assert data["model"] == MODEL_NAME
     assert "api_configured" in data
 
 
@@ -41,14 +45,14 @@ def test_chat_completions_success(mock_openai_client):
     mock_response = MagicMock()
     mock_response.id = "chatcmpl-123"
     mock_response.created = 1234567890
-    mock_response.model = "gpt-4o-mini"
+    mock_response.model = MODEL_NAME
     mock_response.choices = [mock_choice]
     mock_response.usage = mock_usage
 
     mock_openai_client.chat.completions.create.return_value = mock_response
 
     request_data = {
-        "model": "gpt-4o-mini",
+        "model": MODEL_NAME,
         "messages": [{"role": "user", "content": "What is the derivative of x^2?"}],
         "temperature": 0.7,
         "max_tokens": 500,
@@ -60,7 +64,7 @@ def test_chat_completions_success(mock_openai_client):
     data = response.json()
     assert "id" in data
     assert "created" in data
-    assert data["model"] == "gpt-4o-mini"
+    assert data["model"] == MODEL_NAME
     assert len(data["choices"]) == 1
     assert data["choices"][0]["message"]["content"] == "The derivative of x^2 is 2x"
 
@@ -70,7 +74,7 @@ def test_chat_completions_success(mock_openai_client):
 def test_chat_completions_no_api_key():
     """Test chat completion when API key not configured (fallback)"""
     request_data = {
-        "model": "gpt-4o-mini",
+        "model": MODEL_NAME,
         "messages": [{"role": "user", "content": "What is the derivative of x^2?"}],
     }
 
@@ -86,7 +90,7 @@ def test_chat_completions_no_api_key():
 @pytest.mark.unit
 def test_chat_completions_missing_messages():
     """Test chat completion with missing messages field"""
-    response = client.post("/v1/chat/completions", json={"model": "gpt-4o-mini"})
+    response = client.post("/v1/chat/completions", json={"model": MODEL_NAME})
     assert response.status_code == 422  # Validation error
 
 
@@ -97,7 +101,7 @@ def test_chat_completions_api_error(mock_openai_client):
     mock_openai_client.chat.completions.create.side_effect = Exception("API Error")
 
     request_data = {
-        "model": "gpt-4o-mini",
+        "model": MODEL_NAME,
         "messages": [{"role": "user", "content": "test"}],
     }
 
@@ -120,14 +124,14 @@ def test_chat_completions_multiple_messages(mock_openai_client):
     mock_response = MagicMock()
     mock_response.id = "chatcmpl-123"
     mock_response.created = 1234567890
-    mock_response.model = "gpt-4o-mini"
+    mock_response.model = MODEL_NAME
     mock_response.choices = [mock_choice]
     mock_response.usage = None
 
     mock_openai_client.chat.completions.create.return_value = mock_response
 
     request_data = {
-        "model": "gpt-4o-mini",
+        "model": MODEL_NAME,
         "messages": [
             {"role": "user", "content": "What is 2+2?"},
             {"role": "assistant", "content": "4"},
@@ -155,14 +159,14 @@ def test_chat_completions_empty_response(mock_openai_client):
     mock_response = MagicMock()
     mock_response.id = "chatcmpl-123"
     mock_response.created = 1234567890
-    mock_response.model = "gpt-4o-mini"
+    mock_response.model = MODEL_NAME
     mock_response.choices = [mock_choice]
     mock_response.usage = None
 
     mock_openai_client.chat.completions.create.return_value = mock_response
 
     request_data = {
-        "model": "gpt-4o-mini",
+        "model": MODEL_NAME,
         "messages": [{"role": "user", "content": "test"}],
     }
 
@@ -186,14 +190,14 @@ def test_chat_completions_special_characters(mock_openai_client):
     mock_response = MagicMock()
     mock_response.id = "chatcmpl-123"
     mock_response.created = 1234567890
-    mock_response.model = "gpt-4o-mini"
+    mock_response.model = MODEL_NAME
     mock_response.choices = [mock_choice]
     mock_response.usage = None
 
     mock_openai_client.chat.completions.create.return_value = mock_response
 
     request_data = {
-        "model": "gpt-4o-mini",
+        "model": MODEL_NAME,
         "messages": [{"role": "user", "content": "∫ x² dx = ?"}],
     }
 

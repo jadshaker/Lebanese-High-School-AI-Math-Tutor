@@ -132,16 +132,23 @@ async def process_user_input(user_message: str, request_id: str) -> dict:
     Raises:
         HTTPException: If any service in the pipeline fails
     """
+    pipeline_start = time.time()
+    latency: dict[str, float] = {}
     logger.info("Data Processing Pipeline: Started", request_id=request_id)
 
     # Step 1: Process input
+    t0 = time.time()
     input_result = await _process_input(user_message, "text", request_id)
+    latency["input_processor"] = round(time.time() - t0, 3)
     processed_input = input_result["processed_input"]
 
     # Step 2: Reformulate query
+    t0 = time.time()
     reformulate_result = await _reformulate_query(processed_input, "text", request_id)
+    latency["reformulator"] = round(time.time() - t0, 3)
     reformulated_query = reformulate_result["reformulated_query"]
 
+    latency["data_processing_total"] = round(time.time() - pipeline_start, 3)
     logger.info(
         f"Data Processing Pipeline: Completed - Query reformulated",
         request_id=request_id,
@@ -151,4 +158,5 @@ async def process_user_input(user_message: str, request_id: str) -> dict:
         "processed_input": processed_input,
         "reformulated_query": reformulated_query,
         "improvements_made": reformulate_result.get("improvements_made", []),
+        "latency": latency,
     }

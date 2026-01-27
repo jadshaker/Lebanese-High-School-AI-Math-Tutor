@@ -216,6 +216,8 @@ async def chat_completions(
             request_id=request_id,
         )
 
+        pipeline_start = time.time()
+
         # ===== DATA PROCESSING =====
         processing_result = await process_user_input(user_message, request_id)
         reformulated_query = processing_result["reformulated_query"]
@@ -225,11 +227,28 @@ async def chat_completions(
         answer = retrieval_result["answer"]
         source = retrieval_result["source"]
 
+        # ===== LATENCY SUMMARY =====
+        total_duration = round(time.time() - pipeline_start, 3)
+        latency = {
+            **processing_result.get("latency", {}),
+            **retrieval_result.get("latency", {}),
+            "total": total_duration,
+        }
+
+        # Log a clear latency breakdown
+        breakdown = " | ".join(f"{k}: {v}s" for k, v in latency.items())
+        logger.info(
+            f"⏱ Latency breakdown: {breakdown}",
+            context={"latency": latency},
+            request_id=request_id,
+        )
+
         logger.info(
             "Chat completion pipeline successful",
             context={
                 "total_answer_length": len(answer),
                 "source": source,
+                "total_latency_s": total_duration,
             },
             request_id=request_id,
         )

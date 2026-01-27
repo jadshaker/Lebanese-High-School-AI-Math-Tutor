@@ -133,7 +133,7 @@ async def health():
     return {
         "status": "healthy",
         "service": "large_llm",
-        "model": "gpt-4o-mini",
+        "model": Config.LARGE_LLM_MODEL_NAME,
         "api_configured": api_configured,
     }
 

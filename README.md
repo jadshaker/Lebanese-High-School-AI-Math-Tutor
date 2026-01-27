@@ -12,7 +12,7 @@ services/
 ├── cache/              # Vector storage stub (Port 8003)
 ├── input_processor/    # Text/image processing (Port 8004)
 ├── small_llm/          # Ollama DeepSeek-R1 (Port 8005)
-├── fine_tuned_model/   # Ollama TinyLlama (Port 8006)
+├── fine_tuned_model/   # Ollama DeepSeek-R1 (Port 8006)
 └── reformulator/       # Query improvement via LLM (Port 8007)
 ```
 
@@ -40,7 +40,7 @@ SMALL_LLM_MODEL_NAME=deepseek-r1:7b
 EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
 FINE_TUNED_MODEL_SERVICE_URL=http://host.docker.internal:11434
-FINE_TUNED_MODEL_NAME=tinyllama:latest
+FINE_TUNED_MODEL_NAME=deepseek-r1:7b
 CACHE_TOP_K=5
 ```
 
@@ -58,9 +58,8 @@ ollama serve
 # SSH tunnel (from your machine, bind 0.0.0.0 for Docker access)
 ssh -L 0.0.0.0:11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 node_name
 
-# Load models (on the node)
+# Load model (on the node)
 ollama run deepseek-r1:7b --keepalive -1m
-ollama run tinyllama:latest --keepalive -1m
 ```
 
 ### Run

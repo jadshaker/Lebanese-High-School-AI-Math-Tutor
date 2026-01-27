@@ -1,3 +1,4 @@
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -9,7 +10,7 @@ import requests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from conftest import wait_for_logs, wait_for_metrics
 
-GATEWAY_URL = "http://localhost:8000"
+GATEWAY_URL = os.getenv("GATEWAY_SERVICE_URL", "http://localhost:8000")
 
 
 @pytest.mark.e2e

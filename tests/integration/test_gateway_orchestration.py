@@ -1,16 +1,20 @@
+import os
 import uuid
 
 import pytest
 import requests
 
 # Service URLs for integration testing
-GATEWAY_URL = "http://localhost:8000"
-INPUT_PROCESSOR_URL = "http://localhost:8004"
-REFORMULATOR_URL = "http://localhost:8007"
-EMBEDDING_URL = "http://localhost:8002"
-CACHE_URL = "http://localhost:8003"
-SMALL_LLM_URL = "http://localhost:8005"
-LARGE_LLM_URL = "http://localhost:8001"
+GATEWAY_URL = os.getenv("GATEWAY_SERVICE_URL", "http://localhost:8000")
+INPUT_PROCESSOR_URL = os.getenv("INPUT_PROCESSOR_SERVICE_URL", "http://localhost:8004")
+REFORMULATOR_URL = os.getenv("REFORMULATOR_SERVICE_URL", "http://localhost:8007")
+EMBEDDING_URL = os.getenv("EMBEDDING_SERVICE_URL", "http://localhost:8002")
+CACHE_URL = os.getenv("CACHE_SERVICE_URL", "http://localhost:8003")
+SMALL_LLM_URL = os.getenv("SMALL_LLM_SERVICE_URL", "http://localhost:8005")
+LARGE_LLM_URL = os.getenv("LARGE_LLM_SERVICE_URL", "http://localhost:8001")
+
+SMALL_LLM_MODEL_NAME = os.getenv("SMALL_LLM_MODEL_NAME", "deepseek-r1:7b")
+LARGE_LLM_MODEL_NAME = os.getenv("LARGE_LLM_MODEL_NAME", "gpt-4o-mini")
 
 
 @pytest.mark.integration
@@ -133,7 +137,7 @@ def test_answer_retrieval_pipeline(mock_external_apis):
 
     response = requests.post(
         f"{SMALL_LLM_URL}/v1/chat/completions",
-        json={"model": "deepseek-r1:7b", "messages": messages},
+        json={"model": SMALL_LLM_MODEL_NAME, "messages": messages},
         headers={"X-Request-ID": request_id},
         timeout=60,
     )
@@ -149,7 +153,7 @@ def test_answer_retrieval_pipeline(mock_external_apis):
     # Step 4: Call Large LLM (since cache didn't have exact match)
     response = requests.post(
         f"{LARGE_LLM_URL}/v1/chat/completions",
-        json={"model": "gpt-4o-mini", "messages": messages},
+        json={"model": LARGE_LLM_MODEL_NAME, "messages": messages},
         headers={"X-Request-ID": request_id},
         timeout=60,
     )

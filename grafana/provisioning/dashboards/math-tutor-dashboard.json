@@ -606,6 +606,113 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "lastNotNull"],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "pluginVersion": "8.0.0",
+      "targets": [
+        {
+          "expr": "rate(gateway_input_processor_duration_seconds_sum[5m]) / rate(gateway_input_processor_duration_seconds_count[5m])",
+          "legendFormat": "Input Processor",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(gateway_reformulator_duration_seconds_sum[5m]) / rate(gateway_reformulator_duration_seconds_count[5m])",
+          "legendFormat": "Reformulator",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(gateway_embedding_duration_seconds_sum[5m]) / rate(gateway_embedding_duration_seconds_count[5m])",
+          "legendFormat": "Embedding",
+          "refId": "C"
+        },
+        {
+          "expr": "rate(gateway_cache_search_duration_seconds_sum[5m]) / rate(gateway_cache_search_duration_seconds_count[5m])",
+          "legendFormat": "Cache Search",
+          "refId": "D"
+        },
+        {
+          "expr": "rate(gateway_small_llm_duration_seconds_sum[5m]) / rate(gateway_small_llm_duration_seconds_count[5m])",
+          "legendFormat": "Small LLM",
+          "refId": "E"
+        },
+        {
+          "expr": "rate(gateway_large_llm_duration_seconds_sum[5m]) / rate(gateway_large_llm_duration_seconds_count[5m])",
+          "legendFormat": "Large LLM",
+          "refId": "F"
+        },
+        {
+          "expr": "rate(gateway_cache_save_duration_seconds_sum[5m]) / rate(gateway_cache_save_duration_seconds_count[5m])",
+          "legendFormat": "Cache Save",
+          "refId": "G"
+        }
+      ],
+      "title": "Total Time Spent in Each Service (Stacked)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
@@ -648,7 +755,114 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 34
+        "y": 44
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "lastNotNull"],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "pluginVersion": "8.0.0",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(gateway_input_processor_duration_seconds_bucket[1m]))",
+          "legendFormat": "Input Processor (P50)",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(gateway_reformulator_duration_seconds_bucket[1m]))",
+          "legendFormat": "Reformulator (P50)",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(gateway_embedding_duration_seconds_bucket[1m]))",
+          "legendFormat": "Embedding (P50)",
+          "refId": "C"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(gateway_cache_search_duration_seconds_bucket[1m]))",
+          "legendFormat": "Cache Search (P50)",
+          "refId": "D"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(gateway_small_llm_duration_seconds_bucket[1m]))",
+          "legendFormat": "Small LLM (P50)",
+          "refId": "E"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(gateway_large_llm_duration_seconds_bucket[1m]))",
+          "legendFormat": "Large LLM (P50)",
+          "refId": "F"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(gateway_cache_save_duration_seconds_bucket[1m]))",
+          "legendFormat": "Cache Save (P50)",
+          "refId": "G"
+        }
+      ],
+      "title": "Gateway Service Call Duration (P50)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 44
       },
       "id": 8,
       "options": {
@@ -692,6 +906,11 @@
           "expr": "histogram_quantile(0.95, rate(gateway_large_llm_duration_seconds_bucket[1m]))",
           "legendFormat": "Large LLM (P95)",
           "refId": "F"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(gateway_cache_save_duration_seconds_bucket[1m]))",
+          "legendFormat": "Cache Save (P95)",
+          "refId": "G"
         }
       ],
       "title": "Gateway Service Call Duration (P95)",
@@ -750,7 +969,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 34
+        "y": 52
       },
       "id": 9,
       "options": {
