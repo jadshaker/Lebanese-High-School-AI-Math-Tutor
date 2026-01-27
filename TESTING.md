@@ -145,12 +145,11 @@ ssh -L 0.0.0.0:11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434
 OPENAI_API_KEY=sk-...
 ```
 
-4. Verify models are loaded on HPC:
+4. Verify model is loaded on HPC:
 ```bash
 # On the HPC node
 module load ollama
 ollama run deepseek-r1:7b --keepalive -1m
-ollama run tinyllama:latest --keepalive -1m
 ```
 
 5. Run tests with real APIs:
@@ -267,7 +266,7 @@ curl http://localhost:8000/health
 - OpenAI Large LLM (GPT-4o-mini) responses
 - Ollama Small LLM (DeepSeek-R1) responses
 - Ollama Reformulator responses
-- Ollama Fine-Tuned Model (TinyLlama) responses
+- Ollama Fine-Tuned Model (DeepSeek-R1) responses
 
 **To test against real APIs**, use the `--use-real-apis` flag:
 ```bash

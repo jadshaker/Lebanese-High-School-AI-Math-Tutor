@@ -119,33 +119,8 @@ jobs:
             exit 1
           fi
 
-          # Pull tinyllama:latest
-          echo "Pulling tinyllama:latest..."
-          curl -X POST "$OLLAMA_URL/api/pull" \
-            -H "Content-Type: application/json" \
-            -d '{"name": "tinyllama:latest"}' \
-            --max-time 300
-
-          if [ $? -eq 0 ]; then
-            echo "✓ tinyllama:latest pulled"
-          else
-            echo "✗ Failed to pull tinyllama:latest"
-            exit 1
-          fi
-
-          # Load tinyllama:latest with keep_alive
-          echo "Loading tinyllama:latest into memory..."
-          curl -X POST "$OLLAMA_URL/api/generate" \
-            -H "Content-Type: application/json" \
-            -d '{"model": "tinyllama:latest", "prompt": "Hello", "stream": false, "keep_alive": -1}' \
-            --max-time 120 > /dev/null
-
-          if [ $? -eq 0 ]; then
-            echo "✓ tinyllama:latest loaded"
-          else
-            echo "✗ Failed to load tinyllama:latest"
-            exit 1
-          fi
+          # Fine-tuned model uses deepseek-r1:7b (already pulled above)
+          echo "✓ Fine-tuned model (deepseek-r1:7b) already loaded"
 
           echo ""
           echo "✓ All models loaded successfully"
@@ -175,7 +150,7 @@ jobs:
 
           # Fine-Tuned Model Service Configuration (Ollama)
           FINE_TUNED_MODEL_SERVICE_URL=$OLLAMA_URL
-          FINE_TUNED_MODEL_NAME=tinyllama:latest
+          FINE_TUNED_MODEL_NAME=deepseek-r1:7b
 
           # Large LLM Service Configuration
           LARGE_LLM_MODEL_NAME=gpt-4o-mini
@@ -252,7 +227,7 @@ jobs:
           REFORMULATOR_LLM_SERVICE_URL: https://${{ steps.create-pod.outputs.pod_id }}-11434.proxy.runpod.net
           REFORMULATOR_LLM_MODEL_NAME: deepseek-r1:7b
           FINE_TUNED_MODEL_SERVICE_URL: https://${{ steps.create-pod.outputs.pod_id }}-11434.proxy.runpod.net
-          FINE_TUNED_MODEL_NAME: tinyllama:latest
+          FINE_TUNED_MODEL_NAME: deepseek-r1:7b
           LARGE_LLM_MODEL_NAME: gpt-4o-mini
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |

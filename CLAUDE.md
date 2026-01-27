@@ -19,7 +19,7 @@ The application uses a **microservices architecture** with services communicatin
 - **Cache** (Port 8003) - Vector storage with cosine similarity search (stub implementation)
 - **Small LLM** (Port 8005) - Ollama integration for efficient local inference (DeepSeek-R1 hosted on AUB HPC)
 - **Large LLM** (Port 8001) - OpenAI GPT-4o-mini integration for complex math questions
-- **Fine-Tuned Model** (Port 8006) - Ollama integration for fine-tuned model (TinyLlama hosted on AUB HPC)
+- **Fine-Tuned Model** (Port 8006) - Ollama integration for fine-tuned model (DeepSeek-R1 hosted on AUB HPC)
 
 ### Planned Features
 
@@ -138,7 +138,7 @@ EMBEDDING_DIMENSIONS=1536
 # Fine-Tuned Model Service Configuration (Ollama)
 # Note: Use host.docker.internal for Docker, localhost for direct access
 FINE_TUNED_MODEL_SERVICE_URL=http://host.docker.internal:11434
-FINE_TUNED_MODEL_NAME=tinyllama:latest
+FINE_TUNED_MODEL_NAME=deepseek-r1:7b
 
 # Answer Retrieval Service Configuration
 CACHE_TOP_K=5
@@ -149,7 +149,7 @@ Docker Compose loads these via the `env_file` directive.
 **Note**: Both `small_llm` and `fine_tuned_model` services connect to the same Ollama instance:
 - **Local Development**: Use `http://host.docker.internal:11434` to access HPC via SSH tunnel from host machine
 - **CI (GitHub Actions)**: Use `https://POD_ID-11434.proxy.runpod.net` to access RunPod GPU pod
-- Services differentiate by using different model names (deepseek-r1:7b vs tinyllama:latest)
+- Both services currently use the same model (deepseek-r1:7b)
 
 ## Code Quality Tools
 
@@ -237,7 +237,7 @@ Exception: Large LLM and Small LLM services use the official `openai` package (L
 - Cache service (stub) with similarity search and save endpoints
 - Small LLM service with Ollama integration (DeepSeek-R1 on AUB HPC)
 - Large LLM service with OpenAI GPT-4o-mini integration
-- Fine-Tuned Model service with Ollama integration (TinyLlama on AUB HPC)
+- Fine-Tuned Model service with Ollama integration (DeepSeek-R1 on AUB HPC)
 - Docker Compose setup with all services
 - Code quality tooling (isort, black, mypy)
 - CI/CD pre-merge checks
@@ -372,7 +372,7 @@ docker compose up --build
 
 ### Small LLM & Fine-Tuned Model Services - Ollama SSH Tunnel Setup
 
-Both `small_llm` and `fine_tuned_model` services connect to the same Ollama instance running on AUB's HPC (Octopus cluster). They use different models but share the same tunnel. A double SSH tunnel is required:
+Both `small_llm` and `fine_tuned_model` services connect to the same Ollama instance running on AUB's HPC (Octopus cluster). They currently use the same model (deepseek-r1:7b) and share the same tunnel. A double SSH tunnel is required:
 
 **Start SSH Tunnel** (from development machine):
 ```bash
@@ -397,18 +397,15 @@ mkdir -p /scratch/<your-user-id>/tmp
 screen -S ollama
 ollama serve
 
-# In another terminal, load both models (they stay in memory)
-ollama run deepseek-r1:7b --keepalive -1m    # For small_llm service
-# Press Ctrl+C to exit chat (model stays loaded)
-
-ollama run tinyllama:latest --keepalive -1m  # For fine_tuned_model service
+# In another terminal, load the model (it stays in memory)
+ollama run deepseek-r1:7b --keepalive -1m    # For both small_llm and fine_tuned_model services
 # Press Ctrl+C to exit chat (model stays loaded)
 ```
 
 **Important**:
 - Keep SSH tunnel running while services are active
 - Use `0.0.0.0` binding (not `localhost`) so Docker containers can access via `host.docker.internal`
-- Both models run in the same Ollama instance, differentiated by model name
+- Both services use the same model in the same Ollama instance
 - For direct service testing (non-Docker), `localhost:11434` works fine
 
 ## Documentation Maintenance
@@ -480,5 +477,5 @@ ollama run tinyllama:latest --keepalive -1m  # For fine_tuned_model service
 - **FOLLOW** the service structure pattern for consistency
 - Services are independent - each has its own `config.py` and `schemas.py`
 - Run `python3 cli.py clean` before committing changes
-- For small_llm and fine_tuned_model services: ensure SSH tunnel to HPC is active and both models are loaded before testing
-- Both small_llm and fine_tuned_model use the same Ollama instance but different model names (SMALL_LLM_MODEL_NAME and FINE_TUNED_MODEL_NAME)
+- For small_llm and fine_tuned_model services: ensure SSH tunnel to HPC is active and the model is loaded before testing
+- Both small_llm and fine_tuned_model use the same Ollama instance and the same model (both use SMALL_LLM_MODEL_NAME and FINE_TUNED_MODEL_NAME which are currently set to deepseek-r1:7b)
