@@ -22,5 +22,9 @@ class Config:
             "FINE_TUNED_MODEL_SERVICE_URL", "http://fine-tuned-model:8006"
         )
 
+    class MODELS:
+        SMALL_LLM_MODEL_NAME = os.environ["SMALL_LLM_MODEL_NAME"]
+        LARGE_LLM_MODEL_NAME = os.environ["LARGE_LLM_MODEL_NAME"]
+
     # Cache configuration
     CACHE_TOP_K = int(os.getenv("CACHE_TOP_K", "5"))

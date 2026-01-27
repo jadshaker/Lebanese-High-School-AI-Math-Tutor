@@ -178,7 +178,7 @@ async def _query_small_llm(
         result = await call_service(
             f"{Config.SERVICES.SMALL_LLM_URL}/v1/chat/completions",
             {
-                "model": "deepseek-r1:7b",
+                "model": Config.MODELS.SMALL_LLM_MODEL_NAME,
                 "messages": messages,
             },
             request_id,
@@ -251,7 +251,7 @@ async def _query_large_llm(query: str, request_id: str) -> str:
         result = await call_service(
             f"{Config.SERVICES.LARGE_LLM_URL}/v1/chat/completions",
             {
-                "model": "gpt-4o-mini",
+                "model": Config.MODELS.LARGE_LLM_MODEL_NAME,
                 "messages": messages,
             },
             request_id,

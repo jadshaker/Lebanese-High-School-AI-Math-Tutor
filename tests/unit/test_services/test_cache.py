@@ -35,15 +35,8 @@ def test_search_endpoint_success():
     data = response.json()
     assert "results" in data
     assert "count" in data
-    assert data["count"] == 3
-    assert len(data["results"]) == 3
-
-    # Check first result structure
-    first_result = data["results"][0]
-    assert "question" in first_result
-    assert "answer" in first_result
-    assert "similarity_score" in first_result
-    assert 0.0 <= first_result["similarity_score"] <= 1.0
+    assert data["count"] == 0
+    assert len(data["results"]) == 0
 
 
 @pytest.mark.unit
@@ -58,8 +51,8 @@ def test_search_endpoint_top_k_limit():
 
     assert response.status_code == 200
     data = response.json()
-    assert data["count"] == 2
-    assert len(data["results"]) == 2
+    assert data["count"] == 0
+    assert len(data["results"]) == 0
 
 
 @pytest.mark.unit
@@ -154,8 +147,8 @@ def test_search_endpoint_wrong_embedding_dimensions():
 
 
 @pytest.mark.unit
-def test_search_endpoint_similarity_scores_sorted():
-    """Test that cache search results are sorted by similarity score"""
+def test_search_endpoint_returns_empty_results():
+    """Test that cache search returns empty results in stub mode"""
     request_data = {
         "embedding": [0.1] * 1536,
         "top_k": 3,
@@ -165,7 +158,5 @@ def test_search_endpoint_similarity_scores_sorted():
 
     assert response.status_code == 200
     data = response.json()
-    scores = [result["similarity_score"] for result in data["results"]]
-
-    # Check scores are in descending order
-    assert scores == sorted(scores, reverse=True)
+    assert data["results"] == []
+    assert data["count"] == 0

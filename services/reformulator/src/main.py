@@ -259,7 +259,7 @@ Reformulated question:"""
 
     # Prepare request to Small LLM using OpenAI chat completions format
     payload = {
-        "model": "deepseek-r1:7b",
+        "model": Config.SMALL_LLM_MODEL_NAME,
         "messages": [{"role": "user", "content": prompt}],
     }
 

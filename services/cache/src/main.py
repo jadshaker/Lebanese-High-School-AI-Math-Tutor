@@ -12,7 +12,6 @@ from src.logging_utils import (
 from src.metrics import (
     cache_saves_total,
     cache_searches_total,
-    cache_similarity_score,
     cache_size_items,
     http_request_duration_seconds,
     http_requests_total,
@@ -181,38 +180,14 @@ async def search_similar(request: SearchRequest, fastapi_request: FastAPIRequest
     # Record cache search metric
     cache_searches_total.inc()
 
-    # Stub: Return dummy similar questions
-    dummy_results = [
-        CachedResult(
-            question="What is the derivative of x^3?",
-            answer="[Cached] The derivative of x^3 is 3x^2. Using the power rule, we bring down the exponent and reduce it by 1.",
-            similarity_score=0.85,
-        ),
-        CachedResult(
-            question="How do you find the derivative of a polynomial?",
-            answer="[Cached] To find the derivative of a polynomial, apply the power rule to each term: d/dx(x^n) = nx^(n-1).",
-            similarity_score=0.72,
-        ),
-        CachedResult(
-            question="What is the chain rule in calculus?",
-            answer="[Cached] The chain rule states that d/dx[f(g(x))] = f'(g(x)) * g'(x). It's used for composite functions.",
-            similarity_score=0.68,
-        ),
-    ]
-
-    # Return only top_k results
-    results = dummy_results[: request.top_k]
-
-    # Record similarity scores
-    for result in results:
-        cache_similarity_score.observe(result.similarity_score)
+    # Stub: Return empty results until real vector database is implemented
+    results: list[CachedResult] = []
 
     logger.info(
-        "Cache search completed (stub mode)",
+        "Cache search completed (stub mode - empty results)",
         context={
-            "results_count": len(results),
+            "results_count": 0,
             "top_k_requested": request.top_k,
-            "highest_similarity": results[0].similarity_score if results else None,
         },
         request_id=request_id,
     )
