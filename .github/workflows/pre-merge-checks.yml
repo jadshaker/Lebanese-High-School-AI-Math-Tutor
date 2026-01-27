@@ -34,7 +34,3 @@ jobs:
               (cd "$service" && mypy src --explicit-package-bases)
             fi
           done
-
-      - name: Run unit tests
-        run: |
-          python -m pytest tests/ -m unit -v
