@@ -27,6 +27,11 @@ jobs:
         run: black --check services
 
       - name: mypy check
+        env:
+          SMALL_LLM_MODEL_NAME: deepseek-r1:7b
+          LARGE_LLM_MODEL_NAME: gpt-4o-mini
+          FINE_TUNED_MODEL_NAME: tinyllama:latest
+          REFORMULATOR_LLM_MODEL_NAME: deepseek-r1:7b
         run: |
           for service in services/*/; do
             if [ -d "$service/src" ]; then

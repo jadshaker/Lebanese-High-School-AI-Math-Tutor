@@ -165,6 +165,10 @@ jobs:
           SMALL_LLM_SERVICE_URL=$OLLAMA_URL
           SMALL_LLM_MODEL_NAME=deepseek-r1:7b
 
+          # Reformulator LLM Service Configuration (Ollama - same instance in CI)
+          REFORMULATOR_LLM_SERVICE_URL=$OLLAMA_URL
+          REFORMULATOR_LLM_MODEL_NAME=deepseek-r1:7b
+
           # Embedding Service Configuration
           EMBEDDING_MODEL=text-embedding-3-small
           EMBEDDING_DIMENSIONS=1536
@@ -172,6 +176,9 @@ jobs:
           # Fine-Tuned Model Service Configuration (Ollama)
           FINE_TUNED_MODEL_SERVICE_URL=$OLLAMA_URL
           FINE_TUNED_MODEL_NAME=tinyllama:latest
+
+          # Large LLM Service Configuration
+          LARGE_LLM_MODEL_NAME=gpt-4o-mini
 
           # Answer Retrieval Service Configuration
           CACHE_TOP_K=5
@@ -241,7 +248,12 @@ jobs:
         env:
           POD_ID: ${{ steps.create-pod.outputs.pod_id }}
           SMALL_LLM_SERVICE_URL: https://${{ steps.create-pod.outputs.pod_id }}-11434.proxy.runpod.net
+          SMALL_LLM_MODEL_NAME: deepseek-r1:7b
+          REFORMULATOR_LLM_SERVICE_URL: https://${{ steps.create-pod.outputs.pod_id }}-11434.proxy.runpod.net
+          REFORMULATOR_LLM_MODEL_NAME: deepseek-r1:7b
           FINE_TUNED_MODEL_SERVICE_URL: https://${{ steps.create-pod.outputs.pod_id }}-11434.proxy.runpod.net
+          FINE_TUNED_MODEL_NAME: tinyllama:latest
+          LARGE_LLM_MODEL_NAME: gpt-4o-mini
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           echo "Running all tests with RunPod..."
