@@ -351,16 +351,24 @@ async def retrieve_answer(query: str, request_id: str) -> dict:
     Raises:
         HTTPException: If critical services fail
     """
+    pipeline_start = time.time()
+    latency: dict[str, float] = {}
     logger.info("Answer Retrieval Pipeline: Started", request_id=request_id)
 
     # Step 1: Embed the query
+    t0 = time.time()
     embedding = await _embed_query(query, request_id)
+    latency["embedding"] = round(time.time() - t0, 3)
 
     # Step 2: Search cache for similar Q&A pairs
+    t0 = time.time()
     cached_results = await _search_cache(embedding, request_id)
+    latency["cache_search"] = round(time.time() - t0, 3)
 
     # Step 3: Try Small LLM with cached results (or use exact match if found)
+    t0 = time.time()
     small_llm_response = await _query_small_llm(query, cached_results, request_id)
+    latency["small_llm"] = round(time.time() - t0, 3)
 
     # Step 4: Decision point - check if exact match
     if (
@@ -378,6 +386,7 @@ async def retrieve_answer(query: str, request_id: str) -> dict:
 
         answer = small_llm_response["answer"]
 
+        latency["answer_retrieval_total"] = round(time.time() - pipeline_start, 3)
         logger.info(
             f"Answer Retrieval Pipeline: Completed - Exact cache match ({len(answer)} chars)",
             request_id=request_id,
@@ -388,17 +397,23 @@ async def retrieve_answer(query: str, request_id: str) -> dict:
             "source": "cache",
             "confidence": confidence,
             "used_cache": True,
+            "latency": latency,
         }
 
     # Step 5: No exact match - call Large LLM
     # Record cache miss and large LLM call
     gateway_cache_misses_total.inc()
 
+    t0 = time.time()
     large_llm_answer = await _query_large_llm(query, request_id)
+    latency["large_llm"] = round(time.time() - t0, 3)
 
     # Step 6: Save Large LLM answer to cache
+    t0 = time.time()
     await _save_to_cache(query, large_llm_answer, embedding, request_id)
+    latency["cache_save"] = round(time.time() - t0, 3)
 
+    latency["answer_retrieval_total"] = round(time.time() - pipeline_start, 3)
     logger.info(
         f"Answer Retrieval Pipeline: Completed - Large LLM used ({len(large_llm_answer)} chars)",
         request_id=request_id,
@@ -409,4 +424,5 @@ async def retrieve_answer(query: str, request_id: str) -> dict:
         "source": "large_llm",
         "confidence": None,
         "used_cache": False,
+        "latency": latency,
     }
