@@ -79,10 +79,10 @@ tail -n 100 .logs/gateway/app.log
 grep -r '"level":"ERROR"' .logs/
 
 # View specific service log
-cat .logs/data_processing/app.log
+cat .logs/input_processor/app.log
 
 # Follow multiple services
-tail -f .logs/gateway/app.log .logs/answer_retrieval/app.log
+tail -f .logs/gateway/app.log .logs/reformulator/app.log
 ```
 
 #### Log File Locations

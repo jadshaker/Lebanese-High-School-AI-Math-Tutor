@@ -24,7 +24,6 @@ The application uses a **microservices architecture** with services communicatin
 ### Planned Features
 
 - Full cache implementation with vector database
-- UI service (Port 3000)
 
 ## Service Structure
 
@@ -247,7 +246,6 @@ Exception: Large LLM and Small LLM services use the official `openai` package (L
 🚧 **Planned**:
 
 - Full cache implementation with vector database
-- UI service (Port 3000)
 
 ## Adding New Services
 
@@ -307,12 +305,11 @@ When creating a new service:
 
 **Test Types (93 total: 83 unit + 5 integration + 5 E2E):**
 - **Unit tests** (`@pytest.mark.unit`): Fast, isolated, mock everything external - NO external dependencies
-- **Integration tests** (`@pytest.mark.integration`): Real Docker services - REQUIRES Docker + OpenAI keys + HPC
-- **E2E tests** (`@pytest.mark.e2e`): Full pipeline - REQUIRES Docker + OpenAI keys + HPC
+- **Integration tests** (`@pytest.mark.integration`): Real Docker services - REQUIRES Docker + real APIs
+- **E2E tests** (`@pytest.mark.e2e`): Full pipeline - REQUIRES Docker + real APIs
 
-**Current Limitation:**
-Integration and E2E tests require real APIs because they run against Docker services,
-which make API calls in separate processes that cannot be mocked with Python libraries.
+**Note:** Integration/E2E tests run against Docker services which make API calls in separate processes
+that cannot be mocked with Python libraries. CI runs these automatically using RunPod GPU pods.
 
 **Before Committing:**
 1. Run code quality checks: `python3.14 cli.py clean`
@@ -321,14 +318,8 @@ which make API calls in separate processes that cannot be mocked with Python lib
 4. Check coverage if adding new code
 
 **Integration/E2E Tests:**
-- Require Docker services running: `docker compose up -d`
-- Require HPC SSH tunnel for Ollama services
-- Require valid OPENAI_API_KEY in `.env`
-- Should be run manually before major releases
-
-**Planned Enhancement:**
-Add TEST_MODE environment variable to services to enable mocking in Docker.
-This will allow integration/E2E tests to run without external APIs.
+- Run automatically in CI via RunPod GPU pods (`.github/workflows/run-tests.yml`)
+- For local runs: require Docker services + HPC SSH tunnel + valid OPENAI_API_KEY in `.env`
 
 **Quick Test Commands:**
 ```bash
