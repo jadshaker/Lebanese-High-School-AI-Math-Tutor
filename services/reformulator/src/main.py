@@ -119,7 +119,7 @@ async def health():
     small_llm_healthy = False
     try:
         req = Request(
-            f"{Config.SERVICES.SMALL_LLM_URL}/health",
+            f"{Config.SERVICES.REFORMULATOR_LLM_URL}/health",
             method="GET",
         )
         with urlopen(req, timeout=5) as response:
@@ -259,21 +259,21 @@ Reformulated question:"""
 
     # Prepare request to Small LLM using OpenAI chat completions format
     payload = {
-        "model": Config.SMALL_LLM_MODEL_NAME,
+        "model": Config.REFORMULATOR_LLM_MODEL_NAME,
         "messages": [{"role": "user", "content": prompt}],
     }
 
     logger.info(
         "Calling Small LLM service for reformulation",
         context={
-            "url": Config.SERVICES.SMALL_LLM_URL,
+            "url": Config.SERVICES.REFORMULATOR_LLM_URL,
             "input_length": len(processed_input),
         },
         request_id=request_id,
     )
 
     req = Request(
-        f"{Config.SERVICES.SMALL_LLM_URL}/v1/chat/completions",
+        f"{Config.SERVICES.REFORMULATOR_LLM_URL}/v1/chat/completions",
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json", "X-Request-ID": request_id},
         method="POST",
