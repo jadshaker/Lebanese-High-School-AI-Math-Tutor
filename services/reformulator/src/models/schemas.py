@@ -18,5 +18,6 @@ class ReformulatorResponse(BaseModel):
     context: str = Field(..., description="Summarized context for this interaction")
     query: str = Field(..., description="Reformulated query for the LLM")
     location_in_chat: str = Field(
-        ..., description="Position in conversation (e.g., 'start', 'middle', 'followup')"
+        ...,
+        description="Position in conversation (e.g., 'start', 'middle', 'followup')",
     )

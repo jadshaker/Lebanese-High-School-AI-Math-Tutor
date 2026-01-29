@@ -3,11 +3,21 @@ import re
 from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from src.config import Config
 from src.models.schemas import ReformulatorRequest, ReformulatorResponse
 
 app = FastAPI(title="Reformulator Service", version="1.0.0")
+
+# CORS for UI access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 client = OpenAI(
     base_url=f"{Config.OLLAMA_SERVICE_URL}/v1",
@@ -85,7 +95,9 @@ def reformulate_query(request: ReformulatorRequest) -> ReformulatorResponse:
             ).strip()
 
         # STEP 2: Reformulate query with summarized context
-        reformulation_input = f"Context: {summarized_context}\n\nUser query: {request.query}"
+        reformulation_input = (
+            f"Context: {summarized_context}\n\nUser query: {request.query}"
+        )
 
         reformulation_response = client.chat.completions.create(
             model=Config.OLLAMA_MODEL_NAME,

@@ -14,12 +14,18 @@ services:
       - SMALL_LLM_SERVICE_URL=http://small-llm:8005
       - EMBEDDING_SERVICE_URL=http://embedding:8002
       - REFORMULATOR_SERVICE_URL=http://reformulator:8009
+      - VECTOR_CACHE_SERVICE_URL=http://vector-cache:8003
+      - SESSION_SERVICE_URL=http://session:8010
+      - INTENT_CLASSIFIER_SERVICE_URL=http://intent-classifier:8011
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - large-llm
       - small-llm
       - embedding
       - reformulator
+      - vector-cache
+      - session
+      - intent-classifier
     networks:
       - math-tutor-network
 
@@ -88,6 +94,73 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - math-tutor-network
+
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: math-tutor-qdrant
+    ports:
+      - '6333:6333'
+      - '6334:6334'
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - math-tutor-network
+
+  # Vector Cache Service
+  vector-cache:
+    build:
+      context: services/vector_cache
+      dockerfile: Dockerfile
+    container_name: math-tutor-vector-cache
+    ports:
+      - '8003:8003'
+    env_file:
+      - .env
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8003 --reload
+    depends_on:
+      - qdrant
+    networks:
+      - math-tutor-network
+
+  # Session Service
+  session:
+    build:
+      context: services/session
+      dockerfile: Dockerfile
+    container_name: math-tutor-session
+    ports:
+      - '8010:8010'
+    env_file:
+      - .env
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8010 --reload
+    networks:
+      - math-tutor-network
+
+  # Intent Classifier Service
+  intent-classifier:
+    build:
+      context: services/intent_classifier
+      dockerfile: Dockerfile
+    container_name: math-tutor-intent-classifier
+    ports:
+      - '8011:8011'
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_SERVICE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL_NAME=${OLLAMA_MODEL_NAME:-deepseek-r1:7b}
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8011 --reload
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - math-tutor-network
+
+volumes:
+  qdrant_data:
 
 networks:
   math-tutor-network:

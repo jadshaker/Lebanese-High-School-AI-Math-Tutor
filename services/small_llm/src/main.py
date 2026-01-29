@@ -2,11 +2,21 @@ import json
 from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from src.config import Config
 from src.models.schemas import QueryRequest, QueryResponse
 
 app = FastAPI(title="Small LLM Service", version="1.0.0")
+
+# CORS for UI access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 client = OpenAI(
     base_url=f"{Config.OLLAMA_SERVICE_URL}/v1",

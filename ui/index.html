@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Tutor Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: #16213e;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #0f3460;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #e94560;
+            font-size: 1.5rem;
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            padding: 0.5rem 1rem;
+            background: #0f3460;
+            border-radius: 20px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #666;
+        }
+
+        .status-dot.healthy { background: #4ade80; }
+        .status-dot.unhealthy { background: #f87171; }
+        .status-dot.loading { background: #fbbf24; animation: pulse 1s infinite; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            padding: 1rem;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .panel {
+            background: #16213e;
+            border-radius: 12px;
+            border: 1px solid #0f3460;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background: #0f3460;
+            padding: 0.75rem 1rem;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-content {
+            padding: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        /* Chat Panel */
+        .chat-messages {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            min-height: 250px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+        }
+
+        .message {
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            max-width: 85%;
+        }
+
+        .message.user {
+            background: #e94560;
+            align-self: flex-end;
+        }
+
+        .message.assistant {
+            background: #0f3460;
+            align-self: flex-start;
+        }
+
+        .message.system {
+            background: #1e3a5f;
+            align-self: center;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+
+        .chat-input-container {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            background: #1a1a2e;
+            color: #eee;
+            font-size: 1rem;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+
+        button {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            background: #e94560;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #c73e54;
+        }
+
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+
+        button.secondary {
+            background: #0f3460;
+        }
+
+        button.secondary:hover {
+            background: #1e4d7b;
+        }
+
+        /* Session Info */
+        .session-info {
+            display: grid;
+            gap: 0.5rem;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem;
+            background: #1a1a2e;
+            border-radius: 6px;
+        }
+
+        .info-label {
+            color: #888;
+        }
+
+        .info-value {
+            color: #4ade80;
+            font-family: monospace;
+        }
+
+        /* Graph Visualization */
+        .graph-container {
+            min-height: 300px;
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 1rem;
+            overflow: auto;
+        }
+
+        .graph-node {
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            border-radius: 8px;
+            border-left: 4px solid;
+        }
+
+        .graph-node.question {
+            border-color: #e94560;
+            background: rgba(233, 69, 96, 0.1);
+        }
+
+        .graph-node.response {
+            border-color: #4ade80;
+            background: rgba(74, 222, 128, 0.1);
+        }
+
+        .graph-node .node-type {
+            font-size: 0.75rem;
+            color: #888;
+            margin-bottom: 0.25rem;
+        }
+
+        .graph-node .node-content {
+            font-size: 0.9rem;
+        }
+
+        .graph-children {
+            margin-left: 1.5rem;
+            border-left: 2px dashed #0f3460;
+            padding-left: 1rem;
+        }
+
+        /* Cache Browser */
+        .cache-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .cache-item {
+            background: #1a1a2e;
+            padding: 0.75rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .cache-item:hover {
+            background: #0f3460;
+        }
+
+        .cache-item .question-text {
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .cache-item .meta {
+            font-size: 0.75rem;
+            color: #888;
+            display: flex;
+            gap: 1rem;
+        }
+
+        /* Empty states */
+        .empty-state {
+            text-align: center;
+            color: #666;
+            padding: 2rem;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .tab {
+            padding: 0.5rem 1rem;
+            background: transparent;
+            border: 1px solid #0f3460;
+            color: #888;
+            font-size: 0.85rem;
+        }
+
+        .tab.active {
+            background: #0f3460;
+            color: #eee;
+        }
+
+        /* Full width panels */
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        /* Loading spinner */
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #0f3460;
+            border-top-color: #e94560;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Toast notifications */
+        .toast {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            padding: 1rem 1.5rem;
+            background: #0f3460;
+            border-radius: 8px;
+            border-left: 4px solid #4ade80;
+            animation: slideIn 0.3s ease;
+        }
+
+        .toast.error {
+            border-color: #f87171;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a1a2e;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #0f3460;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #1e4d7b;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>🎓 Lebanese Math Tutor Dashboard</h1>
+        <div class="status-bar" id="statusBar">
+            <!-- Status indicators will be added here -->
+        </div>
+    </header>
+
+    <main class="main-container">
+        <!-- Chat Panel -->
+        <div class="panel">
+            <div class="panel-header">
+                <span>💬 Chat</span>
+                <button class="secondary" onclick="newSession()" style="padding: 0.5rem 1rem; font-size: 0.85rem;">New Session</button>
+            </div>
+            <div class="panel-content">
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message system">Start a conversation by asking a math question...</div>
+                </div>
+                <div class="chat-input-container">
+                    <input type="text" class="chat-input" id="chatInput" placeholder="Ask a math question..." onkeypress="handleKeyPress(event)">
+                    <button onclick="sendMessage()" id="sendBtn">Send</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Session Info Panel -->
+        <div class="panel">
+            <div class="panel-header">
+                <span>📊 Session Info</span>
+                <span id="sessionPhase" style="font-size: 0.85rem; color: #4ade80;"></span>
+            </div>
+            <div class="panel-content">
+                <div class="session-info" id="sessionInfo">
+                    <div class="empty-state">No active session</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tutoring Graph Panel -->
+        <div class="panel">
+            <div class="panel-header">
+                <span>🌳 Tutoring Graph</span>
+                <button class="secondary" onclick="loadGraph()" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Refresh</button>
+            </div>
+            <div class="panel-content">
+                <div class="graph-container" id="graphContainer">
+                    <div class="empty-state">No tutoring graph loaded</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cache Browser Panel -->
+        <div class="panel">
+            <div class="panel-header">
+                <span>💾 Cached Questions</span>
+                <button class="secondary" onclick="refreshCache()" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Refresh</button>
+            </div>
+            <div class="panel-content">
+                <div class="cache-list" id="cacheList">
+                    <div class="empty-state">Loading cached questions...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Services Health Panel -->
+        <div class="panel full-width">
+            <div class="panel-header">
+                <span>🔧 Services Health</span>
+                <button class="secondary" onclick="checkAllHealth()" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Check All</button>
+            </div>
+            <div class="panel-content">
+                <div id="servicesGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    <!-- Service cards will be added here -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Configuration
+        const API_BASE = 'http://localhost:8000';
+        const SERVICES = {
+            gateway: { name: 'Gateway', port: 8000, url: 'http://localhost:8000' },
+            vectorCache: { name: 'Vector Cache', port: 8003, url: 'http://localhost:8003' },
+            session: { name: 'Session', port: 8010, url: 'http://localhost:8010' },
+            intentClassifier: { name: 'Intent Classifier', port: 8011, url: 'http://localhost:8011' },
+            embedding: { name: 'Embedding', port: 8002, url: 'http://localhost:8002' },
+            reformulator: { name: 'Reformulator', port: 8009, url: 'http://localhost:8009' },
+            largeLlm: { name: 'Large LLM', port: 8001, url: 'http://localhost:8001' },
+        };
+
+        // State
+        let currentSessionId = null;
+        let currentTutoringRootId = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            checkAllHealth();
+            setInterval(checkAllHealth, 30000); // Check health every 30s
+        });
+
+        // Health Checks
+        async function checkAllHealth() {
+            const statusBar = document.getElementById('statusBar');
+            const servicesGrid = document.getElementById('servicesGrid');
+
+            statusBar.innerHTML = '';
+            servicesGrid.innerHTML = '';
+
+            for (const [key, service] of Object.entries(SERVICES)) {
+                // Add to status bar
+                const indicator = document.createElement('div');
+                indicator.className = 'status-indicator';
+                indicator.innerHTML = `
+                    <span class="status-dot loading" id="dot-${key}"></span>
+                    <span>${service.name}</span>
+                `;
+                statusBar.appendChild(indicator);
+
+                // Add to grid
+                const card = document.createElement('div');
+                card.style.cssText = 'background: #1a1a2e; padding: 1rem; border-radius: 8px;';
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <strong>${service.name}</strong>
+                        <span class="status-dot loading" id="grid-dot-${key}"></span>
+                    </div>
+                    <div style="font-size: 0.85rem; color: #888;">Port: ${service.port}</div>
+                    <div style="font-size: 0.85rem; color: #888;" id="health-detail-${key}">Checking...</div>
+                `;
+                servicesGrid.appendChild(card);
+
+                // Check health
+                checkServiceHealth(key, service);
+            }
+        }
+
+        async function checkServiceHealth(key, service) {
+            const statusDot = document.getElementById(`dot-${key}`);
+            const gridDot = document.getElementById(`grid-dot-${key}`);
+            const detail = document.getElementById(`health-detail-${key}`);
+
+            try {
+                const response = await fetch(`${service.url}/health`, {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                const data = await response.json();
+
+                statusDot.className = 'status-dot healthy';
+                gridDot.className = 'status-dot healthy';
+                detail.textContent = data.status || 'Healthy';
+                detail.style.color = '#4ade80';
+            } catch (error) {
+                statusDot.className = 'status-dot unhealthy';
+                gridDot.className = 'status-dot unhealthy';
+                detail.textContent = 'Unreachable';
+                detail.style.color = '#f87171';
+            }
+        }
+
+        // Chat Functions
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<span class="spinner"></span>';
+
+            addMessage('user', message);
+            input.value = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: message,
+                        session_id: currentSessionId
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentSessionId = data.session_id;
+                    currentTutoringRootId = data.tutoring?.root_node_id;
+
+                    addMessage('assistant', data.message);
+                    updateSessionInfo(data);
+
+                    if (currentTutoringRootId) {
+                        loadGraph();
+                    }
+                } else {
+                    addMessage('system', `Error: ${data.detail || 'Unknown error'}`);
+                }
+            } catch (error) {
+                addMessage('system', `Connection error: ${error.message}`);
+            }
+
+            sendBtn.disabled = false;
+            sendBtn.textContent = 'Send';
+        }
+
+        function addMessage(type, content) {
+            const messages = document.getElementById('chatMessages');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = content;
+            messages.appendChild(msg);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function newSession() {
+            currentSessionId = null;
+            currentTutoringRootId = null;
+            document.getElementById('chatMessages').innerHTML =
+                '<div class="message system">Start a conversation by asking a math question...</div>';
+            document.getElementById('sessionInfo').innerHTML =
+                '<div class="empty-state">No active session</div>';
+            document.getElementById('graphContainer').innerHTML =
+                '<div class="empty-state">No tutoring graph loaded</div>';
+        }
+
+        function updateSessionInfo(data) {
+            const info = document.getElementById('sessionInfo');
+            const phase = document.getElementById('sessionPhase');
+
+            phase.textContent = data.phase || '';
+
+            info.innerHTML = `
+                <div class="info-row">
+                    <span class="info-label">Session ID</span>
+                    <span class="info-value">${data.session_id?.substring(0, 8) || 'N/A'}...</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Phase</span>
+                    <span class="info-value">${data.phase || 'N/A'}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Lesson</span>
+                    <span class="info-value">${data.lesson || 'Not identified'}</span>
+                </div>
+                ${data.tutoring ? `
+                <div class="info-row">
+                    <span class="info-label">Tutoring Active</span>
+                    <span class="info-value">Yes</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Current Node</span>
+                    <span class="info-value">${data.tutoring.current_node_id?.substring(0, 8) || 'N/A'}...</span>
+                </div>
+                ` : ''}
+                ${data.retrieval_tier ? `
+                <div class="info-row">
+                    <span class="info-label">Retrieval Tier</span>
+                    <span class="info-value">${data.retrieval_tier}</span>
+                </div>
+                ` : ''}
+                ${data.retrieval_score !== undefined ? `
+                <div class="info-row">
+                    <span class="info-label">Confidence</span>
+                    <span class="info-value">${(data.retrieval_score * 100).toFixed(1)}%</span>
+                </div>
+                ` : ''}
+            `;
+        }
+
+        // Graph Visualization
+        async function loadGraph() {
+            const container = document.getElementById('graphContainer');
+
+            if (!currentTutoringRootId) {
+                container.innerHTML = '<div class="empty-state">No tutoring graph available</div>';
+                return;
+            }
+
+            container.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading graph...</div>';
+
+            try {
+                const node = await fetchNode(currentTutoringRootId);
+                if (node) {
+                    container.innerHTML = '';
+                    const tree = await buildGraphTree(node);
+                    container.appendChild(tree);
+                }
+            } catch (error) {
+                container.innerHTML = `<div class="empty-state">Error loading graph: ${error.message}</div>`;
+            }
+        }
+
+        async function fetchNode(nodeId) {
+            const response = await fetch(`http://localhost:8003/graph/nodes/${nodeId}`);
+            if (response.ok) {
+                return await response.json();
+            }
+            return null;
+        }
+
+        async function fetchChildren(nodeId) {
+            const response = await fetch(`http://localhost:8003/graph/nodes/${nodeId}/children`);
+            if (response.ok) {
+                const data = await response.json();
+                return data.children || [];
+            }
+            return [];
+        }
+
+        async function buildGraphTree(node, depth = 0) {
+            const nodeEl = document.createElement('div');
+            nodeEl.className = `graph-node ${node.node_type === 'tutoring_question' ? 'question' : 'response'}`;
+            nodeEl.style.marginLeft = `${depth * 10}px`;
+
+            nodeEl.innerHTML = `
+                <div class="node-type">
+                    ${node.node_type === 'tutoring_question' ? '❓' : '💬'}
+                    ${node.node_type}
+                    ${node.intent_category ? `(${node.intent_category})` : ''}
+                </div>
+                <div class="node-content">${node.content}</div>
+            `;
+
+            // Fetch and render children
+            if (node.children_ids && node.children_ids.length > 0) {
+                const childrenContainer = document.createElement('div');
+                childrenContainer.className = 'graph-children';
+
+                for (const childId of node.children_ids) {
+                    const childNode = await fetchNode(childId);
+                    if (childNode) {
+                        const childTree = await buildGraphTree(childNode, depth + 1);
+                        childrenContainer.appendChild(childTree);
+                    }
+                }
+
+                nodeEl.appendChild(childrenContainer);
+            }
+
+            return nodeEl;
+        }
+
+        // Cache Browser
+        async function refreshCache() {
+            const list = document.getElementById('cacheList');
+            list.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading...</div>';
+
+            // Note: We'd need a list endpoint in vector_cache for this
+            // For now, show placeholder
+            list.innerHTML = `
+                <div class="empty-state">
+                    Cache browsing requires a list endpoint.<br>
+                    Use the chat to add questions to the cache.
+                </div>
+            `;
+        }
+
+        // Toast notifications
+        function showToast(message, isError = false) {
+            const toast = document.createElement('div');
+            toast.className = `toast ${isError ? 'error' : ''}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => toast.remove(), 3000);
+        }
+    </script>
+</body>
+</html>
