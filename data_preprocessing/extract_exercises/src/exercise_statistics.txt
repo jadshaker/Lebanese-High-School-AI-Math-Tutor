@@ -1,0 +1,118 @@
+Chapter: ABSOLUTE VALUE AND INTERVALS
+  Number of Exercises: 25
+  Exercises with Given Figure: 0
+  Percentage of Exercises with Given Figure: 0.00%
+========================================
+Chapter: ADDITION OF VECTORS
+  Number of Exercises: 16
+  Exercises with Given Figure: 3
+  Percentage of Exercises with Given Figure: 18.75%
+========================================
+Chapter: CAVALIER PERSPECTIVE
+  Number of Exercises: 11
+  Exercises with Given Figure: 10
+  Percentage of Exercises with Given Figure: 90.91%
+========================================
+Chapter: COORDINATE SYSTEM
+  Number of Exercises: 28
+  Exercises with Given Figure: 7
+  Percentage of Exercises with Given Figure: 25.00%
+========================================
+Chapter: COUNTING
+  Number of Exercises: 23
+  Exercises with Given Figure: 1
+  Percentage of Exercises with Given Figure: 4.35%
+========================================
+Chapter: EQUATIONS OF STRAIGHT LINES
+  Number of Exercises: 40
+  Exercises with Given Figure: 3
+  Percentage of Exercises with Given Figure: 7.50%
+========================================
+Chapter: 13 FIRST DEGREE EQUATIONS AND INEQUALITIES IN ONE UNKNOWN
+  Number of Exercises: 34
+  Exercises with Given Figure: 2
+  Percentage of Exercises with Given Figure: 5.88%
+========================================
+Chapter: GENERALITIES ABOUT
+  Number of Exercises: 30
+  Exercises with Given Figure: 16
+  Percentage of Exercises with Given Figure: 53.33%
+========================================
+Chapter: LINEAR SYSTEMS
+  Number of Exercises: 28
+  Exercises with Given Figure: 4
+  Percentage of Exercises with Given Figure: 14.29%
+========================================
+Chapter: MAPPING - BIJECTION
+  Number of Exercises: 7
+  Exercises with Given Figure: 3
+  Percentage of Exercises with Given Figure: 42.86%
+========================================
+Chapter: MULTIPLICATION OF A VECTOR BY A REAL NUMBER
+  Number of Exercises: 34
+  Exercises with Given Figure: 3
+  Percentage of Exercises with Given Figure: 8.82%
+========================================
+Chapter: A brief history
+  Number of Exercises: 36
+  Exercises with Given Figure: 1
+  Percentage of Exercises with Given Figure: 2.78%
+========================================
+Chapter: PARALLEL STRAIGHT LINES AND PLANES
+  Number of Exercises: 32
+  Exercises with Given Figure: 10
+  Percentage of Exercises with Given Figure: 31.25%
+========================================
+Chapter: POWERS AND RADICALS
+  Number of Exercises: 22
+  Exercises with Given Figure: 0
+  Percentage of Exercises with Given Figure: 0.00%
+========================================
+Chapter: PROJECTION IN THE PLANE
+  Number of Exercises: 9
+  Exercises with Given Figure: 5
+  Percentage of Exercises with Given Figure: 55.56%
+========================================
+Chapter: SCALAR PRODUCT
+  Number of Exercises: 40
+  Exercises with Given Figure: 10
+  Percentage of Exercises with Given Figure: 25.00%
+========================================
+Chapter: SETS AND CARTESIAN PRODUCT
+  Number of Exercises: 23
+  Exercises with Given Figure: 6
+  Percentage of Exercises with Given Figure: 26.09%
+========================================
+Chapter: STATISTICS
+  Number of Exercises: 28
+  Exercises with Given Figure: 5
+  Percentage of Exercises with Given Figure: 17.86%
+========================================
+Chapter: STRAIGHT LINES
+  Number of Exercises: 30
+  Exercises with Given Figure: 12
+  Percentage of Exercises with Given Figure: 40.00%
+========================================
+Chapter: STUDY OF FUNCTIONS
+  Number of Exercises: 29
+  Exercises with Given Figure: 4
+  Percentage of Exercises with Given Figure: 13.79%
+========================================
+Chapter: THE POLYNOMIALS
+  Number of Exercises: 29
+  Exercises with Given Figure: 0
+  Percentage of Exercises with Given Figure: 0.00%
+========================================
+Chapter: TRIGONOMETRIC CIRCLE
+  Number of Exercises: 18
+  Exercises with Given Figure: 5
+  Percentage of Exercises with Given Figure: 27.78%
+========================================
+Chapter: TRIGONOMETRIC LINES
+  Number of Exercises: 45
+  Exercises with Given Figure: 2
+  Percentage of Exercises with Given Figure: 4.44%
+========================================
+Total Number of Exercises: 617
+Total Exercises with Given Figure: 112
+Total Percentage of Exercises with Given Figure: 18.15%
