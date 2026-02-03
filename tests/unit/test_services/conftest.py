@@ -146,3 +146,33 @@ def reformulator_app():
     app = load_service_app_for_module("reformulator")
     yield app
     cleanup_service_modules()
+
+
+@pytest.fixture(scope="module")
+def vector_cache_app():
+    """Load vector_cache service app - keeps modules loaded for entire test module"""
+    # Mock Qdrant client before importing
+    mock_qdrant = MagicMock()
+    sys.modules["qdrant_client"] = mock_qdrant
+    mock_qdrant.QdrantClient = MagicMock()
+    mock_qdrant.models = MagicMock()
+
+    app = load_service_app_for_module("vector_cache")
+    yield app
+    cleanup_service_modules()
+
+
+@pytest.fixture(scope="module")
+def session_app():
+    """Load session service app - keeps modules loaded for entire test module"""
+    app = load_service_app_for_module("session")
+    yield app
+    cleanup_service_modules()
+
+
+@pytest.fixture(scope="module")
+def intent_classifier_app():
+    """Load intent_classifier service app - keeps modules loaded for entire test module"""
+    app = load_service_app_for_module("intent_classifier")
+    yield app
+    cleanup_service_modules()

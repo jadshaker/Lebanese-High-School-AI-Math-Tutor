@@ -38,7 +38,7 @@ class StructuredLogger:
             log_file,
             when="midnight",
             interval=1,
-            backupCount=7,  # Keep 7 days of logs
+            backupCount=7,
             encoding="utf-8",
         )
         file_handler.setFormatter(logging.Formatter("%(message)s"))
@@ -51,28 +51,15 @@ class StructuredLogger:
         context: Optional[dict[str, Any]] = None,
         request_id: Optional[str] = None,
     ):
-        """
-        Log a structured message in uvicorn-style format.
-
-        Args:
-            level: Log level (DEBUG, INFO, WARNING, ERROR)
-            message: Human-readable log message
-            context: Additional context data (endpoint, method, parameters, etc.)
-            request_id: Request ID for tracing distributed requests
-        """
-        # Format timestamp like uvicorn: YYYY-MM-DD HH:MM:SS.mmm
+        """Log a structured message in uvicorn-style format."""
         timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-
-        # Pad level to 8 characters like uvicorn
         level_padded = level.ljust(8)
-
-        # Build log line: timestamp | LEVEL | service:request_id - message - context
         req_id = request_id or generate_request_id()
+
         log_parts = [
             f"{timestamp} | {level_padded} | {self.service_name}:{req_id} - {message}"
         ]
 
-        # Add context as key=value pairs
         if context:
             context_str = " ".join(f"{k}={v}" for k, v in context.items())
             log_parts.append(f" - {context_str}")
@@ -142,17 +129,12 @@ def get_logs_by_request_id(request_id: str, max_lines: int = 1000) -> list[str]:
     matching_logs = []
 
     try:
-        # Read the last max_lines from the log file
         with open(log_file, "r", encoding="utf-8") as f:
-            # Get all lines
             all_lines = f.readlines()
-
-            # Take last max_lines
             recent_lines = (
                 all_lines[-max_lines:] if len(all_lines) > max_lines else all_lines
             )
 
-            # Filter lines containing the request ID
             for line in recent_lines:
                 if request_id in line:
                     matching_logs.append(line.strip())

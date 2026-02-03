@@ -22,8 +22,10 @@ from src.models.schemas import (
     ChatCompletionResponse,
     Model,
     ModelListResponse,
+    TutoringRequest,
+    TutoringResponse,
 )
-from src.orchestrators import process_user_input, retrieve_answer
+from src.orchestrators import handle_tutoring_interaction, process_user_input, retrieve_answer
 
 app = FastAPI(title="Math Tutor API Gateway")
 logger = StructuredLogger("gateway")
@@ -57,9 +59,12 @@ async def health():
         "input_processor": Config.SERVICES.INPUT_PROCESSOR_URL,
         "reformulator": Config.SERVICES.REFORMULATOR_URL,
         "embedding": Config.SERVICES.EMBEDDING_URL,
-        "cache": Config.SERVICES.CACHE_URL,
+        "vector_cache": Config.SERVICES.VECTOR_CACHE_URL,
         "small_llm": Config.SERVICES.SMALL_LLM_URL,
         "large_llm": Config.SERVICES.LARGE_LLM_URL,
+        "fine_tuned_model": Config.SERVICES.FINE_TUNED_MODEL_URL,
+        "session": Config.SERVICES.SESSION_URL,
+        "intent_classifier": Config.SERVICES.INTENT_CLASSIFIER_URL,
     }
 
     service_health = {}
@@ -98,8 +103,10 @@ async def track_request(request_id: str):
         "gateway": Config.SERVICES.GATEWAY_URL,
         "input-processor": Config.SERVICES.INPUT_PROCESSOR_URL,
         "embedding": Config.SERVICES.EMBEDDING_URL,
-        "cache": Config.SERVICES.CACHE_URL,
+        "vector-cache": Config.SERVICES.VECTOR_CACHE_URL,
         "large-llm": Config.SERVICES.LARGE_LLM_URL,
+        "session": Config.SERVICES.SESSION_URL,
+        "intent-classifier": Config.SERVICES.INTENT_CLASSIFIER_URL,
     }
 
     trace: dict[str, Any] = {
@@ -262,6 +269,110 @@ async def chat_completions(
     except Exception as e:
         logger.error(
             "Internal error in chat completion",
+            context={"error": str(e), "error_type": type(e).__name__},
+            request_id=request_id,
+        )
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+@app.post("/tutoring", response_model=TutoringResponse)
+async def tutoring_interaction(
+    request: TutoringRequest, fastapi_request: FastAPIRequest
+):
+    """
+    Handle tutoring interaction with the student.
+
+    This endpoint manages stateful tutoring sessions using a graph cache.
+    The tutor guides the student through solving a math problem step by step,
+    caching interactions for future reuse.
+
+    Flow:
+    1. Get session state (or use provided question context)
+    2. Embed user response and search for cached child nodes
+    3. If cache hit → return cached response
+    4. If cache miss → classify intent, generate with Fine-tuned Model
+    5. Save new interaction to cache
+    6. Update session state with new node ID
+    7. Return response
+
+    Returns TutoringResponse with tutor message, cache hit status, and continuation info.
+    """
+    request_id = getattr(fastapi_request.state, "request_id", generate_request_id())
+
+    try:
+        logger.info(
+            "Starting tutoring interaction",
+            context={
+                "session_id": request.session_id,
+                "user_response": request.user_response[:100],
+                "has_question_id": bool(request.question_id),
+            },
+            request_id=request_id,
+        )
+
+        # Get context from request or session
+        original_question = request.original_question
+        original_answer = request.original_answer or ""
+        question_id = request.question_id or ""
+
+        # If not provided, try to get from session
+        if not original_question or not question_id:
+            try:
+                session_url = f"{Config.SERVICES.SESSION_URL}/sessions/{request.session_id}"
+                req = Request(session_url, method="GET")
+                with urlopen(req, timeout=5) as response:
+                    session_data = json.loads(response.read().decode("utf-8"))
+                    if not original_question:
+                        original_question = session_data.get(
+                            "original_query", "the math problem being tutored"
+                        )
+                    if not question_id:
+                        tutoring_state = session_data.get("tutoring", {})
+                        question_id = tutoring_state.get("question_id", "")
+                    if not original_answer:
+                        original_answer = session_data.get("retrieved_answer", "")
+            except Exception as e:
+                logger.warning(
+                    f"Could not retrieve session: {str(e)}",
+                    request_id=request_id,
+                )
+                if not original_question:
+                    original_question = "the math problem being tutored"
+
+        result = await handle_tutoring_interaction(
+            session_id=request.session_id,
+            original_question=original_question,
+            original_answer=original_answer,
+            question_id=question_id,
+            user_response=request.user_response,
+            request_id=request_id,
+        )
+
+        logger.info(
+            "Tutoring interaction completed",
+            context={
+                "session_id": request.session_id,
+                "is_complete": result["is_complete"],
+                "intent": result["intent"],
+                "cache_hit": result["cache_hit"],
+            },
+            request_id=request_id,
+        )
+
+        return TutoringResponse(
+            session_id=request.session_id,
+            tutor_message=result["tutor_message"],
+            is_complete=result["is_complete"],
+            next_prompt=result["next_prompt"],
+            intent=result["intent"],
+            cache_hit=result["cache_hit"],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            "Internal error in tutoring interaction",
             context={"error": str(e), "error_type": type(e).__name__},
             request_id=request_id,
         )

@@ -12,18 +12,61 @@ The application uses a **microservices architecture** with services communicatin
 
 ### Current Services
 
-- **Gateway** (Port 8000) - API Gateway that orchestrates full two-phase pipeline
+- **Gateway** (Port 8000) - API Gateway with 5-tier confidence routing and tutoring
 - **Input Processor** (Port 8004) - Text/image processing service
-- **Reformulator** (Port 8007) - Query improvement via LLM service
+- **Reformulator** (Port 8007) - Query improvement via LLM with context summarization
 - **Embedding** (Port 8002) - OpenAI text-embedding-3-small for vector embeddings
-- **Cache** (Port 8003) - Vector storage with cosine similarity search (stub implementation)
+- **Vector Cache** (Port 8003) - Qdrant-backed vector storage with Q&A and tutoring collections
 - **Small LLM** (Port 8005) - Ollama integration for efficient local inference (DeepSeek-R1 hosted on AUB HPC)
 - **Large LLM** (Port 8001) - OpenAI GPT-4o-mini integration for complex math questions
 - **Fine-Tuned Model** (Port 8006) - Ollama integration for fine-tuned model (TinyLlama hosted on AUB HPC)
+- **Intent Classifier** (Port 8009) - Hybrid rule-based + Small LLM intent classification
+- **Session** (Port 8010) - In-memory session state management with TTL cleanup
 
-### Planned Features
+### External Services
 
-- Full cache implementation with vector database
+- **Qdrant** (Port 6333) - Vector database for similarity search
+
+### 5-Tier Confidence Routing
+
+The Gateway implements cost-optimized routing based on vector similarity scores:
+- **Tier 1 (≥0.95)**: Direct cache hit - return cached answer immediately
+- **Tier 2 (0.85-0.95)**: Small LLM validates cached answer before use
+- **Tier 3 (0.70-0.85)**: Small LLM generates answer with cache context
+- **Tier 4 (0.50-0.70)**: Fine-tuned model for domain-specific response
+- **Tier 5 (<0.50)**: Large LLM for novel/complex questions
+
+### Tutoring Flow (Graph Cache)
+
+Interactive tutoring uses a **graph-based caching** approach:
+
+1. **Session Service**: Tracks `question_id`, `current_node_id`, and traversal path
+2. **Embedding Service**: Embeds user responses for similarity search
+3. **Vector Cache**: Stores tutoring interactions as a tree structure
+   - Each question has child nodes (tutoring steps)
+   - Each step can have child nodes (follow-up interactions)
+4. **Intent Classifier**: Detects student intent (affirmative, negative, partial, question, skip, off_topic)
+5. **Fine-Tuned Model**: Generates new tutoring responses (not Small LLM)
+
+**Cache Lookup Flow**:
+```
+User Response → Embed → Search children of current_node
+                              │
+                    ┌── Cache Hit (≥0.85)? ──┐
+                    │                         │
+                   YES                       NO
+                    │                         │
+                    ▼                         ▼
+            Return cached         Intent Classifier
+            response                    │
+                                        ▼
+                                Fine-Tuned Model
+                                        │
+                                        ▼
+                                Save as new child node
+```
+
+**Cost Optimization**: As the tutoring cache builds up, common student responses (like "I don't understand", "yes", "explain more") get cached, reducing model calls
 
 ## Service Structure
 
@@ -136,12 +179,31 @@ EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
 
 # Fine-Tuned Model Service Configuration (Ollama)
-# Note: Use host.docker.internal for Docker, localhost for direct access
 FINE_TUNED_MODEL_SERVICE_URL=http://host.docker.internal:11434
 FINE_TUNED_MODEL_NAME=tinyllama:latest
 
-# Answer Retrieval Service Configuration
+# Vector Cache (Qdrant)
+QDRANT_HOST=qdrant
+QDRANT_PORT=6333
 CACHE_TOP_K=5
+
+# 5-Tier Confidence Routing Thresholds
+CONFIDENCE_TIER_1=0.95
+CONFIDENCE_TIER_2=0.85
+CONFIDENCE_TIER_3=0.70
+CONFIDENCE_TIER_4=0.50
+
+# Session Management
+SESSION_TTL_SECONDS=3600
+SESSION_MAX_MESSAGES=50
+
+# Tutoring Configuration
+TUTORING_ENABLE=true
+TUTORING_MAX_DEPTH=5
+
+# Intent Classification
+INTENT_RULE_CONFIDENCE_THRESHOLD=0.8
+INTENT_USE_LLM_FALLBACK=true
 ```
 
 Docker Compose loads these via the `env_file` directive.
@@ -228,24 +290,23 @@ Exception: Large LLM and Small LLM services use the official `openai` package (L
 
 ## Current Implementation Status
 
-✅ **Completed** (8 services):
+✅ **Completed** (11 services):
 
-- Gateway service with full two-phase pipeline orchestration
+- Gateway service with 5-tier confidence routing, tutoring flow, and OpenAI-compatible API
 - Input Processor service with text processing and image stub
-- Reformulator service with LLM-powered query improvement
+- Reformulator service with LLM-powered query improvement and context summarization
 - Embedding service with OpenAI text-embedding-3-small (1536 dimensions)
-- Cache service (stub) with similarity search and save endpoints
+- Vector Cache service with Qdrant backend for Q&A and tutoring interactions
 - Small LLM service with Ollama integration (DeepSeek-R1 on AUB HPC)
 - Large LLM service with OpenAI GPT-4o-mini integration
 - Fine-Tuned Model service with Ollama integration (TinyLlama on AUB HPC)
-- Docker Compose setup with all services
+- Intent Classifier service with hybrid rule-based + LLM fallback
+- Session service with in-memory storage and TTL cleanup
+- Docker Compose setup with all services + Qdrant
+- Prometheus + Grafana observability stack
 - Code quality tooling (isort, black, mypy)
 - CI/CD pre-merge checks
 - VSCode tasks integration
-
-🚧 **Planned**:
-
-- Full cache implementation with vector database
 
 ## Adding New Services
 
@@ -354,12 +415,26 @@ Test the gateway health check to verify all services are running:
 curl http://localhost:8000/health
 ```
 
-Test the query endpoint:
+Test the OpenAI-compatible chat completions endpoint:
 
 ```bash
-curl -X POST http://localhost:8000/query \
+curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"query": "What is the derivative of x^2?"}'
+  -d '{
+    "model": "math-tutor",
+    "messages": [{"role": "user", "content": "What is the derivative of x^2?"}]
+  }'
+```
+
+Test the tutoring endpoint:
+
+```bash
+curl -X POST http://localhost:8000/tutoring \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "test-session",
+    "user_response": "I understand"
+  }'
 ```
 
 ## Deployment

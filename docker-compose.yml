@@ -13,18 +13,24 @@ services:
       - INPUT_PROCESSOR_SERVICE_URL=http://input-processor:8004
       - REFORMULATOR_SERVICE_URL=http://reformulator:8007
       - EMBEDDING_SERVICE_URL=http://embedding:8002
-      - CACHE_SERVICE_URL=http://cache:8003
+      - VECTOR_CACHE_SERVICE_URL=http://vector-cache:8003
       - SMALL_LLM_SERVICE_URL=http://small-llm:8005
       - LARGE_LLM_SERVICE_URL=http://large-llm:8001
+      - FINE_TUNED_MODEL_SERVICE_URL=http://fine-tuned-model:8006
+      - SESSION_SERVICE_URL=http://session:8008
+      - INTENT_CLASSIFIER_SERVICE_URL=http://intent-classifier:8009
       - CACHE_TOP_K=${CACHE_TOP_K:-5}
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload --no-access-log
     depends_on:
       - input-processor
       - reformulator
       - embedding
-      - cache
+      - vector-cache
       - small-llm
       - large-llm
+      - fine-tuned-model
+      - session
+      - intent-classifier
     volumes:
       - ./.logs/gateway:/app/logs
     networks:
@@ -80,19 +86,37 @@ services:
     networks:
       - math-tutor-network
 
-  # Cache Service (Stub)
-  cache:
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: math-tutor-qdrant
+    ports:
+      - '6333:6333'
+      - '6334:6334'
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - math-tutor-network
+    restart: unless-stopped
+
+  # Vector Cache Service (Qdrant-backed)
+  vector-cache:
     build:
-      context: services/cache
+      context: services/vector_cache
       dockerfile: Dockerfile
-    container_name: math-tutor-cache
+    container_name: math-tutor-vector-cache
     ports:
       - '8003:8003'
     env_file:
       - .env
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
     command: uvicorn src.main:app --host 0.0.0.0 --port 8003 --reload --no-access-log
+    depends_on:
+      - qdrant
     volumes:
-      - ./.logs/cache:/app/logs
+      - ./.logs/vector_cache:/app/logs
     networks:
       - math-tutor-network
 
@@ -147,6 +171,47 @@ services:
       - small-llm
     volumes:
       - ./.logs/reformulator:/app/logs
+    networks:
+      - math-tutor-network
+
+  # Session Service
+  session:
+    build:
+      context: services/session
+      dockerfile: Dockerfile
+    container_name: math-tutor-session
+    ports:
+      - '8008:8008'
+    env_file:
+      - .env
+    environment:
+      - SESSION_TTL_SECONDS=${SESSION_TTL_SECONDS:-3600}
+      - SESSION_MAX_HISTORY=${SESSION_MAX_HISTORY:-50}
+      - SESSION_CLEANUP_INTERVAL=${SESSION_CLEANUP_INTERVAL:-300}
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8008 --reload --no-access-log
+    volumes:
+      - ./.logs/session:/app/logs
+    networks:
+      - math-tutor-network
+
+  # Intent Classifier Service
+  intent-classifier:
+    build:
+      context: services/intent_classifier
+      dockerfile: Dockerfile
+    container_name: math-tutor-intent-classifier
+    ports:
+      - '8009:8009'
+    env_file:
+      - .env
+    environment:
+      - SMALL_LLM_SERVICE_URL=http://small-llm:8005
+      - INTENT_USE_LLM_FALLBACK=${INTENT_USE_LLM_FALLBACK:-true}
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8009 --reload --no-access-log
+    depends_on:
+      - small-llm
+    volumes:
+      - ./.logs/intent_classifier:/app/logs
     networks:
       - math-tutor-network
 
@@ -226,3 +291,4 @@ volumes:
   open-webui-data:
   prometheus-data:
   grafana-data:
+  qdrant-data:
