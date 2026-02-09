@@ -11,7 +11,7 @@ services/
 ├── embedding/          # OpenAI text-embedding-3-small (Port 8002)
 ├── cache/              # Vector storage stub (Port 8003)
 ├── input_processor/    # Text/image processing (Port 8004)
-├── small_llm/          # Ollama DeepSeek-R1 (Port 8005)
+├── small_llm/          # vLLM DeepSeek-R1 (Port 8005)
 ├── fine_tuned_model/   # Ollama DeepSeek-R1 (Port 8006)
 └── reformulator/       # Query improvement via LLM (Port 8007)
 ```
@@ -27,7 +27,7 @@ services/
 - Python 3.14+
 - Docker and Docker Compose
 - OpenAI API key
-- Ollama instance (AUB HPC via SSH tunnel or RunPod)
+- LLM backends: vLLM on RunPod (Small LLM), Ollama on RunPod or AUB HPC (Reformulator, Fine-Tuned)
 
 ### Environment Setup
 
@@ -36,7 +36,7 @@ Create `.env` from `.env.example`:
 ```bash
 OPENAI_API_KEY=your_key_here
 SMALL_LLM_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
-SMALL_LLM_MODEL_NAME=deepseek-r1:7b
+SMALL_LLM_MODEL_NAME=deepseek-r1-7b
 SMALL_LLM_API_KEY=your_runpod_api_key
 REFORMULATOR_LLM_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
 REFORMULATOR_LLM_MODEL_NAME=deepseek-r1:7b
@@ -53,7 +53,10 @@ CACHE_TOP_K=5
 
 **Option A: RunPod Serverless (Recommended)**
 
-Each Ollama-backed service (Small LLM, Reformulator, Fine-Tuned Model) uses a RunPod Serverless endpoint with the `svenbrnn/runpod-ollama:latest` Docker image. Endpoints scale to zero when idle (no cost) and serve requests on-demand via OpenAI-compatible API.
+- **Small LLM** uses a vLLM endpoint (`runpod/worker-v1-vllm:stable-cuda12.1.0`) with `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B` (HuggingFace FP16).
+- **Reformulator** and **Fine-Tuned Model** use Ollama endpoints (`svenbrnn/runpod-ollama:latest`) with `deepseek-r1:7b`.
+
+All endpoints scale to zero when idle (no cost) and serve requests on-demand via OpenAI-compatible API.
 
 **Option B: AUB HPC via SSH Tunnel**
 
@@ -120,7 +123,7 @@ See `TESTING.md` for details.
 ### CI/CD
 
 - **Pre-merge checks** (`.github/workflows/pre-merge-checks.yml`): Code quality + unit tests on every push/PR
-- **Full tests** (`.github/workflows/run-tests.yml`): Runs integration/E2E tests against RunPod Serverless endpoints with real Ollama inference
+- **Full tests** (`.github/workflows/run-tests.yml`): Runs integration/E2E tests against RunPod Serverless endpoints with real LLM inference
 
 ## Data Preprocessing
 

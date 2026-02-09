@@ -35,7 +35,7 @@ jobs:
           OPENAI_API_KEY=$OPENAI_API_KEY
 
           SMALL_LLM_SERVICE_URL=https://api.runpod.ai/v2/${SMALL_LLM_ENDPOINT_ID}/openai
-          SMALL_LLM_MODEL_NAME=deepseek-r1:7b
+          SMALL_LLM_MODEL_NAME=deepseek-r1-7b
           SMALL_LLM_API_KEY=$RUNPOD_API_KEY
 
           REFORMULATOR_LLM_SERVICE_URL=https://api.runpod.ai/v2/${REFORMULATOR_ENDPOINT_ID}/openai
@@ -69,7 +69,7 @@ jobs:
           curl -s -m 300 "https://api.runpod.ai/v2/${SMALL_LLM_ENDPOINT_ID}/openai/v1/chat/completions" \
             -H "Authorization: Bearer $RUNPOD_API_KEY" \
             -H "Content-Type: application/json" \
-            -d '{"model":"deepseek-r1:7b","messages":[{"role":"user","content":"hi"}]}' > /dev/null &
+            -d '{"model":"deepseek-r1-7b","messages":[{"role":"user","content":"hi"}]}' > /dev/null &
           PID1=$!
 
           curl -s -m 300 "https://api.runpod.ai/v2/${REFORMULATOR_ENDPOINT_ID}/openai/v1/chat/completions" \
@@ -147,7 +147,7 @@ jobs:
 
       - name: Run All Tests
         env:
-          SMALL_LLM_MODEL_NAME: deepseek-r1:7b
+          SMALL_LLM_MODEL_NAME: deepseek-r1-7b
           REFORMULATOR_LLM_MODEL_NAME: deepseek-r1:7b
           FINE_TUNED_MODEL_NAME: deepseek-r1:7b
           LARGE_LLM_MODEL_NAME: gpt-4o-mini
