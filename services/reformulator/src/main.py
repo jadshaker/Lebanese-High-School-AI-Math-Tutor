@@ -5,6 +5,7 @@ from urllib.request import Request, urlopen
 from fastapi import FastAPI, HTTPException
 from fastapi import Request as FastAPIRequest
 from fastapi import Response
+from openai import OpenAI
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from src.config import Config
 from src.logging_utils import (
@@ -17,6 +18,13 @@ from src.models.schemas import ReformulateRequest, ReformulateResponse
 
 app = FastAPI(title="Math Tutor Reformulator Service")
 logger = StructuredLogger("reformulator")
+
+# Initialize OpenAI client pointing to the reformulator LLM's OpenAI-compatible endpoint
+client = OpenAI(
+    base_url=f"{Config.SERVICES.REFORMULATOR_LLM_URL}/v1",
+    api_key=Config.REFORMULATOR_LLM_API_KEY,
+    timeout=300.0,
+)
 
 
 @app.middleware("http")
@@ -150,9 +158,7 @@ async def get_logs(request_id: str):
 
 
 @app.post("/reformulate", response_model=ReformulateResponse)
-async def reformulate_query(
-    request: ReformulateRequest, fastapi_request: FastAPIRequest
-):
+def reformulate_query(request: ReformulateRequest, fastapi_request: FastAPIRequest):
     """
     Reformulate user input to improve clarity and precision.
 
@@ -194,7 +200,7 @@ async def reformulate_query(
 
     # Call Small LLM to reformulate the query
     try:
-        reformulated, improvements = await _call_llm_for_reformulation(
+        reformulated, improvements = _call_llm_for_reformulation(
             request.processed_input, request.input_type, request_id
         )
 
@@ -228,7 +234,7 @@ async def reformulate_query(
         )
 
 
-async def _call_llm_for_reformulation(
+def _call_llm_for_reformulation(
     processed_input: str, input_type: str, request_id: str
 ) -> tuple[str, list[str]]:
     """
@@ -257,14 +263,8 @@ Respond ONLY with the reformulated question. Do not add explanations, introducti
 
 Reformulated question:"""
 
-    # Prepare request to Small LLM using OpenAI chat completions format
-    payload = {
-        "model": Config.REFORMULATOR_LLM_MODEL_NAME,
-        "messages": [{"role": "user", "content": prompt}],
-    }
-
     logger.info(
-        "Calling Small LLM service for reformulation",
+        "Calling LLM service for reformulation",
         context={
             "url": Config.SERVICES.REFORMULATOR_LLM_URL,
             "input_length": len(processed_input),
@@ -272,63 +272,57 @@ Reformulated question:"""
         request_id=request_id,
     )
 
-    req = Request(
-        f"{Config.SERVICES.REFORMULATOR_LLM_URL}/v1/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", "X-Request-ID": request_id},
-        method="POST",
-    )
-
     try:
-        with urlopen(req, timeout=30) as response:
-            result = json.loads(response.read().decode("utf-8"))
-            reformulated = result["choices"][0]["message"]["content"].strip()
+        response = client.chat.completions.create(
+            model=Config.REFORMULATOR_LLM_MODEL_NAME,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        reformulated = (response.choices[0].message.content or "").strip()
 
-            logger.debug(
-                "Small LLM service responded",
-                context={"raw_response_length": len(reformulated)},
-                request_id=request_id,
-            )
+        logger.debug(
+            "LLM service responded",
+            context={"raw_response_length": len(reformulated)},
+            request_id=request_id,
+        )
 
-            # Clean up the response
-            reformulated = _clean_llm_response(reformulated)
+        # Clean up the response
+        reformulated = _clean_llm_response(reformulated)
 
-            # If reformulation failed or is empty, return original
-            if not reformulated or len(reformulated) < 3:
-                logger.warning(
-                    "Reformulation produced empty or invalid result, using original",
-                    context={
-                        "reformulated_length": len(reformulated) if reformulated else 0
-                    },
-                    request_id=request_id,
-                )
-                return processed_input, ["none (reformulation failed)"]
-
-            # Analyze what improvements were made
-            improvements = _detect_improvements(processed_input, reformulated)
-
-            logger.info(
-                "Small LLM reformulation complete",
+        # If reformulation failed or is empty, return original
+        if not reformulated or len(reformulated) < 3:
+            logger.warning(
+                "Reformulation produced empty or invalid result, using original",
                 context={
-                    "original_length": len(processed_input),
-                    "reformulated_length": len(reformulated),
-                    "improvements": improvements,
+                    "reformulated_length": len(reformulated) if reformulated else 0
                 },
                 request_id=request_id,
             )
+            return processed_input, ["none (reformulation failed)"]
 
-            return reformulated, improvements
+        # Analyze what improvements were made
+        improvements = _detect_improvements(processed_input, reformulated)
+
+        logger.info(
+            "LLM reformulation complete",
+            context={
+                "original_length": len(processed_input),
+                "reformulated_length": len(reformulated),
+                "improvements": improvements,
+            },
+            request_id=request_id,
+        )
+
+        return reformulated, improvements
 
     except Exception as e:
-        # If LLM call fails, return original input
         logger.error(
-            "Failed to call Small LLM service",
+            "Failed to call LLM service",
             context={"error": str(e), "error_type": type(e).__name__},
             request_id=request_id,
         )
         raise HTTPException(
             status_code=503,
-            detail=f"Failed to call Small LLM service: {str(e)}",
+            detail=f"Failed to call LLM service: {str(e)}",
         )
 
 

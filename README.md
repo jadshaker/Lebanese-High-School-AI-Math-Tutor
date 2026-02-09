@@ -35,32 +35,38 @@ Create `.env` from `.env.example`:
 
 ```bash
 OPENAI_API_KEY=your_key_here
-SMALL_LLM_SERVICE_URL=http://host.docker.internal:11434
+SMALL_LLM_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
 SMALL_LLM_MODEL_NAME=deepseek-r1:7b
+SMALL_LLM_API_KEY=your_runpod_api_key
+REFORMULATOR_LLM_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
+REFORMULATOR_LLM_MODEL_NAME=deepseek-r1:7b
+REFORMULATOR_LLM_API_KEY=your_runpod_api_key
+FINE_TUNED_MODEL_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
+FINE_TUNED_MODEL_NAME=deepseek-r1:7b
+FINE_TUNED_MODEL_API_KEY=your_runpod_api_key
 EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
-FINE_TUNED_MODEL_SERVICE_URL=http://host.docker.internal:11434
-FINE_TUNED_MODEL_NAME=deepseek-r1:7b
 CACHE_TOP_K=5
 ```
 
-### Ollama Setup (AUB HPC)
+### LLM Backend Options
+
+**Option A: RunPod Serverless (Recommended)**
+
+Each Ollama-backed service (Small LLM, Reformulator, Fine-Tuned Model) uses a RunPod Serverless endpoint with the `svenbrnn/runpod-ollama:latest` Docker image. Endpoints scale to zero when idle (no cost) and serve requests on-demand via OpenAI-compatible API.
+
+**Option B: AUB HPC via SSH Tunnel**
 
 ```bash
-# Reserve GPU node
-ssh username@octopus.aub.edu.lb
-srun --partition=gpu --pty bash
-
-# Start Ollama on the node
-module load ollama
-ollama serve
-
 # SSH tunnel (from your machine, bind 0.0.0.0 for Docker access)
 ssh -L 0.0.0.0:11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 node_name
 
-# Load model (on the node)
+# On the HPC node: start Ollama and load model
+module load ollama && ollama serve
 ollama run deepseek-r1:7b --keepalive -1m
 ```
+
+Then set `*_SERVICE_URL=http://host.docker.internal:11434` and `*_API_KEY=dummy` in `.env`.
 
 ### Run
 
@@ -100,16 +106,21 @@ python3.14 cli.py test              # All tests
 python3.14 cli.py test -- -m unit   # Unit tests only (no external deps)
 ```
 
-- **Unit tests** (83): Fully mocked, no external dependencies
-- **Integration tests** (5): Require Docker + real APIs
-- **E2E tests** (5): Require Docker + real APIs
+- **Unit tests** (81): Fully mocked, no external dependencies
+- **Integration tests** (5): Require Docker + RunPod/HPC
+- **E2E tests** (5): Require Docker + RunPod/HPC
+
+**Parallel execution** (requires `pytest-xdist`):
+```bash
+python3.14 cli.py test -- -m "integration or e2e" --dist loadgroup -n 4
+```
 
 See `TESTING.md` for details.
 
 ### CI/CD
 
 - **Pre-merge checks** (`.github/workflows/pre-merge-checks.yml`): Code quality + unit tests on every push/PR
-- **Full tests** (`.github/workflows/run-tests.yml`): Creates RunPod GPU pod, loads models, runs all tests against real Ollama inference
+- **Full tests** (`.github/workflows/run-tests.yml`): Runs integration/E2E tests against RunPod Serverless endpoints with real Ollama inference
 
 ## Data Preprocessing
 

@@ -150,7 +150,7 @@ async def get_logs(request_id: str):
 
 
 @app.post("/embed", response_model=EmbedResponse)
-async def embed_text(request: EmbedRequest, fastapi_request: FastAPIRequest):
+def embed_text(request: EmbedRequest, fastapi_request: FastAPIRequest):
     """
     Generate embedding for input text using OpenAI's embedding API.
     Falls back to dummy response if API key is not configured.

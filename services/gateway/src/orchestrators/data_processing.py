@@ -85,7 +85,7 @@ async def _reformulate_query(
             f"{Config.SERVICES.REFORMULATOR_URL}/reformulate",
             {"processed_input": processed_input, "input_type": input_type},
             request_id,
-            timeout=30,
+            timeout=300,
         )
 
         duration = time.time() - start_time

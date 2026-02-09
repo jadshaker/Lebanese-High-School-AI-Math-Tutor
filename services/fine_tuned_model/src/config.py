@@ -10,3 +10,4 @@ class Config:
         "FINE_TUNED_MODEL_SERVICE_URL", "http://localhost:11434"
     )
     FINE_TUNED_MODEL_NAME = os.environ["FINE_TUNED_MODEL_NAME"]
+    FINE_TUNED_MODEL_API_KEY = os.getenv("FINE_TUNED_MODEL_API_KEY", "dummy")

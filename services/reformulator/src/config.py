@@ -12,6 +12,7 @@ class Config:
         )
 
     REFORMULATOR_LLM_MODEL_NAME = os.environ["REFORMULATOR_LLM_MODEL_NAME"]
+    REFORMULATOR_LLM_API_KEY = os.getenv("REFORMULATOR_LLM_API_KEY", "dummy")
 
     class REFORMULATION:
         # Whether to use the LLM for reformulation or just return the input

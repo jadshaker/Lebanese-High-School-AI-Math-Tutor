@@ -17,9 +17,9 @@ The application uses a **microservices architecture** with services communicatin
 - **Reformulator** (Port 8007) - Query improvement via LLM service
 - **Embedding** (Port 8002) - OpenAI text-embedding-3-small for vector embeddings
 - **Cache** (Port 8003) - Vector storage with cosine similarity search (stub implementation)
-- **Small LLM** (Port 8005) - Ollama integration for efficient local inference (DeepSeek-R1 hosted on AUB HPC)
+- **Small LLM** (Port 8005) - Ollama integration for efficient inference (DeepSeek-R1 via RunPod Serverless or AUB HPC)
 - **Large LLM** (Port 8001) - OpenAI GPT-4o-mini integration for complex math questions
-- **Fine-Tuned Model** (Port 8006) - Ollama integration for fine-tuned model (DeepSeek-R1 hosted on AUB HPC)
+- **Fine-Tuned Model** (Port 8006) - Ollama integration for fine-tuned model (DeepSeek-R1 via RunPod Serverless or AUB HPC)
 
 ### Planned Features
 
@@ -126,19 +126,24 @@ All environment variables are defined in `.env` at the project root:
 # API Keys
 OPENAI_API_KEY=sk-...
 
-# Small LLM Service Configuration (Ollama)
-# Note: Use host.docker.internal for Docker, localhost for direct access
-SMALL_LLM_SERVICE_URL=http://host.docker.internal:11434
+# Small LLM Service Configuration
+SMALL_LLM_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
 SMALL_LLM_MODEL_NAME=deepseek-r1:7b
+SMALL_LLM_API_KEY=your_runpod_api_key
+
+# Reformulator LLM Service Configuration
+REFORMULATOR_LLM_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
+REFORMULATOR_LLM_MODEL_NAME=deepseek-r1:7b
+REFORMULATOR_LLM_API_KEY=your_runpod_api_key
 
 # Embedding Service Configuration
 EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
 
-# Fine-Tuned Model Service Configuration (Ollama)
-# Note: Use host.docker.internal for Docker, localhost for direct access
-FINE_TUNED_MODEL_SERVICE_URL=http://host.docker.internal:11434
+# Fine-Tuned Model Service Configuration
+FINE_TUNED_MODEL_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
 FINE_TUNED_MODEL_NAME=deepseek-r1:7b
+FINE_TUNED_MODEL_API_KEY=your_runpod_api_key
 
 # Answer Retrieval Service Configuration
 CACHE_TOP_K=5
@@ -146,10 +151,10 @@ CACHE_TOP_K=5
 
 Docker Compose loads these via the `env_file` directive.
 
-**Note**: Both `small_llm` and `fine_tuned_model` services connect to the same Ollama instance:
-- **Local Development**: Use `http://host.docker.internal:11434` to access HPC via SSH tunnel from host machine
-- **CI (GitHub Actions)**: Use `https://POD_ID-11434.proxy.runpod.net` to access RunPod GPU pod
-- Both services currently use the same model (deepseek-r1:7b)
+**LLM Backend**: Small LLM, Reformulator, and Fine-Tuned Model each use a separate RunPod Serverless endpoint running Ollama with `deepseek-r1:7b`. The OpenAI-compatible API is available at `https://api.runpod.ai/v2/{ENDPOINT_ID}/openai/v1`.
+- **RunPod Serverless**: Set `*_SERVICE_URL` to RunPod endpoint URL and `*_API_KEY` to RunPod API key
+- **AUB HPC (alternative)**: Set `*_SERVICE_URL=http://host.docker.internal:11434` and `*_API_KEY=dummy`
+- All three services use the OpenAI Python client for LLM calls
 
 ## Code Quality Tools
 
@@ -175,7 +180,7 @@ Configuration:
 - `.env.example` - Example environment variables
 - `.vscode/tasks.json` - VSCode tasks for development
 - `.github/workflows/pre-merge-checks.yml` - CI/CD code quality and unit tests
-- `.github/workflows/run-tests.yml` - CI/CD integration/E2E tests with RunPod GPU pods
+- `.github/workflows/run-tests.yml` - CI/CD integration/E2E tests with RunPod Serverless endpoints
 
 ## API Guidelines
 
@@ -224,7 +229,7 @@ with urlopen(req) as response:
     result = json.loads(response.read().decode("utf-8"))
 ```
 
-Exception: Large LLM and Small LLM services use the official `openai` package (Large LLM for OpenAI API calls, Small LLM for Ollama's OpenAI-compatible API).
+Exception: Large LLM, Small LLM, Reformulator, and Fine-Tuned Model services use the official `openai` package for LLM calls (Large LLM for OpenAI API, others for Ollama's OpenAI-compatible API via RunPod Serverless).
 
 ## Current Implementation Status
 
@@ -303,34 +308,39 @@ When creating a new service:
 - Update tests when modifying existing functionality
 - Run tests before committing: `python3.14 cli.py test`
 
-**Test Types (93 total: 83 unit + 5 integration + 5 E2E):**
+**Test Types (91 total: 81 unit + 5 integration + 5 E2E):**
 - **Unit tests** (`@pytest.mark.unit`): Fast, isolated, mock everything external - NO external dependencies
-- **Integration tests** (`@pytest.mark.integration`): Real Docker services - REQUIRES Docker + real APIs
-- **E2E tests** (`@pytest.mark.e2e`): Full pipeline - REQUIRES Docker + real APIs
+- **Integration tests** (`@pytest.mark.integration`): Real Docker services - REQUIRES Docker + RunPod/HPC
+- **E2E tests** (`@pytest.mark.e2e`): Full pipeline - REQUIRES Docker + RunPod/HPC
 
 **Note:** Integration/E2E tests run against Docker services which make API calls in separate processes
-that cannot be mocked with Python libraries. CI runs these automatically using RunPod GPU pods.
+that cannot be mocked with Python libraries. CI runs these automatically using RunPod Serverless endpoints.
+
+**Parallel Test Execution:** Integration/E2E tests use `pytest-xdist` with `xdist_group` markers for smart parallelization - tests hitting different pods run in parallel, full pipeline tests run serially.
 
 **Before Committing:**
 1. Run code quality checks: `python3.14 cli.py clean`
 2. Run unit tests: `python3.14 cli.py test -- -m unit`
-3. Ensure unit tests pass (83 tests)
+3. Ensure unit tests pass (81 tests)
 4. Check coverage if adding new code
 
 **Integration/E2E Tests:**
-- Run automatically in CI via RunPod GPU pods (`.github/workflows/run-tests.yml`)
-- For local runs: require Docker services + HPC SSH tunnel + valid OPENAI_API_KEY in `.env`
+- Run automatically in CI via RunPod Serverless endpoints (`.github/workflows/run-tests.yml`)
+- For local runs: require Docker services + RunPod Serverless (or HPC SSH tunnel) + valid OPENAI_API_KEY in `.env`
 
 **Quick Test Commands:**
 ```bash
 # Run only unit tests (fast, no external dependencies)
 python3.14 cli.py test -- -m unit
 
-# Run integration tests (requires Docker + OpenAI keys + HPC)
+# Run integration tests (requires Docker + RunPod/HPC)
 python3.14 cli.py test -- -m integration
 
-# Run E2E tests (requires Docker + OpenAI keys + HPC)
+# Run E2E tests (requires Docker + RunPod/HPC)
 python3.14 cli.py test -- -m e2e
+
+# Run integration + E2E in parallel (recommended)
+python3.14 -m pytest tests/integration tests/e2e -m "integration or e2e" --dist loadgroup -n 4
 
 # Run with coverage
 python3.14 cli.py test -- --cov=services --cov-report=html
@@ -370,43 +380,26 @@ curl -X POST http://localhost:8000/query \
 docker compose up --build
 ```
 
-### Small LLM & Fine-Tuned Model Services - Ollama SSH Tunnel Setup
+### Ollama-backed Services - RunPod Serverless (Recommended)
 
-Both `small_llm` and `fine_tuned_model` services connect to the same Ollama instance running on AUB's HPC (Octopus cluster). They currently use the same model (deepseek-r1:7b) and share the same tunnel. A double SSH tunnel is required:
+Small LLM, Reformulator, and Fine-Tuned Model each use a separate RunPod Serverless endpoint running Ollama with `deepseek-r1:7b` (Docker image: `svenbrnn/runpod-ollama:latest`). Endpoints scale to zero when idle and serve requests on-demand.
 
-**Start SSH Tunnel** (from development machine):
-```bash
-# Bind to all interfaces (0.0.0.0) so Docker can access it
-ssh -L 0.0.0.0:11434:localhost:11434 jss31@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 onode26
-```
-
-This creates:
-- **First tunnel**: Dev machine port 11434 → Octopus port 11434
-- **Second tunnel**: Octopus port 11434 → onode26 port 11434 (where Ollama runs)
-
-**On the HPC compute node** (e.g., onode26):
-```bash
-# Set up Ollama to use shared models and avoid NFS issues
-module load ollama
-export OLLAMA_MODELS=/scratch/shared/ai/models/llms/ollama/models
-export TMPDIR=/scratch/<your-user-id>/tmp
-export OLLAMA_TMPDIR=/scratch/<your-user-id>/tmp
-mkdir -p /scratch/<your-user-id>/tmp
-
-# Start Ollama server (in screen/tmux for persistence)
-screen -S ollama
-ollama serve
-
-# In another terminal, load the model (it stays in memory)
-ollama run deepseek-r1:7b --keepalive -1m    # For both small_llm and fine_tuned_model services
-# Press Ctrl+C to exit chat (model stays loaded)
-```
+**Configuration**: Set `*_SERVICE_URL` to `https://api.runpod.ai/v2/<endpoint_id>/openai` and `*_API_KEY` to your RunPod API key in `.env`.
 
 **Important**:
-- Keep SSH tunnel running while services are active
-- Use `0.0.0.0` binding (not `localhost`) so Docker containers can access via `host.docker.internal`
-- Both services use the same model in the same Ollama instance
-- For direct service testing (non-Docker), `localhost:11434` works fine
+- Each service has its own endpoint (separate GPUs, no contention)
+- Services use the OpenAI Python client with `timeout=300.0` for cold start tolerance
+- Endpoint idle timeout is 5 minutes (workers stay warm between requests)
+- All three services use `deepseek-r1:7b` model
+
+### Alternative: AUB HPC via SSH Tunnel
+
+For HPC-based development, set `*_SERVICE_URL=http://host.docker.internal:11434` and `*_API_KEY=dummy`:
+
+```bash
+# SSH tunnel (bind 0.0.0.0 for Docker access)
+ssh -L 0.0.0.0:11434:localhost:11434 jss31@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 onode26
+```
 
 ## Documentation Maintenance
 
@@ -468,8 +461,9 @@ ollama run deepseek-r1:7b --keepalive -1m    # For both small_llm and fine_tuned
 
 - **EXCEPTION**: Use `openai` package for:
   - Large LLM service: OpenAI API calls
-  - Small LLM service: Ollama's OpenAI-compatible API
-  - Fine-Tuned Model service: Ollama's OpenAI-compatible API
+  - Small LLM service: Ollama's OpenAI-compatible API (via RunPod Serverless)
+  - Fine-Tuned Model service: Ollama's OpenAI-compatible API (via RunPod Serverless)
+  - Reformulator service: Ollama's OpenAI-compatible API (via RunPod Serverless)
 - **ALWAYS** activate `.venv` before running development commands
 - **NEVER** commit `.env` file
 - **ALWAYS** add health check endpoint to new services
@@ -477,5 +471,6 @@ ollama run deepseek-r1:7b --keepalive -1m    # For both small_llm and fine_tuned
 - **FOLLOW** the service structure pattern for consistency
 - Services are independent - each has its own `config.py` and `schemas.py`
 - Run `python3 cli.py clean` before committing changes
-- For small_llm and fine_tuned_model services: ensure SSH tunnel to HPC is active and the model is loaded before testing
-- Both small_llm and fine_tuned_model use the same Ollama instance and the same model (both use SMALL_LLM_MODEL_NAME and FINE_TUNED_MODEL_NAME which are currently set to deepseek-r1:7b)
+- Small LLM, Reformulator, and Fine-Tuned Model each use a separate RunPod Serverless endpoint (or shared HPC Ollama instance as fallback)
+- All three Ollama-backed services use `deepseek-r1:7b` model
+- **Event loop safety**: Service endpoints that call synchronous OpenAI client must use `def` (not `async def`) so FastAPI runs them in a threadpool. Gateway's `call_service` uses `asyncio.to_thread` for the same reason.

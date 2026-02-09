@@ -182,7 +182,7 @@ async def _query_small_llm(
                 "messages": messages,
             },
             request_id,
-            timeout=60,
+            timeout=300,
         )
 
         answer = result["choices"][0]["message"]["content"]
@@ -255,7 +255,7 @@ async def _query_large_llm(query: str, request_id: str) -> str:
                 "messages": messages,
             },
             request_id,
-            timeout=60,
+            timeout=300,
         )
 
         answer = result["choices"][0]["message"]["content"]

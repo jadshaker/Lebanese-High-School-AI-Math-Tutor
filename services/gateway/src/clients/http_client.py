@@ -1,9 +1,30 @@
+import asyncio
 import json
 from typing import Any, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from fastapi import HTTPException
+
+
+def _call_service_sync(
+    url: str,
+    payload: dict[str, Any],
+    request_id: str,
+    timeout: int,
+    method: str,
+) -> dict[str, Any]:
+    """Synchronous HTTP call (runs in thread pool to avoid blocking event loop)"""
+    req = Request(
+        url,
+        data=json.dumps(payload).encode("utf-8") if payload else None,
+        headers={"Content-Type": "application/json", "X-Request-ID": request_id},
+        method=method,
+    )
+
+    with urlopen(req, timeout=timeout) as response:
+        result = json.loads(response.read().decode("utf-8"))
+        return result
 
 
 async def call_service(
@@ -30,16 +51,9 @@ async def call_service(
         HTTPException: If the service call fails
     """
     try:
-        req = Request(
-            url,
-            data=json.dumps(payload).encode("utf-8") if payload else None,
-            headers={"Content-Type": "application/json", "X-Request-ID": request_id},
-            method=method,
+        return await asyncio.to_thread(
+            _call_service_sync, url, payload, request_id, timeout, method
         )
-
-        with urlopen(req, timeout=timeout) as response:
-            result = json.loads(response.read().decode("utf-8"))
-            return result
 
     except (HTTPError, URLError) as e:
         # Re-raise as HTTPException with service unavailable status

@@ -152,9 +152,7 @@ async def get_logs(request_id: str):
 
 
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
-async def chat_completions(
-    request: ChatCompletionRequest, fastapi_request: FastAPIRequest
-):
+def chat_completions(request: ChatCompletionRequest, fastapi_request: FastAPIRequest):
     """
     OpenAI-compatible chat completions endpoint.
     Generates answers using OpenAI's GPT-4 API.

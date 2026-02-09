@@ -28,7 +28,8 @@ logger = StructuredLogger("fine_tuned_model")
 # Initialize OpenAI client pointing to Ollama's OpenAI-compatible endpoint
 client = OpenAI(
     base_url=f"{Config.FINE_TUNED_MODEL_SERVICE_URL}/v1",
-    api_key="dummy",  # Ollama doesn't require authentication
+    api_key=Config.FINE_TUNED_MODEL_API_KEY,
+    timeout=300.0,
 )
 
 
@@ -211,7 +212,7 @@ def chat_completions(
             request_id=request_id,
         )
 
-        # Call Ollama using OpenAI SDK
+        # Call LLM using OpenAI SDK
         # Build the call parameters explicitly to satisfy mypy's type checking
         from typing import Any
 
@@ -221,7 +222,6 @@ def chat_completions(
             "messages": [
                 {"role": msg.role, "content": msg.content} for msg in request.messages
             ],
-            "extra_body": {"keep_alive": -1},  # Ollama-specific parameter
         }
 
         # Add optional parameters only if they're set

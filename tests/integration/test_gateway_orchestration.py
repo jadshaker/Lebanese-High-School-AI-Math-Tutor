@@ -18,6 +18,7 @@ LARGE_LLM_MODEL_NAME = os.getenv("LARGE_LLM_MODEL_NAME", "gpt-4o-mini")
 
 
 @pytest.mark.integration
+@pytest.mark.xdist_group("reformulator_pod")
 def test_data_processing_pipeline(mock_external_apis):
     """
     Test: Input Processor → Reformulator flow
@@ -54,7 +55,7 @@ def test_data_processing_pipeline(mock_external_apis):
         f"{REFORMULATOR_URL}/reformulate",
         json={"processed_input": processed_input, "input_type": "text"},
         headers={"X-Request-ID": request_id},
-        timeout=30,
+        timeout=300,
     )
 
     assert response.status_code == 200, f"Reformulator failed: {response.text}"
@@ -80,6 +81,7 @@ def test_data_processing_pipeline(mock_external_apis):
 
 @pytest.mark.integration
 @pytest.mark.slow
+@pytest.mark.xdist_group("small_llm_pod")
 def test_answer_retrieval_pipeline(mock_external_apis):
     """
     Test: Embed → Cache → Small LLM → Large LLM flow
@@ -97,7 +99,7 @@ def test_answer_retrieval_pipeline(mock_external_apis):
         f"{EMBEDDING_URL}/embed",
         json={"text": query},
         headers={"X-Request-ID": request_id},
-        timeout=10,
+        timeout=30,
     )
 
     assert response.status_code == 200, f"Embedding failed: {response.text}"
@@ -139,7 +141,7 @@ def test_answer_retrieval_pipeline(mock_external_apis):
         f"{SMALL_LLM_URL}/v1/chat/completions",
         json={"model": SMALL_LLM_MODEL_NAME, "messages": messages},
         headers={"X-Request-ID": request_id},
-        timeout=60,
+        timeout=300,
     )
 
     assert response.status_code == 200, f"Small LLM failed: {response.text}"
@@ -155,7 +157,7 @@ def test_answer_retrieval_pipeline(mock_external_apis):
         f"{LARGE_LLM_URL}/v1/chat/completions",
         json={"model": LARGE_LLM_MODEL_NAME, "messages": messages},
         headers={"X-Request-ID": request_id},
-        timeout=60,
+        timeout=300,
     )
 
     assert response.status_code == 200, f"Large LLM failed: {response.text}"
@@ -193,6 +195,7 @@ def test_answer_retrieval_pipeline(mock_external_apis):
 
 @pytest.mark.integration
 @pytest.mark.slow
+@pytest.mark.xdist_group("full_pipeline")
 def test_full_pipeline_simple_question(mock_external_apis):
     """
     Test: Complete flow from user input to final answer
@@ -213,7 +216,7 @@ def test_full_pipeline_simple_question(mock_external_apis):
             "messages": [{"role": "user", "content": "What is 2+2?"}],
         },
         headers={"X-Request-ID": request_id},
-        timeout=120,  # Increased timeout for full pipeline
+        timeout=360,  # Increased timeout for full pipeline with RunPod cold starts
     )
 
     assert response.status_code == 200, f"Gateway failed: {response.text}"
@@ -255,6 +258,7 @@ def test_full_pipeline_simple_question(mock_external_apis):
 
 
 @pytest.mark.integration
+@pytest.mark.xdist_group("no_pod")
 def test_request_id_propagation(mock_external_apis):
     """
     Test: Request ID flows through services that support /logs endpoint
@@ -285,7 +289,7 @@ def test_request_id_propagation(mock_external_apis):
         f"{EMBEDDING_URL}/embed",
         json={"text": "test query for logging"},
         headers={"X-Request-ID": request_id},
-        timeout=10,
+        timeout=30,
     )
 
     assert response.status_code == 200, f"Embedding failed: {response.text}"
@@ -331,6 +335,7 @@ def test_request_id_propagation(mock_external_apis):
 
 @pytest.mark.integration
 @pytest.mark.slow
+@pytest.mark.xdist_group("full_pipeline")
 def test_metrics_are_recorded(mock_external_apis):
     """
     Test: Prometheus metrics are recorded correctly
@@ -349,7 +354,7 @@ def test_metrics_are_recorded(mock_external_apis):
             "model": "math-tutor",
             "messages": [{"role": "user", "content": "What is 5+3?"}],
         },
-        timeout=120,
+        timeout=360,
     )
 
     assert response.status_code == 200, f"Gateway failed: {response.text}"
