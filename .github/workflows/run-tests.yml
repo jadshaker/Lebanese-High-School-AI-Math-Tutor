@@ -39,14 +39,14 @@ jobs:
           SMALL_LLM_API_KEY=$RUNPOD_API_KEY
 
           REFORMULATOR_LLM_SERVICE_URL=https://api.runpod.ai/v2/${REFORMULATOR_ENDPOINT_ID}/openai
-          REFORMULATOR_LLM_MODEL_NAME=deepseek-r1:7b
+          REFORMULATOR_LLM_MODEL_NAME=deepseek-r1-7b
           REFORMULATOR_LLM_API_KEY=$RUNPOD_API_KEY
 
           EMBEDDING_MODEL=text-embedding-3-small
           EMBEDDING_DIMENSIONS=1536
 
           FINE_TUNED_MODEL_SERVICE_URL=https://api.runpod.ai/v2/${FINE_TUNED_ENDPOINT_ID}/openai
-          FINE_TUNED_MODEL_NAME=deepseek-r1:7b
+          FINE_TUNED_MODEL_NAME=deepseek-r1-7b
           FINE_TUNED_MODEL_API_KEY=$RUNPOD_API_KEY
 
           LARGE_LLM_MODEL_NAME=gpt-4o-mini
@@ -75,13 +75,13 @@ jobs:
           curl -s -m 300 "https://api.runpod.ai/v2/${REFORMULATOR_ENDPOINT_ID}/openai/v1/chat/completions" \
             -H "Authorization: Bearer $RUNPOD_API_KEY" \
             -H "Content-Type: application/json" \
-            -d '{"model":"deepseek-r1:7b","messages":[{"role":"user","content":"hi"}]}' > /dev/null &
+            -d '{"model":"deepseek-r1-7b","messages":[{"role":"user","content":"hi"}]}' > /dev/null &
           PID2=$!
 
           curl -s -m 300 "https://api.runpod.ai/v2/${FINE_TUNED_ENDPOINT_ID}/openai/v1/chat/completions" \
             -H "Authorization: Bearer $RUNPOD_API_KEY" \
             -H "Content-Type: application/json" \
-            -d '{"model":"deepseek-r1:7b","messages":[{"role":"user","content":"hi"}]}' > /dev/null &
+            -d '{"model":"deepseek-r1-7b","messages":[{"role":"user","content":"hi"}]}' > /dev/null &
           PID3=$!
 
           # Wait for all warmup requests to complete
@@ -148,8 +148,8 @@ jobs:
       - name: Run All Tests
         env:
           SMALL_LLM_MODEL_NAME: deepseek-r1-7b
-          REFORMULATOR_LLM_MODEL_NAME: deepseek-r1:7b
-          FINE_TUNED_MODEL_NAME: deepseek-r1:7b
+          REFORMULATOR_LLM_MODEL_NAME: deepseek-r1-7b
+          FINE_TUNED_MODEL_NAME: deepseek-r1-7b
           LARGE_LLM_MODEL_NAME: gpt-4o-mini
         run: |
           echo "Running all tests..."

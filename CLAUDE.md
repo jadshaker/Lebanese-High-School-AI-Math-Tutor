@@ -14,12 +14,12 @@ The application uses a **microservices architecture** with services communicatin
 
 - **Gateway** (Port 8000) - API Gateway that orchestrates full two-phase pipeline
 - **Input Processor** (Port 8004) - Text/image processing service
-- **Reformulator** (Port 8007) - Query improvement via LLM service
+- **Reformulator** (Port 8007) - Query improvement via vLLM service (DeepSeek-R1-Distill-Qwen-7B via RunPod Serverless)
 - **Embedding** (Port 8002) - OpenAI text-embedding-3-small for vector embeddings
 - **Cache** (Port 8003) - Vector storage with cosine similarity search (stub implementation)
 - **Small LLM** (Port 8005) - vLLM integration for efficient inference (DeepSeek-R1-Distill-Qwen-7B via RunPod Serverless)
 - **Large LLM** (Port 8001) - OpenAI GPT-4o-mini integration for complex math questions
-- **Fine-Tuned Model** (Port 8006) - Ollama integration for fine-tuned model (DeepSeek-R1 via RunPod Serverless or AUB HPC)
+- **Fine-Tuned Model** (Port 8006) - vLLM integration for fine-tuned model (DeepSeek-R1-Distill-Qwen-7B via RunPod Serverless)
 
 ### Planned Features
 
@@ -133,7 +133,7 @@ SMALL_LLM_API_KEY=your_runpod_api_key
 
 # Reformulator LLM Service Configuration
 REFORMULATOR_LLM_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
-REFORMULATOR_LLM_MODEL_NAME=deepseek-r1:7b
+REFORMULATOR_LLM_MODEL_NAME=deepseek-r1-7b
 REFORMULATOR_LLM_API_KEY=your_runpod_api_key
 
 # Embedding Service Configuration
@@ -142,7 +142,7 @@ EMBEDDING_DIMENSIONS=1536
 
 # Fine-Tuned Model Service Configuration
 FINE_TUNED_MODEL_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
-FINE_TUNED_MODEL_NAME=deepseek-r1:7b
+FINE_TUNED_MODEL_NAME=deepseek-r1-7b
 FINE_TUNED_MODEL_API_KEY=your_runpod_api_key
 
 # Answer Retrieval Service Configuration
@@ -151,9 +151,8 @@ CACHE_TOP_K=5
 
 Docker Compose loads these via the `env_file` directive.
 
-**LLM Backend**: Small LLM uses a RunPod Serverless endpoint running vLLM with `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B` (served as `deepseek-r1-7b`). Reformulator and Fine-Tuned Model each use a separate RunPod Serverless endpoint running Ollama with `deepseek-r1:7b`. The OpenAI-compatible API is available at `https://api.runpod.ai/v2/{ENDPOINT_ID}/openai/v1`.
+**LLM Backend**: All three LLM services (Small LLM, Reformulator, Fine-Tuned Model) use separate RunPod Serverless endpoints running vLLM with `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B` (served as `deepseek-r1-7b`). The OpenAI-compatible API is available at `https://api.runpod.ai/v2/{ENDPOINT_ID}/openai/v1`.
 - **RunPod Serverless**: Set `*_SERVICE_URL` to RunPod endpoint URL and `*_API_KEY` to RunPod API key
-- **AUB HPC (alternative, Reformulator/Fine-Tuned only)**: Set `*_SERVICE_URL=http://host.docker.internal:11434` and `*_API_KEY=dummy`
 - All three services use the OpenAI Python client for LLM calls
 
 ## Code Quality Tools
@@ -229,7 +228,7 @@ with urlopen(req) as response:
     result = json.loads(response.read().decode("utf-8"))
 ```
 
-Exception: Large LLM, Small LLM, Reformulator, and Fine-Tuned Model services use the official `openai` package for LLM calls (Large LLM for OpenAI API, Small LLM for vLLM's OpenAI-compatible API via RunPod Serverless, others for Ollama's OpenAI-compatible API via RunPod Serverless).
+Exception: Large LLM, Small LLM, Reformulator, and Fine-Tuned Model services use the official `openai` package for LLM calls (Large LLM for OpenAI API, others for vLLM's OpenAI-compatible API via RunPod Serverless).
 
 ## Current Implementation Status
 
@@ -237,12 +236,12 @@ Exception: Large LLM, Small LLM, Reformulator, and Fine-Tuned Model services use
 
 - Gateway service with full two-phase pipeline orchestration
 - Input Processor service with text processing and image stub
-- Reformulator service with LLM-powered query improvement
+- Reformulator service with vLLM-powered query improvement
 - Embedding service with OpenAI text-embedding-3-small (1536 dimensions)
 - Cache service (stub) with similarity search and save endpoints
 - Small LLM service with vLLM integration (DeepSeek-R1-Distill-Qwen-7B on RunPod Serverless)
 - Large LLM service with OpenAI GPT-4o-mini integration
-- Fine-Tuned Model service with Ollama integration (DeepSeek-R1 on AUB HPC)
+- Fine-Tuned Model service with vLLM integration (DeepSeek-R1-Distill-Qwen-7B on RunPod Serverless)
 - Docker Compose setup with all services
 - Code quality tooling (isort, black, mypy)
 - CI/CD pre-merge checks
@@ -382,12 +381,7 @@ docker compose up --build
 
 ### LLM Services - RunPod Serverless (Recommended)
 
-Each LLM service uses a separate RunPod Serverless endpoint:
-- **Small LLM**: vLLM (`runpod/worker-v1-vllm:stable-cuda12.1.0`) with `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B` (HuggingFace FP16, served as `deepseek-r1-7b`)
-- **Reformulator**: Ollama (`svenbrnn/runpod-ollama:latest`) with `deepseek-r1:7b`
-- **Fine-Tuned Model**: Ollama (`svenbrnn/runpod-ollama:latest`) with `deepseek-r1:7b`
-
-Endpoints scale to zero when idle and serve requests on-demand.
+All three LLM services (Small LLM, Reformulator, Fine-Tuned Model) use separate RunPod Serverless endpoints running vLLM (`runpod/worker-v1-vllm:stable-cuda12.1.0`) with `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B` (HuggingFace FP16, served as `deepseek-r1-7b`). Endpoints scale to zero when idle and serve requests on-demand.
 
 **Configuration**: Set `*_SERVICE_URL` to `https://api.runpod.ai/v2/<endpoint_id>/openai` and `*_API_KEY` to your RunPod API key in `.env`.
 
@@ -395,7 +389,7 @@ Endpoints scale to zero when idle and serve requests on-demand.
 - Each service has its own endpoint (separate GPUs, no contention)
 - Services use the OpenAI Python client with `timeout=300.0` for cold start tolerance
 - Endpoint idle timeout is 5 minutes (workers stay warm between requests)
-- Small LLM model name: `deepseek-r1-7b`; Reformulator/Fine-Tuned: `deepseek-r1:7b`
+- All three services use `deepseek-r1-7b` model name
 
 ### Alternative: AUB HPC via SSH Tunnel
 
@@ -467,8 +461,8 @@ ssh -L 0.0.0.0:11434:localhost:11434 jss31@octopus.aub.edu.lb -t ssh -L 11434:lo
 - **EXCEPTION**: Use `openai` package for:
   - Large LLM service: OpenAI API calls
   - Small LLM service: vLLM's OpenAI-compatible API (via RunPod Serverless)
-  - Fine-Tuned Model service: Ollama's OpenAI-compatible API (via RunPod Serverless)
-  - Reformulator service: Ollama's OpenAI-compatible API (via RunPod Serverless)
+  - Fine-Tuned Model service: vLLM's OpenAI-compatible API (via RunPod Serverless)
+  - Reformulator service: vLLM's OpenAI-compatible API (via RunPod Serverless)
 - **ALWAYS** activate `.venv` before running development commands
 - **NEVER** commit `.env` file
 - **ALWAYS** add health check endpoint to new services
@@ -476,6 +470,6 @@ ssh -L 0.0.0.0:11434:localhost:11434 jss31@octopus.aub.edu.lb -t ssh -L 11434:lo
 - **FOLLOW** the service structure pattern for consistency
 - Services are independent - each has its own `config.py` and `schemas.py`
 - Run `python3 cli.py clean` before committing changes
-- Small LLM uses a RunPod Serverless vLLM endpoint; Reformulator and Fine-Tuned Model each use a separate RunPod Serverless Ollama endpoint (or shared HPC Ollama instance as fallback)
-- Small LLM uses `deepseek-r1-7b` model (vLLM); Reformulator and Fine-Tuned Model use `deepseek-r1:7b` (Ollama)
+- Small LLM, Reformulator, and Fine-Tuned Model each use a separate RunPod Serverless vLLM endpoint
+- All three vLLM-backed services use `deepseek-r1-7b` model name (served by `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`)
 - **Event loop safety**: Service endpoints that call synchronous OpenAI client must use `def` (not `async def`) so FastAPI runs them in a threadpool. Gateway's `call_service` uses `asyncio.to_thread` for the same reason.

@@ -12,8 +12,8 @@ services/
 ├── cache/              # Vector storage stub (Port 8003)
 ├── input_processor/    # Text/image processing (Port 8004)
 ├── small_llm/          # vLLM DeepSeek-R1 (Port 8005)
-├── fine_tuned_model/   # Ollama DeepSeek-R1 (Port 8006)
-└── reformulator/       # Query improvement via LLM (Port 8007)
+├── fine_tuned_model/   # vLLM DeepSeek-R1 (Port 8006)
+└── reformulator/       # Query improvement via vLLM (Port 8007)
 ```
 
 **Pipeline**: Gateway orchestrates two phases:
@@ -27,7 +27,7 @@ services/
 - Python 3.14+
 - Docker and Docker Compose
 - OpenAI API key
-- LLM backends: vLLM on RunPod (Small LLM), Ollama on RunPod or AUB HPC (Reformulator, Fine-Tuned)
+- vLLM on RunPod Serverless (all LLM services)
 
 ### Environment Setup
 
@@ -39,10 +39,10 @@ SMALL_LLM_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
 SMALL_LLM_MODEL_NAME=deepseek-r1-7b
 SMALL_LLM_API_KEY=your_runpod_api_key
 REFORMULATOR_LLM_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
-REFORMULATOR_LLM_MODEL_NAME=deepseek-r1:7b
+REFORMULATOR_LLM_MODEL_NAME=deepseek-r1-7b
 REFORMULATOR_LLM_API_KEY=your_runpod_api_key
 FINE_TUNED_MODEL_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
-FINE_TUNED_MODEL_NAME=deepseek-r1:7b
+FINE_TUNED_MODEL_NAME=deepseek-r1-7b
 FINE_TUNED_MODEL_API_KEY=your_runpod_api_key
 EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
@@ -53,10 +53,7 @@ CACHE_TOP_K=5
 
 **Option A: RunPod Serverless (Recommended)**
 
-- **Small LLM** uses a vLLM endpoint (`runpod/worker-v1-vllm:stable-cuda12.1.0`) with `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B` (HuggingFace FP16).
-- **Reformulator** and **Fine-Tuned Model** use Ollama endpoints (`svenbrnn/runpod-ollama:latest`) with `deepseek-r1:7b`.
-
-All endpoints scale to zero when idle (no cost) and serve requests on-demand via OpenAI-compatible API.
+All three LLM services (Small LLM, Reformulator, Fine-Tuned Model) use vLLM endpoints (`runpod/worker-v1-vllm:stable-cuda12.1.0`) with `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B` (HuggingFace FP16). Endpoints scale to zero when idle (no cost) and serve requests on-demand via OpenAI-compatible API.
 
 **Option B: AUB HPC via SSH Tunnel**
 

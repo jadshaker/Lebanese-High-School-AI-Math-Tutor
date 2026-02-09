@@ -19,7 +19,7 @@ from src.models.schemas import ReformulateRequest, ReformulateResponse
 app = FastAPI(title="Math Tutor Reformulator Service")
 logger = StructuredLogger("reformulator")
 
-# Initialize OpenAI client pointing to the reformulator LLM's OpenAI-compatible endpoint
+# Initialize OpenAI client pointing to the LLM backend's OpenAI-compatible endpoint
 client = OpenAI(
     base_url=f"{Config.SERVICES.REFORMULATOR_LLM_URL}/v1",
     api_key=Config.REFORMULATOR_LLM_API_KEY,

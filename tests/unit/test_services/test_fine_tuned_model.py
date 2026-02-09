@@ -19,12 +19,10 @@ def setup_module(fine_tuned_model_app):
 @pytest.mark.unit
 @patch("src.main.urlopen")
 def test_health_endpoint_healthy(mock_urlopen):
-    """Test health check when Ollama is reachable and model available"""
-    # Mock Ollama /api/tags response
+    """Test health check when LLM backend is reachable and model available"""
+    # Mock OpenAI-compatible /v1/models response
     mock_response = MagicMock()
-    mock_response.read.return_value = (
-        f'{{"models": [{{"name": "{MODEL_NAME}"}}]}}'.encode()
-    )
+    mock_response.read.return_value = f'{{"data": [{{"id": "{MODEL_NAME}"}}]}}'.encode()
     mock_response.__enter__ = MagicMock(return_value=mock_response)
     mock_response.__exit__ = MagicMock(return_value=False)
     mock_urlopen.return_value = mock_response
@@ -35,7 +33,7 @@ def test_health_endpoint_healthy(mock_urlopen):
     data = response.json()
     assert data["status"] == "healthy"
     assert data["service"] == "fine_tuned_model"
-    assert data["ollama_reachable"] is True
+    assert data["llm_reachable"] is True
     assert data["model_available"] is True
     assert "configured_model" in data
 
@@ -43,7 +41,7 @@ def test_health_endpoint_healthy(mock_urlopen):
 @pytest.mark.unit
 @patch("src.main.urlopen")
 def test_health_endpoint_degraded(mock_urlopen):
-    """Test health check when Ollama is unreachable"""
+    """Test health check when LLM backend is unreachable"""
     mock_urlopen.side_effect = Exception("Connection refused")
 
     response = client.get("/health")
@@ -51,15 +49,15 @@ def test_health_endpoint_degraded(mock_urlopen):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "degraded"
-    assert data["ollama_reachable"] is False
+    assert data["llm_reachable"] is False
     assert data["model_available"] is False
 
 
 @pytest.mark.unit
 @patch("src.main.client")
 def test_chat_completions_success(mock_openai_client):
-    """Test successful chat completion via Ollama"""
-    # Mock Ollama response
+    """Test successful chat completion via LLM backend"""
+    # Mock LLM response
     mock_message = MagicMock()
     mock_message.content = "The answer is 4"
     mock_choice = MagicMock()
@@ -116,7 +114,7 @@ def test_chat_completions_missing_messages():
 @pytest.mark.unit
 @patch("src.main.client")
 def test_chat_completions_service_error(mock_openai_client):
-    """Test chat completion when Ollama returns error"""
+    """Test chat completion when LLM backend returns error"""
     mock_openai_client.chat.completions.create.side_effect = Exception(
         "Connection error"
     )
@@ -136,7 +134,7 @@ def test_chat_completions_service_error(mock_openai_client):
 @patch("src.main.client")
 def test_chat_completions_default_model(mock_openai_client):
     """Test chat completion with explicit model (model field is required)"""
-    # Mock Ollama response
+    # Mock LLM response
     mock_message = MagicMock()
     mock_message.content = "Response"
     mock_choice = MagicMock()
@@ -178,7 +176,7 @@ def test_chat_completions_default_model(mock_openai_client):
 @patch("src.main.client")
 def test_chat_completions_multiple_messages(mock_openai_client):
     """Test chat completion with conversation history"""
-    # Mock Ollama response
+    # Mock LLM response
     mock_message = MagicMock()
     mock_message.content = "Yes, that's right"
     mock_choice = MagicMock()
@@ -226,7 +224,7 @@ def test_chat_completions_multiple_messages(mock_openai_client):
 @patch("src.main.client")
 def test_chat_completions_special_characters(mock_openai_client):
     """Test chat completion with special characters and unicode"""
-    # Mock Ollama response
+    # Mock LLM response
     mock_message = MagicMock()
     mock_message.content = "√16 = 4"
     mock_choice = MagicMock()
@@ -270,7 +268,7 @@ def test_chat_completions_special_characters(mock_openai_client):
 @patch("src.main.client")
 def test_chat_completions_empty_response(mock_openai_client):
     """Test chat completion when model returns empty content"""
-    # Mock Ollama response with empty content
+    # Mock LLM response with empty content
     mock_message = MagicMock()
     mock_message.content = ""
     mock_choice = MagicMock()
