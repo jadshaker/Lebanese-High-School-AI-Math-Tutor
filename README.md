@@ -36,13 +36,13 @@ Create `.env` from `.env.example`:
 ```bash
 OPENAI_API_KEY=your_key_here
 SMALL_LLM_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
-SMALL_LLM_MODEL_NAME=deepseek-r1-7b
+SMALL_LLM_MODEL_NAME=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
 SMALL_LLM_API_KEY=your_runpod_api_key
 REFORMULATOR_LLM_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
-REFORMULATOR_LLM_MODEL_NAME=deepseek-r1-7b
+REFORMULATOR_LLM_MODEL_NAME=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
 REFORMULATOR_LLM_API_KEY=your_runpod_api_key
 FINE_TUNED_MODEL_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
-FINE_TUNED_MODEL_NAME=deepseek-r1-7b
+FINE_TUNED_MODEL_NAME=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
 FINE_TUNED_MODEL_API_KEY=your_runpod_api_key
 EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
