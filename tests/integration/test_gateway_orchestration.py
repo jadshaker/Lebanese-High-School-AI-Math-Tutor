@@ -13,7 +13,9 @@ CACHE_URL = os.getenv("CACHE_SERVICE_URL", "http://localhost:8003")
 SMALL_LLM_URL = os.getenv("SMALL_LLM_SERVICE_URL", "http://localhost:8005")
 LARGE_LLM_URL = os.getenv("LARGE_LLM_SERVICE_URL", "http://localhost:8001")
 
-SMALL_LLM_MODEL_NAME = os.getenv("SMALL_LLM_MODEL_NAME", "deepseek-r1:7b")
+SMALL_LLM_MODEL_NAME = os.getenv(
+    "SMALL_LLM_MODEL_NAME", "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
+)
 LARGE_LLM_MODEL_NAME = os.getenv("LARGE_LLM_MODEL_NAME", "gpt-4o-mini")
 
 

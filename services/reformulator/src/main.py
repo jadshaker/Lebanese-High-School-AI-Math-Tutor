@@ -122,25 +122,32 @@ async def logging_and_metrics_middleware(request: FastAPIRequest, call_next):
 
 @app.get("/health")
 async def health():
-    """Health check endpoint"""
-    # Check if Small LLM service is reachable
-    small_llm_healthy = False
+    """Health check endpoint that verifies LLM backend connectivity and model availability."""
+    llm_reachable = False
+    model_available = False
     try:
         req = Request(
-            f"{Config.SERVICES.REFORMULATOR_LLM_URL}/health",
+            f"{Config.SERVICES.REFORMULATOR_LLM_URL}/v1/models",
             method="GET",
+            headers={"Authorization": f"Bearer {Config.REFORMULATOR_LLM_API_KEY}"},
         )
         with urlopen(req, timeout=5) as response:
             result = json.loads(response.read().decode("utf-8"))
-            small_llm_healthy = result.get("status") == "healthy"
+            llm_reachable = True
+            models = result.get("data", [])
+            model_available = any(
+                model.get("id") == Config.REFORMULATOR_LLM_MODEL_NAME
+                for model in models
+            )
     except Exception:
         pass
 
     return {
-        "status": "healthy" if small_llm_healthy else "degraded",
+        "status": "healthy" if llm_reachable and model_available else "degraded",
         "service": "reformulator",
-        "small_llm_service": "reachable" if small_llm_healthy else "unreachable",
-        "message": "Reformulator service is running",
+        "llm_reachable": llm_reachable,
+        "model_available": model_available,
+        "configured_model": Config.REFORMULATOR_LLM_MODEL_NAME,
     }
 
 

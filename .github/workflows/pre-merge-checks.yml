@@ -28,10 +28,10 @@ jobs:
 
       - name: mypy check
         env:
-          SMALL_LLM_MODEL_NAME: deepseek-r1:7b
+          SMALL_LLM_MODEL_NAME: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
           LARGE_LLM_MODEL_NAME: gpt-4o-mini
-          FINE_TUNED_MODEL_NAME: deepseek-r1:7b
-          REFORMULATOR_LLM_MODEL_NAME: deepseek-r1:7b
+          FINE_TUNED_MODEL_NAME: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+          REFORMULATOR_LLM_MODEL_NAME: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
         run: |
           for service in services/*/; do
             if [ -d "$service/src" ]; then

@@ -3,6 +3,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from services.reformulator.src.config import Config
+
+MODEL_NAME = Config.REFORMULATOR_LLM_MODEL_NAME
+
 
 # Module-level setup - load app and create client
 @pytest.fixture(scope="module", autouse=True)
@@ -15,10 +19,10 @@ def setup_module(reformulator_app):
 @pytest.mark.unit
 @patch("src.main.urlopen")
 def test_health_endpoint_healthy(mock_urlopen):
-    """Test health check when Small LLM service is reachable"""
-    # Mock Small LLM /health response
+    """Test health check when LLM backend is reachable and model available"""
+    # Mock OpenAI-compatible /v1/models response
     mock_response = MagicMock()
-    mock_response.read.return_value = b'{"status": "healthy"}'
+    mock_response.read.return_value = f'{{"data": [{{"id": "{MODEL_NAME}"}}]}}'.encode()
     mock_response.__enter__ = MagicMock(return_value=mock_response)
     mock_response.__exit__ = MagicMock(return_value=False)
     mock_urlopen.return_value = mock_response
@@ -29,13 +33,15 @@ def test_health_endpoint_healthy(mock_urlopen):
     data = response.json()
     assert data["status"] == "healthy"
     assert data["service"] == "reformulator"
-    assert data["small_llm_service"] == "reachable"
+    assert data["llm_reachable"] is True
+    assert data["model_available"] is True
+    assert "configured_model" in data
 
 
 @pytest.mark.unit
 @patch("src.main.urlopen")
 def test_health_endpoint_degraded(mock_urlopen):
-    """Test health check when Small LLM service is unreachable"""
+    """Test health check when LLM backend is unreachable"""
     mock_urlopen.side_effect = Exception("Connection refused")
 
     response = client.get("/health")
@@ -43,7 +49,8 @@ def test_health_endpoint_degraded(mock_urlopen):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "degraded"
-    assert data["small_llm_service"] == "unreachable"
+    assert data["llm_reachable"] is False
+    assert data["model_available"] is False
 
 
 @pytest.mark.unit
