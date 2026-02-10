@@ -180,6 +180,8 @@ async def _query_small_llm(
             {
                 "model": Config.MODELS.SMALL_LLM_MODEL_NAME,
                 "messages": messages,
+                "temperature": 0.7,
+                "top_p": 0.9,
             },
             request_id,
             timeout=300,
@@ -253,6 +255,8 @@ async def _query_large_llm(query: str, request_id: str) -> str:
             {
                 "model": Config.MODELS.LARGE_LLM_MODEL_NAME,
                 "messages": messages,
+                "temperature": 0.7,
+                "top_p": 0.9,
             },
             request_id,
             timeout=300,

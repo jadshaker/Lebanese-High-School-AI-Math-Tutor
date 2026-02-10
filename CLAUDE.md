@@ -456,6 +456,11 @@ ssh -L 0.0.0.0:11434:localhost:11434 jss31@octopus.aub.edu.lb -t ssh -L 11434:lo
 - Maintain consistency with existing documentation style
 - Test all commands before documenting them
 
+## Notifications
+
+- Use `terminal-notifier` whenever you need user input or are done with tasks
+- Example: `terminal-notifier -title "Test" -message "This is a test notification"`
+
 ## Notes for Claude Code
 
 - **EXCEPTION**: Use `openai` package for:

@@ -283,6 +283,8 @@ Reformulated question:"""
         response = client.chat.completions.create(
             model=Config.REFORMULATOR_LLM_MODEL_NAME,
             messages=[{"role": "user", "content": prompt}],
+            temperature=0.6,
+            top_p=0.9,
         )
         reformulated = (response.choices[0].message.content or "").strip()
 
