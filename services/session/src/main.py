@@ -407,6 +407,8 @@ async def update_tutoring_state(
     if request.add_to_path is not None:
         session.tutoring.traversal_path.append(request.add_to_path)
         session.tutoring.depth = len(session.tutoring.traversal_path)
+    if request.is_new_branch is not None:
+        session.tutoring.is_new_branch = request.is_new_branch
 
     session.last_activity = datetime.now(timezone.utc)
 

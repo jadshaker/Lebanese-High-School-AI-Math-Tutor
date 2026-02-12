@@ -5,13 +5,12 @@ from pydantic import BaseModel, Field
 
 
 class ConfidenceTier(str, Enum):
-    """5-tier confidence routing levels"""
+    """4-tier confidence routing levels"""
 
-    TIER_1_DIRECT_CACHE = "tier_1_direct_cache"
-    TIER_2_SMALL_LLM_VALIDATE = "tier_2_small_llm_validate"
-    TIER_3_SMALL_LLM_CONTEXT = "tier_3_small_llm_context"
-    TIER_4_FINE_TUNED = "tier_4_fine_tuned"
-    TIER_5_LARGE_LLM = "tier_5_large_llm"
+    TIER_1_SMALL_LLM_VALIDATE_OR_GENERATE = "tier_1_small_llm_validate_or_generate"
+    TIER_2_SMALL_LLM_CONTEXT = "tier_2_small_llm_context"
+    TIER_3_FINE_TUNED = "tier_3_fine_tuned"
+    TIER_4_LARGE_LLM = "tier_4_large_llm"
 
 
 class ChatMessage(BaseModel):
@@ -107,4 +106,4 @@ class RetrievalMetadata(BaseModel):
     confidence_score: float
     cache_hit: bool
     llm_used: Optional[str] = None
-    validation_passed: Optional[bool] = None
+    cache_reused: Optional[bool] = None

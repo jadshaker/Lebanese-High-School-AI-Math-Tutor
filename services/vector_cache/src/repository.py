@@ -115,9 +115,9 @@ class QdrantRepository:
             if conditions:
                 query_filter = Filter(must=conditions)
 
-        results = await self.client.search(
+        results = await self.client.query_points(
             collection_name=self.questions_collection,
-            query_vector=embedding,
+            query=embedding,
             limit=top_k,
             score_threshold=threshold,
             query_filter=query_filter,
@@ -130,7 +130,7 @@ class QdrantRepository:
                 "score": r.score,
                 **r.payload,
             }
-            for r in results
+            for r in results.points
         ]
 
     async def add_question(
@@ -322,17 +322,17 @@ class QdrantRepository:
                 FieldCondition(key="depth", match=MatchValue(value=1))
             )
 
-        results = await self.client.search(
+        results = await self.client.query_points(
             collection_name=self.nodes_collection,
-            query_vector=user_input_embedding,
+            query=user_input_embedding,
             limit=1,
             score_threshold=threshold,
             query_filter=Filter(must=conditions),
             with_payload=True,
         )
 
-        if results:
-            best = results[0]
+        if results.points:
+            best = results.points[0]
             return {
                 "is_cache_hit": True,
                 "match_score": best.score,

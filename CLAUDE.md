@@ -12,7 +12,7 @@ The application uses a **microservices architecture** with services communicatin
 
 ### Current Services
 
-- **Gateway** (Port 8000) - API Gateway with 5-tier confidence routing and tutoring
+- **Gateway** (Port 8000) - API Gateway with 4-tier confidence routing and tutoring
 - **Input Processor** (Port 8004) - Text/image processing service
 - **Reformulator** (Port 8007) - Query improvement via LLM with context summarization
 - **Embedding** (Port 8002) - OpenAI text-embedding-3-small for vector embeddings
@@ -27,14 +27,13 @@ The application uses a **microservices architecture** with services communicatin
 
 - **Qdrant** (Port 6333) - Vector database for similarity search
 
-### 5-Tier Confidence Routing
+### 4-Tier Confidence Routing
 
 The Gateway implements cost-optimized routing based on vector similarity scores:
-- **Tier 1 (≥0.95)**: Direct cache hit - return cached answer immediately
-- **Tier 2 (0.85-0.95)**: Small LLM validates cached answer before use
-- **Tier 3 (0.70-0.85)**: Small LLM generates answer with cache context
-- **Tier 4 (0.50-0.70)**: Fine-tuned model for domain-specific response
-- **Tier 5 (<0.50)**: Large LLM for novel/complex questions
+- **Tier 1 (≥0.85)**: Small LLM validate-or-generate - validates cached answer or generates new one in a single call
+- **Tier 2 (0.70-0.85)**: Small LLM generates answer with cache context
+- **Tier 3 (0.50-0.70)**: Fine-tuned model for domain-specific response
+- **Tier 4 (<0.50)**: Large LLM for novel/complex questions
 
 ### Tutoring Flow (Graph Cache)
 
@@ -50,23 +49,35 @@ Interactive tutoring uses a **graph-based caching** approach:
 
 **Cache Lookup Flow**:
 ```
-User Response → Embed → Search children of current_node
+User Response → is_new_branch?
+                    │
+              ┌── YES ──┐── NO ──┐
+              │                   │
+              ▼                   ▼
+    Skip embed+search     Embed → Search children
+              │                   │
+              │         ┌── Cache Hit (≥0.85)? ──┐
+              │         │                         │
+              │        YES                       NO
+              │         │                         │
+              │         ▼                         │
+              │  Return cached response           │
+              │  (is_new_branch=False)             │
+              │                                   │
+              └───────────────────────────────────┘
                               │
-                    ┌── Cache Hit (≥0.85)? ──┐
-                    │                         │
-                   YES                       NO
-                    │                         │
-                    ▼                         ▼
-            Return cached         Intent Classifier
-            response                    │
-                                        ▼
-                                Fine-Tuned Model
-                                        │
-                                        ▼
-                                Save as new child node
+                              ▼
+                      Intent Classifier
+                              │
+                              ▼
+                      Fine-Tuned Model
+                              │
+                              ▼
+                   Save as new child node
+                   (is_new_branch=True)
 ```
 
-**Cost Optimization**: As the tutoring cache builds up, common student responses (like "I don't understand", "yes", "explain more") get cached, reducing model calls
+**Cost Optimization**: As the tutoring cache builds up, common student responses (like "I don't understand", "yes", "explain more") get cached, reducing model calls. Additionally, after inserting a new node, the `is_new_branch` flag skips the embedding + cache search on the next interaction (~2.8s saved per turn).
 
 ## Service Structure
 
@@ -187,11 +198,10 @@ QDRANT_HOST=qdrant
 QDRANT_PORT=6333
 CACHE_TOP_K=5
 
-# 5-Tier Confidence Routing Thresholds
-CONFIDENCE_TIER_1=0.95
-CONFIDENCE_TIER_2=0.85
-CONFIDENCE_TIER_3=0.70
-CONFIDENCE_TIER_4=0.50
+# 4-Tier Confidence Routing Thresholds
+CONFIDENCE_TIER_1=0.85
+CONFIDENCE_TIER_2=0.70
+CONFIDENCE_TIER_3=0.50
 
 # Session Management
 SESSION_TTL_SECONDS=3600
@@ -292,7 +302,7 @@ Exception: Large LLM and Small LLM services use the official `openai` package (L
 
 ✅ **Completed** (11 services):
 
-- Gateway service with 5-tier confidence routing, tutoring flow, and OpenAI-compatible API
+- Gateway service with 4-tier confidence routing, tutoring flow, and OpenAI-compatible API
 - Input Processor service with text processing and image stub
 - Reformulator service with LLM-powered query improvement and context summarization
 - Embedding service with OpenAI text-embedding-3-small (1536 dimensions)

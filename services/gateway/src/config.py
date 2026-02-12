@@ -31,13 +31,12 @@ class Config:
     # Vector cache configuration
     CACHE_TOP_K = int(os.getenv("CACHE_TOP_K", "5"))
 
-    # 5-tier confidence routing thresholds
+    # 4-tier confidence routing thresholds
     class CONFIDENCE_TIERS:
-        TIER_1_THRESHOLD = float(os.getenv("CONFIDENCE_TIER_1", "0.95"))  # Direct cache
-        TIER_2_THRESHOLD = float(os.getenv("CONFIDENCE_TIER_2", "0.85"))  # Small LLM validate
-        TIER_3_THRESHOLD = float(os.getenv("CONFIDENCE_TIER_3", "0.70"))  # Small LLM with context
-        TIER_4_THRESHOLD = float(os.getenv("CONFIDENCE_TIER_4", "0.50"))  # Fine-tuned first
-        # Below TIER_4 → Large LLM directly
+        TIER_1_THRESHOLD = float(os.getenv("CONFIDENCE_TIER_1", "0.85"))  # Small LLM validate-or-generate
+        TIER_2_THRESHOLD = float(os.getenv("CONFIDENCE_TIER_2", "0.70"))  # Small LLM with context
+        TIER_3_THRESHOLD = float(os.getenv("CONFIDENCE_TIER_3", "0.50"))  # Fine-tuned model
+        # Below TIER_3 → Large LLM directly
 
     # Tutoring configuration
     class TUTORING:

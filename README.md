@@ -23,17 +23,16 @@ External:
 
 **Pipeline**: Gateway orchestrates two phases:
 1. **Data Processing**: Input Processor → Reformulator
-2. **Answer Retrieval**: 5-Tier Confidence Routing
-   - **Tier 1 (≥0.95)**: Direct cache hit
-   - **Tier 2 (0.85-0.95)**: Small LLM validates cached answer
-   - **Tier 3 (0.70-0.85)**: Small LLM generates with cache context
-   - **Tier 4 (0.50-0.70)**: Fine-tuned model
-   - **Tier 5 (<0.50)**: Large LLM for novel questions
+2. **Answer Retrieval**: 4-Tier Confidence Routing
+   - **Tier 1 (≥0.85)**: Small LLM validates cached answer or generates new one
+   - **Tier 2 (0.70-0.85)**: Small LLM generates with cache context
+   - **Tier 3 (0.50-0.70)**: Fine-tuned model
+   - **Tier 4 (<0.50)**: Large LLM for novel questions
 
 **Tutoring Mode**: Interactive step-by-step problem solving using:
-- Session service for conversation state
+- Session service for conversation state (with `is_new_branch` optimization to skip cache on new nodes)
 - Intent classifier for understanding student responses
-- Small LLM for generating appropriate tutoring responses
+- Fine-tuned model for generating appropriate tutoring responses
 
 ## Getting Started
 
@@ -67,11 +66,10 @@ QDRANT_HOST=qdrant
 QDRANT_PORT=6333
 CACHE_TOP_K=5
 
-# 5-Tier Confidence Routing
-CONFIDENCE_TIER_1=0.95
-CONFIDENCE_TIER_2=0.85
-CONFIDENCE_TIER_3=0.70
-CONFIDENCE_TIER_4=0.50
+# 4-Tier Confidence Routing
+CONFIDENCE_TIER_1=0.85
+CONFIDENCE_TIER_2=0.70
+CONFIDENCE_TIER_3=0.50
 
 # Session Management
 SESSION_TTL_SECONDS=3600

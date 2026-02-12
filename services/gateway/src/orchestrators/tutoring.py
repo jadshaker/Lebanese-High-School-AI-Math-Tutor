@@ -118,18 +118,20 @@ async def _update_tutoring_state(
     question_id: str,
     depth: int,
     request_id: str,
+    is_new_branch: bool = False,
 ) -> dict:
     """Update tutoring state in session with actual node ID."""
     result = await call_service(
         f"{Config.SERVICES.SESSION_URL}/sessions/{session_id}/tutoring",
         {
-            "current_node": current_node_id,
+            "current_node_id": current_node_id,
             "question_id": question_id,
             "depth": depth,
+            "is_new_branch": is_new_branch,
         },
         request_id,
         timeout=5,
-        method="PUT",
+        method="PATCH",
     )
     return result
 
@@ -153,7 +155,7 @@ async def _search_tutoring_cache(
             {
                 "question_id": question_id,
                 "parent_id": parent_node_id,
-                "embedding": user_embedding,
+                "user_input_embedding": user_embedding,
                 "threshold": TUTORING_CACHE_THRESHOLD,
             },
             request_id,
@@ -198,7 +200,7 @@ async def _save_tutoring_interaction(
                 "question_id": question_id,
                 "parent_id": parent_node_id,
                 "user_input": user_input,
-                "embedding": user_embedding,
+                "user_input_embedding": user_embedding,
                 "system_response": system_response,
             },
             request_id,
@@ -428,6 +430,7 @@ async def handle_tutoring_interaction(
 
     # Step 1: Get or create session
     session = await _get_session(session_id, request_id)
+    is_new_branch = False
     if session is None:
         session = await _create_session(
             session_id, original_question, question_id, request_id
@@ -435,54 +438,65 @@ async def handle_tutoring_interaction(
         current_node_id = None
         depth = 0
     else:
-        tutoring_state = session.get("tutoring_state", {})
-        current_node_id = tutoring_state.get("current_node")
+        tutoring_state = session.get("tutoring", {})
+        current_node_id = tutoring_state.get("current_node_id")
         depth = tutoring_state.get("depth", 0)
+        is_new_branch = tutoring_state.get("is_new_branch", False)
 
-    # Step 2: Embed user response
-    user_embedding = await _embed_text(user_response, request_id)
-
-    # Step 3: Search cache for matching child node
-    cache_result = await _search_tutoring_cache(
-        question_id=question_id,
-        parent_node_id=current_node_id,
-        user_embedding=user_embedding,
-        request_id=request_id,
-    )
-
-    # Step 4: Check for cache hit
-    if cache_result.get("is_cache_hit") and cache_result.get("matched_node"):
-        matched_node = cache_result["matched_node"]
-        new_node_id = matched_node["id"]
-        tutor_response = matched_node["system_response"]
-        new_depth = matched_node.get("depth", depth + 1)
-
+    # Step 2: Check if we can skip cache search (new branch optimization)
+    if is_new_branch:
         logger.info(
-            f"Tutoring cache HIT: node_id={new_node_id}, score={cache_result['match_score']:.2f}",
+            "Skipping cache search: is_new_branch=True (node has no cached children)",
             request_id=request_id,
         )
+        # Go directly to intent classification + generation (step 5)
+        user_embedding = await _embed_text(user_response, request_id)
+    else:
+        # Step 2b: Embed user response
+        user_embedding = await _embed_text(user_response, request_id)
 
-        # Update session with the matched node
-        await _update_tutoring_state(
-            session_id=session_id,
-            current_node_id=new_node_id,
+        # Step 3: Search cache for matching child node
+        cache_result = await _search_tutoring_cache(
             question_id=question_id,
-            depth=new_depth,
+            parent_node_id=current_node_id,
+            user_embedding=user_embedding,
             request_id=request_id,
         )
 
-        is_complete = new_depth >= Config.TUTORING.MAX_INTERACTION_DEPTH
-        next_prompt = None if is_complete else "Do you understand? Would you like me to explain further?"
+        # Step 4: Check for cache hit
+        if cache_result.get("is_cache_hit") and cache_result.get("matched_node"):
+            matched_node = cache_result["matched_node"]
+            new_node_id = matched_node["id"]
+            tutor_response = matched_node["system_response"]
+            new_depth = matched_node.get("depth", depth + 1)
 
-        return {
-            "tutor_message": tutor_response,
-            "is_complete": is_complete,
-            "next_prompt": next_prompt,
-            "intent": "cached",
-            "cache_hit": True,
-        }
+            logger.info(
+                f"Tutoring cache HIT: node_id={new_node_id}, score={cache_result['match_score']:.2f}",
+                request_id=request_id,
+            )
 
-    # Step 5: Cache miss - classify intent
+            # Update session with the matched node (following existing path)
+            await _update_tutoring_state(
+                session_id=session_id,
+                current_node_id=new_node_id,
+                question_id=question_id,
+                depth=new_depth,
+                request_id=request_id,
+                is_new_branch=False,
+            )
+
+            is_complete = new_depth >= Config.TUTORING.MAX_INTERACTION_DEPTH
+            next_prompt = None if is_complete else "Do you understand? Would you like me to explain further?"
+
+            return {
+                "tutor_message": tutor_response,
+                "is_complete": is_complete,
+                "next_prompt": next_prompt,
+                "intent": "cached",
+                "cache_hit": True,
+            }
+
+    # Step 5: Cache miss (or skipped) - classify intent
     logger.info("Tutoring cache MISS: generating new response", request_id=request_id)
 
     context = f"The tutor is teaching: {original_question}"
@@ -518,7 +532,7 @@ async def handle_tutoring_interaction(
         request_id=request_id,
     )
 
-    # Step 9: Update session with new node
+    # Step 9: Update session with new node (mark as new branch since we just created it)
     if new_node_id and not tutoring_result["is_complete"]:
         await _update_tutoring_state(
             session_id=session_id,
@@ -526,6 +540,7 @@ async def handle_tutoring_interaction(
             question_id=question_id,
             depth=depth + 1,
             request_id=request_id,
+            is_new_branch=True,
         )
 
     logger.info(

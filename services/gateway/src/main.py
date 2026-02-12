@@ -228,7 +228,9 @@ async def chat_completions(
         reformulated_query = processing_result["reformulated_query"]
 
         # ===== ANSWER RETRIEVAL =====
-        retrieval_result = await retrieve_answer(reformulated_query, request_id)
+        retrieval_result = await retrieve_answer(
+            reformulated_query, request_id, original_query=user_message
+        )
         answer = retrieval_result["answer"]
         source = retrieval_result["source"]
 

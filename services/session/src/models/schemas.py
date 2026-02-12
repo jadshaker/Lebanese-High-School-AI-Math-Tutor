@@ -39,6 +39,7 @@ class TutoringState(BaseModel):
     current_node_id: Optional[str] = None
     traversal_path: list[str] = Field(default_factory=list)
     depth: int = 0
+    is_new_branch: bool = False
 
 
 class SessionData(BaseModel):
@@ -122,6 +123,7 @@ class TutoringUpdateRequest(BaseModel):
     current_node_id: Optional[str] = None
     depth: Optional[int] = None
     add_to_path: Optional[str] = Field(None, description="Node ID to add to path")
+    is_new_branch: Optional[bool] = None
 
 
 class MessageAddRequest(BaseModel):
