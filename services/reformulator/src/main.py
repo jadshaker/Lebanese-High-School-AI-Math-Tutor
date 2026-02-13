@@ -170,12 +170,17 @@ async def reformulate_query(
     """
     request_id = getattr(fastapi_request.state, "request_id", generate_request_id())
 
+    has_context = bool(
+        request.conversation_history and len(request.conversation_history) > 0
+    )
+
     logger.info(
         "Reformulating query",
         context={
             "input_type": request.input_type,
             "input_length": len(request.processed_input),
             "use_llm": Config.REFORMULATION.USE_LLM,
+            "has_conversation_context": has_context,
         },
         request_id=request_id,
     )
@@ -192,10 +197,24 @@ async def reformulate_query(
             improvements_made=["none (LLM reformulation disabled)"],
         )
 
+    # Summarize conversation context if provided
+    conversation_context = ""
+    if has_context and request.conversation_history is not None:
+        conversation_context = _summarize_conversation_context(
+            request.conversation_history, request_id
+        )
+        logger.info(
+            f"Summarized conversation context ({len(conversation_context)} chars)",
+            request_id=request_id,
+        )
+
     # Call Small LLM to reformulate the query
     try:
         reformulated, improvements = await _call_llm_for_reformulation(
-            request.processed_input, request.input_type, request_id
+            request.processed_input,
+            request.input_type,
+            request_id,
+            conversation_context,
         )
 
         logger.info(
@@ -228,8 +247,47 @@ async def reformulate_query(
         )
 
 
+def _summarize_conversation_context(conversation_history: list, request_id: str) -> str:
+    """
+    Summarize conversation history into a brief context string.
+
+    Args:
+        conversation_history: List of ConversationMessage objects
+        request_id: Request ID for logging
+
+    Returns:
+        Summarized context string
+    """
+    if not conversation_history:
+        return ""
+
+    # Take only the most recent messages
+    recent_messages = conversation_history[-Config.REFORMULATION.MAX_CONTEXT_MESSAGES :]
+
+    # Build context summary
+    context_parts = []
+    for msg in recent_messages:
+        role_label = "Student" if msg.role == "user" else "Tutor"
+        # Truncate long messages
+        content = msg.content[:200] + "..." if len(msg.content) > 200 else msg.content
+        context_parts.append(f"{role_label}: {content}")
+
+    context_summary = "\n".join(context_parts)
+
+    # Truncate if too long
+    if len(context_summary) > Config.REFORMULATION.MAX_CONTEXT_LENGTH:
+        context_summary = (
+            context_summary[: Config.REFORMULATION.MAX_CONTEXT_LENGTH] + "..."
+        )
+
+    return context_summary
+
+
 async def _call_llm_for_reformulation(
-    processed_input: str, input_type: str, request_id: str
+    processed_input: str,
+    input_type: str,
+    request_id: str,
+    conversation_context: str = "",
 ) -> tuple[str, list[str]]:
     """
     Call the Small LLM service to reformulate the query.
@@ -238,24 +296,38 @@ async def _call_llm_for_reformulation(
         processed_input: The processed user input
         input_type: Type of input (text or image)
         request_id: Request ID for logging
+        conversation_context: Summarized conversation context
 
     Returns:
         Tuple of (reformulated_query, improvements_made)
     """
     # Build a prompt that instructs the LLM to reformulate the question
-    prompt = f"""You are a math question reformulator. Your task is to improve the clarity and precision of math questions.
+    context_section = ""
+    if conversation_context:
+        context_section = f"""
+Previous conversation context:
+{conversation_context}
 
-Original question: "{processed_input}"
+"""
 
-Please reformulate this question to:
-1. Use standard mathematical notation (e.g., x^2 instead of "x squared")
-2. Make the question clear and complete
-3. Fix any grammar or structural issues
-4. Ensure it's precise for mathematical problem-solving
+    prompt = f"""You are a math tutor assistant. Your task is to interpret user input and reformulate it if needed.
+{context_section}
+User input: "{processed_input}"
 
-Respond ONLY with the reformulated question. Do not add explanations, introductions, or any other text.
+Rules:
+- If the input is a math question or math-related, reformulate it to:
+  1. Use standard mathematical notation (e.g., x^2 instead of "x squared")
+  2. Make the question clear and complete
+  3. Fix any grammar or structural issues
+  4. Ensure it's precise for mathematical problem-solving
+  5. If there's conversation context, resolve any references (like "it", "that", "the same") to make the question standalone
+- If the input is a greeting (e.g., "hello", "hi", "hey"), return it exactly as-is.
+- If the input is a general non-math question or statement, return it exactly as-is.
+- Do NOT invent a math problem when there is none.
 
-Reformulated question:"""
+Respond ONLY with the reformulated question or the original input. Do not add explanations, introductions, or any other text.
+
+Output:"""
 
     # Prepare request to Small LLM using OpenAI chat completions format
     payload = {
@@ -305,7 +377,10 @@ Reformulated question:"""
                 return processed_input, ["none (reformulation failed)"]
 
             # Analyze what improvements were made
-            improvements = _detect_improvements(processed_input, reformulated)
+            had_context = bool(conversation_context)
+            improvements = _detect_improvements(
+                processed_input, reformulated, had_context
+            )
 
             logger.info(
                 "Small LLM reformulation complete",
@@ -377,13 +452,16 @@ def _clean_llm_response(response: str) -> str:
     return response.strip()
 
 
-def _detect_improvements(original: str, reformulated: str) -> list[str]:
+def _detect_improvements(
+    original: str, reformulated: str, had_context: bool = False
+) -> list[str]:
     """
     Detect what improvements were made to the query.
 
     Args:
         original: Original input
         reformulated: Reformulated query
+        had_context: Whether conversation context was used
 
     Returns:
         List of improvements made
@@ -405,6 +483,13 @@ def _detect_improvements(original: str, reformulated: str) -> list[str]:
     # Check if capitalization was improved
     if reformulated[0].isupper() and not original[0].isupper():
         improvements.append("improved capitalization")
+
+    # Check for reference resolution (e.g., "it" → specific term)
+    reference_words = ["it", "that", "this", "the same", "them"]
+    original_lower = original.lower()
+    if had_context and any(word in original_lower for word in reference_words):
+        if not any(word in reformulated.lower() for word in reference_words):
+            improvements.append("resolved contextual references")
 
     # Generic improvement if we detected changes but no specific improvements
     if not improvements and original.lower() != reformulated.lower():

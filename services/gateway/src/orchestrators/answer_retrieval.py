@@ -1,5 +1,5 @@
+import re
 import time
-from urllib.error import HTTPError, URLError
 
 from src.clients.http_client import call_service
 from src.config import Config
@@ -16,24 +16,26 @@ from src.metrics import (
     gateway_llm_calls_total,
     gateway_small_llm_duration_seconds,
 )
+from src.models.schemas import ConfidenceTier
 
 logger = StructuredLogger("gateway")
 
 
+def _determine_tier(confidence: float) -> ConfidenceTier:
+    """Determine which tier to use based on confidence score."""
+    thresholds = Config.CONFIDENCE_TIERS
+    if confidence >= thresholds.TIER_1_THRESHOLD:
+        return ConfidenceTier.TIER_1_SMALL_LLM_VALIDATE_OR_GENERATE
+    elif confidence >= thresholds.TIER_2_THRESHOLD:
+        return ConfidenceTier.TIER_2_SMALL_LLM_CONTEXT
+    elif confidence >= thresholds.TIER_3_THRESHOLD:
+        return ConfidenceTier.TIER_3_FINE_TUNED
+    else:
+        return ConfidenceTier.TIER_4_LARGE_LLM
+
+
 async def _embed_query(query: str, request_id: str) -> list[float]:
-    """
-    Call Embedding Service to convert query to vector
-
-    Args:
-        query: User's question text
-        request_id: Request ID for distributed tracing
-
-    Returns:
-        Embedding vector as list of floats
-
-    Raises:
-        HTTPException: If embedding service fails
-    """
+    """Call Embedding Service to convert query to vector."""
     start_time = time.time()
     try:
         logger.info("  → Embedding Service", request_id=request_id)
@@ -68,25 +70,13 @@ async def _embed_query(query: str, request_id: str) -> list[float]:
 
 
 async def _search_cache(embedding: list[float], request_id: str) -> list[dict]:
-    """
-    Search cache for similar Q&A pairs
-
-    Args:
-        embedding: Query embedding vector
-        request_id: Request ID for distributed tracing
-
-    Returns:
-        List of similar cached Q&A pairs
-
-    Raises:
-        HTTPException: If cache service fails (non-critical)
-    """
+    """Search vector cache for similar Q&A pairs."""
     start_time = time.time()
     try:
-        logger.info("  → Cache Search", request_id=request_id)
+        logger.info("  → Vector Cache Search", request_id=request_id)
 
         result = await call_service(
-            f"{Config.SERVICES.CACHE_URL}/search",
+            f"{Config.SERVICES.VECTOR_CACHE_URL}/search",
             {"embedding": embedding, "top_k": Config.CACHE_TOP_K},
             request_id,
             timeout=10,
@@ -96,18 +86,17 @@ async def _search_cache(embedding: list[float], request_id: str) -> list[dict]:
         duration = time.time() - start_time
         gateway_cache_search_duration_seconds.observe(duration)
 
-        top_sim = results[0].get("similarity_score", 0) if results else 0
+        top_sim = results[0].get("score", 0) if results else 0
         logger.info(
-            f"  ✓ Cache Search ({duration:.2f}s): {len(results)} results, top similarity: {top_sim:.2f}",
+            f"  ✓ Vector Cache Search ({duration:.2f}s): {len(results)} results, top similarity: {top_sim:.2f}",
             request_id=request_id,
         )
         return results
 
-    except (HTTPError, URLError) as e:
+    except Exception as e:
         duration = time.time() - start_time
         gateway_cache_search_duration_seconds.observe(duration)
 
-        # Cache failure is non-critical, return empty results
         logger.warning(
             f"Cache search failed ({duration:.2f}s): {str(e)} (non-critical)",
             request_id=request_id,
@@ -115,72 +104,134 @@ async def _search_cache(embedding: list[float], request_id: str) -> list[dict]:
         return []
 
 
-async def _query_small_llm(
-    query: str, cached_results: list[dict], request_id: str
+def _clean_llm_response(response: str) -> str:
+    """Strip <think>...</think> blocks from DeepSeek-R1 style responses."""
+    if "<think>" in response:
+        response = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
+    return response
+
+
+async def _validate_or_generate_with_small_llm(
+    query: str, cached_question: str, cached_answer: str, request_id: str
 ) -> dict:
     """
-    Query Small LLM with cached context using OpenAI chat completions format
+    Tier 1: Use Small LLM to validate cached answer OR generate a new one.
 
-    Args:
-        query: User's question
-        cached_results: Similar cached Q&A pairs
-        request_id: Request ID for distributed tracing
+    Single LLM call that checks if the cached answer is valid for the query,
+    and if not, generates a correct answer using the cached Q&A as context.
 
     Returns:
-        Dict with answer, confidence, and is_exact_match
-
-    Raises:
-        HTTPException: If small LLM service fails
+        dict with "answer" (str) and "cache_reused" (bool)
     """
     start_time = time.time()
     try:
-        # Check for exact match in cached results (similarity >= 0.95)
-        if cached_results:
-            for cached in cached_results:
-                if cached.get("similarity_score", 0) >= 0.95:
-                    # Found exact match, return cached answer
-                    duration = time.time() - start_time
-                    similarity = cached["similarity_score"]
-                    logger.info(
-                        f"  ✓ Exact cache match found ({duration:.2f}s): similarity {similarity:.3f}",
-                        request_id=request_id,
-                    )
-                    return {
-                        "answer": cached["answer"],
-                        "confidence": cached["similarity_score"],
-                        "is_exact_match": True,
-                    }
+        messages = [
+            {
+                "role": "system",
+                "content": """You are a math answer validator and generator.
+You will receive a user's question and a cached question-answer pair.
 
-        # No exact match - build OpenAI messages format
-        messages = []
+If the cached answer correctly and completely answers the user's question, respond with:
+CACHE_VALID
+<the cached answer, unchanged>
 
-        # Add system message with cached context if available
-        if cached_results and len(cached_results) > 0:
-            context = "You are a math tutor. Here are some similar questions and answers for context:\n\n"
-            for i, cached in enumerate(cached_results[:3], 1):
-                context += f"{i}. Q: {cached['question']}\n   A: {cached['answer']}\n\n"
-            context += "Use these examples to help answer the user's question."
-            messages.append({"role": "system", "content": context})
-        else:
-            messages.append({"role": "system", "content": "You are a math tutor."})
+If the cached answer does NOT correctly answer the user's question, respond with:
+GENERATED
+<your own correct answer to the user's question>
 
-        # Add user message
-        messages.append({"role": "user", "content": query})
+You MUST start your response with either CACHE_VALID or GENERATED on the first line, followed by the answer on subsequent lines.""",
+            },
+            {
+                "role": "user",
+                "content": f"User's Question: {query}\n\nCached Question: {cached_question}\n\nCached Answer: {cached_answer}",
+            },
+        ]
 
-        cached_info = (
-            f"with {len(cached_results)} cached examples"
-            if cached_results
-            else "no cache context"
-        )
-        logger.info(f"  → Small LLM ({cached_info})", request_id=request_id)
+        logger.info("  → Small LLM (validate-or-generate)", request_id=request_id)
 
-        # Call Small LLM with OpenAI format
         result = await call_service(
             f"{Config.SERVICES.SMALL_LLM_URL}/v1/chat/completions",
-            {
-                "model": "deepseek-r1:7b",
-                "messages": messages,
-            },
+            {"model": "deepseek-r1:7b", "messages": messages},
+            request_id,
+            timeout=60,
+        )
+
+        response_text = result["choices"][0]["message"]["content"]
+        duration = time.time() - start_time
+        gateway_small_llm_duration_seconds.observe(duration)
+        gateway_llm_calls_total.labels(
+            llm_service="small_llm_validate_or_generate"
+        ).inc()
+
+        # Clean <think> blocks from DeepSeek-R1
+        response_text = _clean_llm_response(response_text)
+
+        # Parse the prefix
+        lines = response_text.strip().split("\n", 1)
+        prefix = lines[0].strip().upper()
+        answer_text = lines[1].strip() if len(lines) > 1 else ""
+
+        if prefix == "CACHE_VALID":
+            # Use the cached answer (LLM confirmed it's valid)
+            answer = answer_text if answer_text else cached_answer
+            cache_reused = True
+            logger.info(
+                f"  ✓ Small LLM validate-or-generate ({duration:.1f}s): CACHE_VALID ({len(answer)} chars)",
+                request_id=request_id,
+            )
+        else:
+            # LLM generated a new answer (GENERATED prefix or unrecognized)
+            answer = answer_text if answer_text else response_text
+            cache_reused = False
+            logger.info(
+                f"  ✓ Small LLM validate-or-generate ({duration:.1f}s): GENERATED ({len(answer)} chars)",
+                request_id=request_id,
+            )
+
+        return {"answer": answer, "cache_reused": cache_reused}
+
+    except Exception as e:
+        duration = time.time() - start_time
+        gateway_small_llm_duration_seconds.observe(duration)
+        gateway_errors_total.labels(
+            error_type="small_llm_validate_or_generate_error"
+        ).inc()
+
+        logger.error(
+            f"Small LLM validate-or-generate failed ({duration:.1f}s): {str(e)}",
+            request_id=request_id,
+        )
+        raise
+
+
+async def _query_small_llm_with_context(
+    query: str, cached_results: list[dict], request_id: str
+) -> str:
+    """
+    Tier 2: Query Small LLM with cached context to generate answer.
+    """
+    start_time = time.time()
+    try:
+        context = "You are a math tutor. Here are some similar questions and answers for context:\n\n"
+        for i, cached in enumerate(cached_results[:3], 1):
+            context += (
+                f"{i}. Q: {cached['question_text']}\n   A: {cached['answer_text']}\n\n"
+            )
+        context += "Use these examples to help answer the user's question accurately."
+
+        messages = [
+            {"role": "system", "content": context},
+            {"role": "user", "content": query},
+        ]
+
+        logger.info(
+            f"  → Small LLM (with {len(cached_results)} context examples)",
+            request_id=request_id,
+        )
+
+        result = await call_service(
+            f"{Config.SERVICES.SMALL_LLM_URL}/v1/chat/completions",
+            {"model": "deepseek-r1:7b", "messages": messages},
             request_id,
             timeout=60,
         )
@@ -188,34 +239,65 @@ async def _query_small_llm(
         answer = result["choices"][0]["message"]["content"]
         duration = time.time() - start_time
         gateway_small_llm_duration_seconds.observe(duration)
-
-        # Determine confidence based on whether we had cached context
-        confidence = 0.7 if cached_results else 0.5
-
-        # Record small LLM call
-        gateway_llm_calls_total.labels(llm_service="small_llm").inc()
-
-        # Record confidence
-        gateway_confidence.observe(confidence)
+        gateway_llm_calls_total.labels(llm_service="small_llm_context").inc()
 
         logger.info(
-            f"  ✓ Small LLM ({duration:.1f}s): {len(answer)} chars, confidence {confidence:.1f}",
+            f"  ✓ Small LLM with context ({duration:.1f}s): {len(answer)} chars",
             request_id=request_id,
         )
-
-        return {
-            "answer": answer,
-            "confidence": confidence,
-            "is_exact_match": False,
-        }
+        return answer
 
     except Exception as e:
         duration = time.time() - start_time
         gateway_small_llm_duration_seconds.observe(duration)
-        gateway_errors_total.labels(error_type="small_llm_error").inc()
+        gateway_errors_total.labels(error_type="small_llm_context_error").inc()
 
         logger.error(
-            f"Small LLM service failed ({duration:.1f}s): {str(e)}",
+            f"Small LLM with context failed ({duration:.1f}s): {str(e)}",
+            request_id=request_id,
+        )
+        raise
+
+
+async def _query_fine_tuned_model(query: str, request_id: str) -> str:
+    """
+    Tier 3: Query fine-tuned model for domain-specific answer.
+    """
+    start_time = time.time()
+    try:
+        messages = [
+            {
+                "role": "system",
+                "content": "You are an expert mathematics tutor for Lebanese high school students.",
+            },
+            {"role": "user", "content": query},
+        ]
+
+        logger.info("  → Fine-Tuned Model", request_id=request_id)
+
+        result = await call_service(
+            f"{Config.SERVICES.FINE_TUNED_MODEL_URL}/v1/chat/completions",
+            {"model": "tinyllama:latest", "messages": messages},
+            request_id,
+            timeout=60,
+        )
+
+        answer = result["choices"][0]["message"]["content"]
+        duration = time.time() - start_time
+        gateway_llm_calls_total.labels(llm_service="fine_tuned").inc()
+
+        logger.info(
+            f"  ✓ Fine-Tuned Model ({duration:.1f}s): {len(answer)} chars",
+            request_id=request_id,
+        )
+        return answer
+
+    except Exception as e:
+        duration = time.time() - start_time
+        gateway_errors_total.labels(error_type="fine_tuned_error").inc()
+
+        logger.error(
+            f"Fine-tuned model failed ({duration:.1f}s): {str(e)}",
             request_id=request_id,
         )
         raise
@@ -223,23 +305,12 @@ async def _query_small_llm(
 
 async def _query_large_llm(query: str, request_id: str) -> str:
     """
-    Query Large LLM for final answer using OpenAI chat completions format
-
-    Args:
-        query: User's question
-        request_id: Request ID for distributed tracing
-
-    Returns:
-        Answer string from Large LLM
-
-    Raises:
-        HTTPException: If large LLM service fails
+    Tier 4: Query Large LLM for complex or novel questions.
     """
     start_time = time.time()
     try:
-        logger.info("  → Large LLM [cache miss]", request_id=request_id)
+        logger.info("  → Large LLM", request_id=request_id)
 
-        # Build OpenAI messages format
         messages = [
             {
                 "role": "system",
@@ -250,10 +321,7 @@ async def _query_large_llm(query: str, request_id: str) -> str:
 
         result = await call_service(
             f"{Config.SERVICES.LARGE_LLM_URL}/v1/chat/completions",
-            {
-                "model": "gpt-4o-mini",
-                "messages": messages,
-            },
+            {"model": "gpt-4o-mini", "messages": messages},
             request_id,
             timeout=60,
         )
@@ -261,8 +329,6 @@ async def _query_large_llm(query: str, request_id: str) -> str:
         answer = result["choices"][0]["message"]["content"]
         duration = time.time() - start_time
         gateway_large_llm_duration_seconds.observe(duration)
-
-        # Record large LLM call
         gateway_llm_calls_total.labels(llm_service="large_llm").inc()
 
         logger.info(
@@ -284,24 +350,25 @@ async def _query_large_llm(query: str, request_id: str) -> str:
 
 
 async def _save_to_cache(
-    query: str, answer: str, embedding: list[float], request_id: str
+    original_query: str,
+    reformulated_query: str,
+    answer: str,
+    embedding: list[float],
+    request_id: str,
 ) -> None:
-    """
-    Save Q&A pair to cache (non-critical operation)
-
-    Args:
-        query: User's question
-        answer: Final answer
-        embedding: Query embedding vector
-        request_id: Request ID for distributed tracing
-    """
+    """Save Q&A pair to vector cache (non-critical operation)."""
     start_time = time.time()
     try:
-        logger.info("  → Cache Save", request_id=request_id)
+        logger.info("  → Vector Cache Save", request_id=request_id)
 
         await call_service(
-            f"{Config.SERVICES.CACHE_URL}/save",
-            {"question": query, "answer": answer, "embedding": embedding},
+            f"{Config.SERVICES.VECTOR_CACHE_URL}/questions",
+            {
+                "question_text": original_query,
+                "reformulated_text": reformulated_query,
+                "answer_text": answer,
+                "embedding": embedding,
+            },
             request_id,
             timeout=10,
         )
@@ -309,104 +376,148 @@ async def _save_to_cache(
         duration = time.time() - start_time
         gateway_cache_save_duration_seconds.observe(duration)
 
-        # Successfully saved (or acknowledged in stub mode)
-        logger.info(
-            f"  ✓ Cache Save ({duration:.2f}s)",
-            request_id=request_id,
-        )
+        logger.info(f"  ✓ Vector Cache Save ({duration:.2f}s)", request_id=request_id)
 
-    except (HTTPError, URLError) as e:
+    except Exception as e:
         duration = time.time() - start_time
         gateway_cache_save_duration_seconds.observe(duration)
 
-        # Cache save failure is non-critical, silently continue
         logger.warning(
             f"Cache save failed ({duration:.2f}s): {str(e)} (non-critical)",
             request_id=request_id,
         )
 
 
-async def retrieve_answer(query: str, request_id: str) -> dict:
+async def retrieve_answer(
+    query: str, request_id: str, original_query: str = ""
+) -> dict:
     """
-    Execute Answer Retrieval pipeline
+    Execute 4-Tier Answer Retrieval pipeline.
 
-    Flow:
-        1. Embed query (Embedding Service)
-        2. Search cache (Cache Service)
-        3. Query Small LLM with cache context
-        4. If no exact match: Query Large LLM
-        5. Save to cache
+    Tiers:
+        1. Small LLM validate-or-generate (>=0.85): Validate cached answer or generate new
+        2. Small LLM with context (0.70-0.85): Generate with cached examples
+        3. Fine-tuned model (0.50-0.70): Use domain-specific model
+        4. Large LLM (<0.50): Use powerful model for novel questions
 
     Args:
         query: Reformulated query from Data Processing pipeline
         request_id: Request ID for tracing
+        original_query: Original user query before reformulation
 
     Returns:
         Dict with:
             - answer: Final answer text
-            - source: Source of answer ('cache', 'small_llm', 'large_llm')
-            - confidence: Confidence score (if applicable)
+            - source: Source tier description
+            - tier: ConfidenceTier enum value
+            - confidence: Confidence score
             - used_cache: Whether cache was used
-
-    Raises:
-        HTTPException: If critical services fail
+            - cache_reused: Whether cached answer was reused (Tier 1 only)
     """
-    logger.info("Answer Retrieval Pipeline: Started", request_id=request_id)
+    original_query = original_query or query
+    logger.info("4-Tier Answer Retrieval Pipeline: Started", request_id=request_id)
 
     # Step 1: Embed the query
     embedding = await _embed_query(query, request_id)
 
-    # Step 2: Search cache for similar Q&A pairs
+    # Step 2: Search vector cache
     cached_results = await _search_cache(embedding, request_id)
 
-    # Step 3: Try Small LLM with cached results (or use exact match if found)
-    small_llm_response = await _query_small_llm(query, cached_results, request_id)
-
-    # Step 4: Decision point - check if exact match
-    if (
-        small_llm_response.get("is_exact_match")
-        and small_llm_response.get("answer") is not None
-    ):
-        # Exact match found, return Small LLM answer (cached answer)
-        # Record cache hit
-        gateway_cache_hits_total.inc()
-
-        # Record confidence if available
-        confidence = small_llm_response.get("confidence")
-        if confidence is not None:
-            gateway_confidence.observe(confidence)
-
-        answer = small_llm_response["answer"]
-
-        logger.info(
-            f"Answer Retrieval Pipeline: Completed - Exact cache match ({len(answer)} chars)",
-            request_id=request_id,
-        )
-
-        return {
-            "answer": answer,
-            "source": "cache",
-            "confidence": confidence,
-            "used_cache": True,
-        }
-
-    # Step 5: No exact match - call Large LLM
-    # Record cache miss and large LLM call
-    gateway_cache_misses_total.inc()
-
-    large_llm_answer = await _query_large_llm(query, request_id)
-
-    # Step 6: Save Large LLM answer to cache
-    await _save_to_cache(query, large_llm_answer, embedding, request_id)
+    # Determine confidence and tier
+    top_confidence = cached_results[0].get("score", 0) if cached_results else 0
+    tier = _determine_tier(top_confidence)
+    gateway_confidence.observe(top_confidence)
 
     logger.info(
-        f"Answer Retrieval Pipeline: Completed - Large LLM used ({len(large_llm_answer)} chars)",
+        f"Routing decision: confidence={top_confidence:.3f}, tier={tier.value}",
+        request_id=request_id,
+    )
+
+    answer = None
+    source = tier.value
+    used_cache = False
+    cache_reused = None
+
+    # Execute based on tier
+    if tier == ConfidenceTier.TIER_1_SMALL_LLM_VALIDATE_OR_GENERATE:
+        # Tier 1: Small LLM validates cached answer or generates new one
+        cached_question = cached_results[0]["question_text"]
+        cached_answer = cached_results[0]["answer_text"]
+
+        try:
+            result = await _validate_or_generate_with_small_llm(
+                query, cached_question, cached_answer, request_id
+            )
+            answer = result["answer"]
+            cache_reused = result["cache_reused"]
+
+            if cache_reused:
+                gateway_cache_hits_total.inc()
+                used_cache = True
+                source = f"{tier.value}_cache_reused"
+                logger.info(
+                    f"Tier 1: Cache validated ({len(answer)} chars)",
+                    request_id=request_id,
+                )
+            else:
+                gateway_cache_misses_total.inc()
+                source = f"{tier.value}_generated"
+                logger.info(
+                    f"Tier 1: Generated new answer ({len(answer)} chars)",
+                    request_id=request_id,
+                )
+                await _save_to_cache(
+                    original_query, query, answer, embedding, request_id
+                )
+
+        except Exception:
+            # Fallback to Large LLM if Small LLM fails
+            logger.warning(
+                "Tier 1: Small LLM failed, falling back to Large LLM",
+                request_id=request_id,
+            )
+            gateway_cache_misses_total.inc()
+            answer = await _query_large_llm(query, request_id)
+            source = f"{tier.value}_fallback"
+            await _save_to_cache(original_query, query, answer, embedding, request_id)
+
+    elif tier == ConfidenceTier.TIER_2_SMALL_LLM_CONTEXT:
+        # Tier 2: Small LLM with cached context
+        gateway_cache_misses_total.inc()
+        answer = await _query_small_llm_with_context(query, cached_results, request_id)
+        await _save_to_cache(original_query, query, answer, embedding, request_id)
+
+    elif tier == ConfidenceTier.TIER_3_FINE_TUNED:
+        # Tier 3: Fine-tuned model
+        gateway_cache_misses_total.inc()
+        try:
+            answer = await _query_fine_tuned_model(query, request_id)
+        except Exception:
+            # Fallback to Large LLM if fine-tuned fails
+            logger.warning(
+                "Tier 3: Fine-tuned failed, falling back to Large LLM",
+                request_id=request_id,
+            )
+            answer = await _query_large_llm(query, request_id)
+            source = f"{tier.value}_fallback"
+        await _save_to_cache(original_query, query, answer, embedding, request_id)
+
+    else:
+        # Tier 4: Large LLM
+        gateway_cache_misses_total.inc()
+        answer = await _query_large_llm(query, request_id)
+        await _save_to_cache(original_query, query, answer, embedding, request_id)
+
+    logger.info(
+        f"4-Tier Answer Retrieval Pipeline: Completed - {source} ({len(answer)} chars)",
         request_id=request_id,
     )
 
     return {
-        "answer": large_llm_answer,
-        "source": "large_llm",
-        "confidence": None,
-        "used_cache": False,
+        "answer": answer,
+        "source": source,
+        "tier": tier,
+        "confidence": top_confidence,
+        "used_cache": used_cache,
+        "cache_reused": cache_reused,
     }

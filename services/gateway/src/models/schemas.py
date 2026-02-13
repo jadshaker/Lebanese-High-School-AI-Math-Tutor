@@ -1,6 +1,16 @@
+from enum import Enum
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
+
+
+class ConfidenceTier(str, Enum):
+    """4-tier confidence routing levels"""
+
+    TIER_1_SMALL_LLM_VALIDATE_OR_GENERATE = "tier_1_small_llm_validate_or_generate"
+    TIER_2_SMALL_LLM_CONTEXT = "tier_2_small_llm_context"
+    TIER_3_FINE_TUNED = "tier_3_fine_tuned"
+    TIER_4_LARGE_LLM = "tier_4_large_llm"
 
 
 class ChatMessage(BaseModel):
@@ -66,3 +76,40 @@ class ModelListResponse(BaseModel):
 
     object: Literal["list"] = Field(default="list")
     data: list[Model] = Field(..., description="List of available models")
+
+
+class TutoringRequest(BaseModel):
+    """Request for tutoring interaction"""
+
+    session_id: str = Field(..., description="Session ID for stateful tutoring")
+    user_response: str = Field(..., description="User's response to tutor prompt")
+    question_id: Optional[str] = Field(
+        None, description="Question ID from initial query"
+    )
+    original_question: Optional[str] = Field(None, description="Original question text")
+    original_answer: Optional[str] = Field(
+        None, description="Original answer for context"
+    )
+
+
+class TutoringResponse(BaseModel):
+    """Response from tutoring interaction"""
+
+    session_id: str
+    tutor_message: str
+    is_complete: bool = Field(default=False, description="Whether tutoring is complete")
+    next_prompt: Optional[str] = Field(None, description="Next question if continuing")
+    intent: Optional[str] = Field(None, description="Classified intent")
+    cache_hit: bool = Field(
+        default=False, description="Whether response was from cache"
+    )
+
+
+class RetrievalMetadata(BaseModel):
+    """Metadata about how an answer was retrieved"""
+
+    tier: ConfidenceTier
+    confidence_score: float
+    cache_hit: bool
+    llm_used: Optional[str] = None
+    cache_reused: Optional[bool] = None

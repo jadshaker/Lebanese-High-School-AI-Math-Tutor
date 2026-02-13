@@ -27,9 +27,9 @@ jobs:
         env:
           RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
         run: |
-          echo "Creating RunPod A40 pod with ollama/ollama image..."
+          echo "Creating RunPod A40 pod with ollama/ollama:latest image..."
 
-          # Create pod using REST API
+          # Create pod using REST API with image directly (no template needed)
           RESPONSE=$(curl -s -X POST "https://rest.runpod.io/v1/pods" \
             -H "Authorization: Bearer $RUNPOD_API_KEY" \
             -H "Content-Type: application/json" \
@@ -38,7 +38,10 @@ jobs:
               "gpuCount": 1,
               "gpuTypeIds": ["NVIDIA A40"],
               "name": "ci-test-pod",
-              "templateId": "q5rqanpolz"
+              "imageName": "ollama/ollama:latest",
+              "containerDiskInGb": 50,
+              "volumeInGb": 50,
+              "ports": ["11434/http"]
             }')
 
           echo "Response: $RESPONSE"
@@ -158,27 +161,28 @@ jobs:
           OLLAMA_URL="https://${POD_ID}-11434.proxy.runpod.net"
 
           cat > .env << EOF
-          # Environment variables for CI
           OPENAI_API_KEY=$OPENAI_API_KEY
-
-          # Small LLM Service Configuration (Ollama)
           SMALL_LLM_SERVICE_URL=$OLLAMA_URL
           SMALL_LLM_MODEL_NAME=deepseek-r1:7b
-
-          # Embedding Service Configuration
           EMBEDDING_MODEL=text-embedding-3-small
           EMBEDDING_DIMENSIONS=1536
-
-          # Fine-Tuned Model Service Configuration (Ollama)
           FINE_TUNED_MODEL_SERVICE_URL=$OLLAMA_URL
           FINE_TUNED_MODEL_NAME=tinyllama:latest
-
-          # Answer Retrieval Service Configuration
           CACHE_TOP_K=5
-
-          # Data Processing Service Configuration (Phase 1)
-          INPUT_PROCESSOR_SERVICE_URL=http://input-processor:8004
-          REFORMULATOR_SERVICE_URL=http://reformulator:8007
+          QDRANT_HOST=qdrant
+          QDRANT_PORT=6333
+          CONFIDENCE_TIER_1=0.85
+          CONFIDENCE_TIER_2=0.70
+          CONFIDENCE_TIER_3=0.50
+          SESSION_TTL_SECONDS=3600
+          SESSION_MAX_HISTORY=50
+          SESSION_CLEANUP_INTERVAL=300
+          TUTORING_ENABLED=true
+          TUTORING_MAX_DEPTH=4
+          TUTORING_INTERACTION_THRESHOLD=0.85
+          INTENT_RULE_CONFIDENCE_THRESHOLD=0.80
+          INTENT_USE_LLM_FALLBACK=true
+          REFORMULATOR_USE_LLM=true
           EOF
 
           echo "✓ .env file created with RunPod URL: $OLLAMA_URL"
@@ -197,11 +201,13 @@ jobs:
             "gateway:8000"
             "large-llm:8001"
             "embedding:8002"
-            "cache:8003"
+            "vector-cache:8003"
             "input-processor:8004"
             "small-llm:8005"
             "fine-tuned-model:8006"
             "reformulator:8007"
+            "intent-classifier:8009"
+            "session:8008"
           )
 
           TIMEOUT=120

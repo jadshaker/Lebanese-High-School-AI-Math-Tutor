@@ -109,14 +109,6 @@ def embedding_app():
 
 
 @pytest.fixture(scope="module")
-def cache_app():
-    """Load cache service app - keeps modules loaded for entire test module"""
-    app = load_service_app_for_module("cache")
-    yield app
-    cleanup_service_modules()
-
-
-@pytest.fixture(scope="module")
 def small_llm_app():
     """Load small_llm service app - keeps modules loaded for entire test module"""
     app = load_service_app_for_module("small_llm")
@@ -144,5 +136,39 @@ def input_processor_app():
 def reformulator_app():
     """Load reformulator service app - keeps modules loaded for entire test module"""
     app = load_service_app_for_module("reformulator")
+    yield app
+    cleanup_service_modules()
+
+
+@pytest.fixture(scope="module")
+def vector_cache_app():
+    """Load vector_cache service app - keeps modules loaded for entire test module"""
+    # Mock Qdrant client before importing
+    mock_qdrant = MagicMock()
+    mock_qdrant_models = MagicMock()
+    mock_qdrant.models = mock_qdrant_models
+    sys.modules["qdrant_client"] = mock_qdrant
+    sys.modules["qdrant_client.models"] = mock_qdrant_models
+
+    app = load_service_app_for_module("vector_cache")
+    yield app
+    # Clean up qdrant mocks
+    sys.modules.pop("qdrant_client", None)
+    sys.modules.pop("qdrant_client.models", None)
+    cleanup_service_modules()
+
+
+@pytest.fixture(scope="module")
+def session_app():
+    """Load session service app - keeps modules loaded for entire test module"""
+    app = load_service_app_for_module("session")
+    yield app
+    cleanup_service_modules()
+
+
+@pytest.fixture(scope="module")
+def intent_classifier_app():
+    """Load intent_classifier service app - keeps modules loaded for entire test module"""
+    app = load_service_app_for_module("intent_classifier")
     yield app
     cleanup_service_modules()

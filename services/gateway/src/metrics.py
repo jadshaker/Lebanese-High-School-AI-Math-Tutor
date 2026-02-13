@@ -73,18 +73,18 @@ gateway_llm_calls_total = Counter(
 
 gateway_cache_hits_total = Counter(
     "gateway_cache_hits_total",
-    "Total cache hits (exact matches with similarity >= 0.95)",
+    "Total cache hits (validated by Small LLM)",
 )
 
 gateway_cache_misses_total = Counter(
     "gateway_cache_misses_total",
-    "Total cache misses (no exact match, required large LLM call)",
+    "Total cache misses",
 )
 
 gateway_confidence = Histogram(
     "gateway_confidence",
     "Confidence scores of gateway results",
-    buckets=[0, 0.5, 0.7, 0.8, 0.9, 0.95, 1.0],
+    buckets=[0, 0.5, 0.7, 0.85, 0.9, 0.95, 1.0],
 )
 
 gateway_errors_total = Counter(
