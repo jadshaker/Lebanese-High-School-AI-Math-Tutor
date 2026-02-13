@@ -12,9 +12,6 @@ from src.metrics import (
 
 logger = StructuredLogger("gateway")
 
-# Threshold for tutoring cache hit
-TUTORING_CACHE_THRESHOLD = 0.85
-
 
 async def _classify_intent(text: str, context: str | None, request_id: str) -> dict:
     """Classify user intent using the intent classifier service."""
@@ -154,7 +151,7 @@ async def _search_tutoring_cache(
                 "question_id": question_id,
                 "parent_id": parent_node_id,
                 "user_input_embedding": user_embedding,
-                "threshold": TUTORING_CACHE_THRESHOLD,
+                "threshold": Config.TUTORING.CACHE_THRESHOLD,
             },
             request_id,
             timeout=10,
