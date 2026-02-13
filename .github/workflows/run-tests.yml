@@ -41,8 +41,7 @@ jobs:
               "imageName": "ollama/ollama:latest",
               "containerDiskInGb": 50,
               "volumeInGb": 50,
-              "ports": ["11434/http"],
-              "dockerArgs": ""
+              "ports": ["11434/http"]
             }')
 
           echo "Response: $RESPONSE"
