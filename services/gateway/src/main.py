@@ -25,7 +25,11 @@ from src.models.schemas import (
     TutoringRequest,
     TutoringResponse,
 )
-from src.orchestrators import handle_tutoring_interaction, process_user_input, retrieve_answer
+from src.orchestrators import (
+    handle_tutoring_interaction,
+    process_user_input,
+    retrieve_answer,
+)
 
 app = FastAPI(title="Math Tutor API Gateway")
 logger = StructuredLogger("gateway")
@@ -320,7 +324,9 @@ async def tutoring_interaction(
         # If not provided, try to get from session
         if not original_question or not question_id:
             try:
-                session_url = f"{Config.SERVICES.SESSION_URL}/sessions/{request.session_id}"
+                session_url = (
+                    f"{Config.SERVICES.SESSION_URL}/sessions/{request.session_id}"
+                )
                 req = Request(session_url, method="GET")
                 with urlopen(req, timeout=5) as response:
                     session_data = json.loads(response.read().decode("utf-8"))

@@ -33,14 +33,18 @@ class Config:
 
     # 4-tier confidence routing thresholds
     class CONFIDENCE_TIERS:
-        TIER_1_THRESHOLD = float(os.getenv("CONFIDENCE_TIER_1", "0.85"))  # Small LLM validate-or-generate
-        TIER_2_THRESHOLD = float(os.getenv("CONFIDENCE_TIER_2", "0.70"))  # Small LLM with context
-        TIER_3_THRESHOLD = float(os.getenv("CONFIDENCE_TIER_3", "0.50"))  # Fine-tuned model
+        TIER_1_THRESHOLD = float(
+            os.getenv("CONFIDENCE_TIER_1", "0.85")
+        )  # Small LLM validate-or-generate
+        TIER_2_THRESHOLD = float(
+            os.getenv("CONFIDENCE_TIER_2", "0.70")
+        )  # Small LLM with context
+        TIER_3_THRESHOLD = float(
+            os.getenv("CONFIDENCE_TIER_3", "0.50")
+        )  # Fine-tuned model
         # Below TIER_3 → Large LLM directly
 
     # Tutoring configuration
     class TUTORING:
         MAX_INTERACTION_DEPTH = int(os.getenv("TUTORING_MAX_DEPTH", "5"))
-        ENABLE_TUTORING_MODE = (
-            os.getenv("TUTORING_ENABLE", "true").lower() == "true"
-        )
+        ENABLE_TUTORING_MODE = os.getenv("TUTORING_ENABLE", "true").lower() == "true"

@@ -224,7 +224,9 @@ async def get_logs(request_id: str):
 
 
 @app.post("/search", response_model=SearchResponse)
-async def search(request: SearchRequest, fastapi_request: FastAPIRequest) -> SearchResponse:
+async def search(
+    request: SearchRequest, fastapi_request: FastAPIRequest
+) -> SearchResponse:
     """Search for similar questions by embedding"""
     request_id = getattr(fastapi_request.state, "request_id", generate_request_id())
     repository = get_repo()
@@ -408,7 +410,9 @@ async def update_question(
 
     question = await repository.get_question(question_id)
     if not question:
-        raise HTTPException(status_code=500, detail="Failed to retrieve updated question")
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve updated question"
+        )
 
     logger.info(
         "Question updated",

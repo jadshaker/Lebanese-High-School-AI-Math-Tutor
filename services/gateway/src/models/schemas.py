@@ -83,9 +83,13 @@ class TutoringRequest(BaseModel):
 
     session_id: str = Field(..., description="Session ID for stateful tutoring")
     user_response: str = Field(..., description="User's response to tutor prompt")
-    question_id: Optional[str] = Field(None, description="Question ID from initial query")
+    question_id: Optional[str] = Field(
+        None, description="Question ID from initial query"
+    )
     original_question: Optional[str] = Field(None, description="Original question text")
-    original_answer: Optional[str] = Field(None, description="Original answer for context")
+    original_answer: Optional[str] = Field(
+        None, description="Original answer for context"
+    )
 
 
 class TutoringResponse(BaseModel):
@@ -96,7 +100,9 @@ class TutoringResponse(BaseModel):
     is_complete: bool = Field(default=False, description="Whether tutoring is complete")
     next_prompt: Optional[str] = Field(None, description="Next question if continuing")
     intent: Optional[str] = Field(None, description="Classified intent")
-    cache_hit: bool = Field(default=False, description="Whether response was from cache")
+    cache_hit: bool = Field(
+        default=False, description="Whether response was from cache"
+    )
 
 
 class RetrievalMetadata(BaseModel):

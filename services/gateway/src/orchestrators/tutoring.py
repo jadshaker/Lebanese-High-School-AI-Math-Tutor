@@ -16,9 +16,7 @@ logger = StructuredLogger("gateway")
 TUTORING_CACHE_THRESHOLD = 0.85
 
 
-async def _classify_intent(
-    text: str, context: str | None, request_id: str
-) -> dict:
+async def _classify_intent(text: str, context: str | None, request_id: str) -> dict:
     """Classify user intent using the intent classifier service."""
     start_time = time.time()
     try:
@@ -362,7 +360,9 @@ Redirect them back to the math problem."""
 
         next_prompt = None
         if not is_complete:
-            next_prompt = "Do you understand this step? Would you like me to explain further?"
+            next_prompt = (
+                "Do you understand this step? Would you like me to explain further?"
+            )
 
         return {
             "response": response,
@@ -486,7 +486,11 @@ async def handle_tutoring_interaction(
             )
 
             is_complete = new_depth >= Config.TUTORING.MAX_INTERACTION_DEPTH
-            next_prompt = None if is_complete else "Do you understand? Would you like me to explain further?"
+            next_prompt = (
+                None
+                if is_complete
+                else "Do you understand? Would you like me to explain further?"
+            )
 
             return {
                 "tutor_message": tutor_response,

@@ -112,7 +112,9 @@ class InteractionCreate(BaseModel):
         None, description="Parent node ID (null = direct child of question)"
     )
     user_input: str = Field(..., description="What the user said")
-    user_input_embedding: list[float] = Field(..., description="Embedding of user_input")
+    user_input_embedding: list[float] = Field(
+        ..., description="Embedding of user_input"
+    )
     system_response: str = Field(..., description="System's response to user")
 
 

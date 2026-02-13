@@ -13,7 +13,9 @@ class Config:
         RULE_CONFIDENCE_THRESHOLD = float(
             os.getenv("INTENT_RULE_CONFIDENCE_THRESHOLD", "0.8")
         )
-        USE_LLM_FALLBACK = os.getenv("INTENT_USE_LLM_FALLBACK", "true").lower() == "true"
+        USE_LLM_FALLBACK = (
+            os.getenv("INTENT_USE_LLM_FALLBACK", "true").lower() == "true"
+        )
 
     CLASSIFICATION_PROMPT = """You are an intent classifier for a math tutoring system.
 Classify the user's response into ONE of these categories:

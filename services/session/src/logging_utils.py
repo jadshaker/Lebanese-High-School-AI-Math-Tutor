@@ -59,16 +59,36 @@ class StructuredLogger:
         log_method = getattr(self.logger, level.lower(), self.logger.info)
         log_method(log_line)
 
-    def info(self, message: str, context: Optional[dict] = None, request_id: Optional[str] = None):
+    def info(
+        self,
+        message: str,
+        context: Optional[dict] = None,
+        request_id: Optional[str] = None,
+    ):
         self.log("INFO", message, context, request_id)
 
-    def debug(self, message: str, context: Optional[dict] = None, request_id: Optional[str] = None):
+    def debug(
+        self,
+        message: str,
+        context: Optional[dict] = None,
+        request_id: Optional[str] = None,
+    ):
         self.log("DEBUG", message, context, request_id)
 
-    def warning(self, message: str, context: Optional[dict] = None, request_id: Optional[str] = None):
+    def warning(
+        self,
+        message: str,
+        context: Optional[dict] = None,
+        request_id: Optional[str] = None,
+    ):
         self.log("WARNING", message, context, request_id)
 
-    def error(self, message: str, context: Optional[dict] = None, request_id: Optional[str] = None):
+    def error(
+        self,
+        message: str,
+        context: Optional[dict] = None,
+        request_id: Optional[str] = None,
+    ):
         self.log("ERROR", message, context, request_id)
 
 
@@ -89,7 +109,9 @@ def get_logs_by_request_id(request_id: str, max_lines: int = 1000) -> list[str]:
     try:
         with open(log_file, "r", encoding="utf-8") as f:
             all_lines = f.readlines()
-            recent_lines = all_lines[-max_lines:] if len(all_lines) > max_lines else all_lines
+            recent_lines = (
+                all_lines[-max_lines:] if len(all_lines) > max_lines else all_lines
+            )
 
             for line in recent_lines:
                 if request_id in line:

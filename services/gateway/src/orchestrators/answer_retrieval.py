@@ -159,7 +159,9 @@ You MUST start your response with either CACHE_VALID or GENERATED on the first l
         response_text = result["choices"][0]["message"]["content"]
         duration = time.time() - start_time
         gateway_small_llm_duration_seconds.observe(duration)
-        gateway_llm_calls_total.labels(llm_service="small_llm_validate_or_generate").inc()
+        gateway_llm_calls_total.labels(
+            llm_service="small_llm_validate_or_generate"
+        ).inc()
 
         # Clean <think> blocks from DeepSeek-R1
         response_text = _clean_llm_response(response_text)
@@ -191,7 +193,9 @@ You MUST start your response with either CACHE_VALID or GENERATED on the first l
     except Exception as e:
         duration = time.time() - start_time
         gateway_small_llm_duration_seconds.observe(duration)
-        gateway_errors_total.labels(error_type="small_llm_validate_or_generate_error").inc()
+        gateway_errors_total.labels(
+            error_type="small_llm_validate_or_generate_error"
+        ).inc()
 
         logger.error(
             f"Small LLM validate-or-generate failed ({duration:.1f}s): {str(e)}",
@@ -210,7 +214,9 @@ async def _query_small_llm_with_context(
     try:
         context = "You are a math tutor. Here are some similar questions and answers for context:\n\n"
         for i, cached in enumerate(cached_results[:3], 1):
-            context += f"{i}. Q: {cached['question_text']}\n   A: {cached['answer_text']}\n\n"
+            context += (
+                f"{i}. Q: {cached['question_text']}\n   A: {cached['answer_text']}\n\n"
+            )
         context += "Use these examples to help answer the user's question accurately."
 
         messages = [
@@ -473,9 +479,7 @@ async def retrieve_answer(
             gateway_cache_misses_total.inc()
             answer = await _query_large_llm(query, request_id)
             source = f"{tier.value}_fallback"
-            await _save_to_cache(
-                original_query, query, answer, embedding, request_id
-            )
+            await _save_to_cache(original_query, query, answer, embedding, request_id)
 
     elif tier == ConfidenceTier.TIER_2_SMALL_LLM_CONTEXT:
         # Tier 2: Small LLM with cached context

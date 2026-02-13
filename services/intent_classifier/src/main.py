@@ -305,7 +305,9 @@ def classify_llm_based(
             context={"error": str(e)},
             request_id=request_id,
         )
-        raise HTTPException(status_code=503, detail=f"Small LLM service unavailable: {e}")
+        raise HTTPException(
+            status_code=503, detail=f"Small LLM service unavailable: {e}"
+        )
     except Exception as e:
         llm_fallback_errors_total.inc()
         logger.error(
@@ -394,7 +396,10 @@ async def classify(
 
     logger.info(
         "Classifying intent",
-        context={"text_length": len(request.text), "has_context": bool(request.context)},
+        context={
+            "text_length": len(request.text),
+            "has_context": bool(request.context),
+        },
         request_id=request_id,
     )
 
