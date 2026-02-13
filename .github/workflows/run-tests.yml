@@ -27,9 +27,9 @@ jobs:
         env:
           RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
         run: |
-          echo "Creating RunPod A40 pod with ollama/ollama image..."
+          echo "Creating RunPod A40 pod with ollama/ollama:latest image..."
 
-          # Create pod using REST API
+          # Create pod using REST API with image directly (no template needed)
           RESPONSE=$(curl -s -X POST "https://rest.runpod.io/v1/pods" \
             -H "Authorization: Bearer $RUNPOD_API_KEY" \
             -H "Content-Type: application/json" \
@@ -38,7 +38,11 @@ jobs:
               "gpuCount": 1,
               "gpuTypeIds": ["NVIDIA A40"],
               "name": "ci-test-pod",
-              "templateId": "q5rqanpolz"
+              "imageName": "ollama/ollama:latest",
+              "containerDiskInGb": 50,
+              "volumeInGb": 50,
+              "ports": "11434/http",
+              "dockerArgs": ""
             }')
 
           echo "Response: $RESPONSE"
@@ -197,11 +201,13 @@ jobs:
             "gateway:8000"
             "large-llm:8001"
             "embedding:8002"
-            "cache:8003"
+            "vector-cache:8003"
             "input-processor:8004"
             "small-llm:8005"
             "fine-tuned-model:8006"
             "reformulator:8007"
+            "intent-classifier:8009"
+            "session:8010"
           )
 
           TIMEOUT=120
