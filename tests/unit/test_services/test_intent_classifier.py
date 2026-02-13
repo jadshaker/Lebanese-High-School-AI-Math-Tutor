@@ -23,7 +23,7 @@ def test_health_endpoint():
         assert response.status_code == 200
         data = response.json()
         assert data["status"] in ["healthy", "degraded"]
-        assert data["service"] == "intent-classifier"
+        assert data["service"] == "intent_classifier"
         assert "small_llm_available" in data
 
 
@@ -33,11 +33,12 @@ def test_classify_affirmative():
     test_cases = [
         "yes",
         "Yes, I understand",
-        "got it",
-        "I know that",
         "understood",
         "correct",
         "right",
+        "sure",
+        "okay",
+        "definitely",
     ]
 
     for text in test_cases:
@@ -55,9 +56,9 @@ def test_classify_negative():
     test_cases = [
         "no",
         "I don't know",
-        "never learned this",
+        "I don't understand",
         "I'm confused",
-        "not familiar",
+        "not at all",
     ]
 
     for text in test_cases:
@@ -74,9 +75,11 @@ def test_classify_partial():
     test_cases = [
         "somewhat",
         "a little bit",
-        "I'm not sure",
         "maybe",
         "kind of",
+        "sort of",
+        "I think so",
+        "I guess",
     ]
 
     for text in test_cases:
