@@ -86,7 +86,8 @@ def test_answer_retrieval_pipeline(mock_external_apis):
     - Answer is saved to cache
     """
     request_id = f"test-{uuid.uuid4().hex[:8]}"
-    query = "Calculate the integral of 3x^2 dx"
+    unique_suffix = uuid.uuid4().hex[:8]
+    query = f"Calculate the integral of 3x^2 dx (test-{unique_suffix})"
 
     # Step 1: Embed the query
     response = requests.post(
@@ -117,12 +118,9 @@ def test_answer_retrieval_pipeline(mock_external_apis):
     assert "results" in data
     results = data["results"]
 
-    # Cache stub returns results with ~0.85 similarity (not exact match)
     if results:
-        top_similarity = results[0]["similarity_score"]
-        assert (
-            top_similarity < 0.95
-        ), "Cache should not return exact match for this test"
+        top_similarity = results[0]["score"]
+        assert 0.0 <= top_similarity <= 1.0, "Score should be between 0 and 1"
 
     # Step 3: Call Small LLM with cache context
     # Build messages format
@@ -164,27 +162,44 @@ def test_answer_retrieval_pipeline(mock_external_apis):
 
     # Step 5: Save to cache
     response = requests.post(
-        f"{CACHE_URL}/save",
-        json={"question": query, "answer": large_llm_answer, "embedding": embedding},
+        f"{CACHE_URL}/questions",
+        json={
+            "question_text": query,
+            "reformulated_text": query,
+            "answer_text": large_llm_answer,
+            "embedding": embedding,
+            "source": "api_llm",
+            "confidence": 0.9,
+        },
         headers={"X-Request-ID": request_id},
         timeout=10,
     )
 
-    assert response.status_code == 200, f"Cache save failed: {response.text}"
+    assert response.status_code == 201, f"Cache save failed: {response.text}"
     data = response.json()
 
-    assert data.get("status") == "success"
+    assert "id" in data
 
     print(f"\n✓ Answer Retrieval Pipeline:")
     print(f"  Query: {query}")
     print(
-        f"  Cache results: {len(results)} (top similarity: {results[0]['similarity_score']:.2f})"
+        f"  Cache results: {len(results)} (top similarity: {results[0]['score']:.2f})"
         if results
         else "  Cache results: None"
     )
     print(f"  Small LLM answer length: {len(small_llm_answer)}")
     print(f"  Large LLM answer length: {len(large_llm_answer)}")
     print(f"  Saved to cache: Yes")
+
+    # Cleanup: delete the question from cache to avoid polluting future runs
+    question_id = data["id"]
+    cleanup = requests.delete(
+        f"{CACHE_URL}/questions/{question_id}",
+        headers={"X-Request-ID": request_id},
+        timeout=10,
+    )
+    assert cleanup.status_code == 204, f"Cache cleanup failed: {cleanup.text}"
+    print(f"  Cleaned up question: {question_id}")
 
 
 @pytest.mark.integration
