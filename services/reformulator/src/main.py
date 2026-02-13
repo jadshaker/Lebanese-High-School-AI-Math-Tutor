@@ -199,7 +199,7 @@ async def reformulate_query(
 
     # Summarize conversation context if provided
     conversation_context = ""
-    if has_context:
+    if has_context and request.conversation_history is not None:
         conversation_context = _summarize_conversation_context(
             request.conversation_history, request_id
         )
@@ -211,7 +211,10 @@ async def reformulate_query(
     # Call Small LLM to reformulate the query
     try:
         reformulated, improvements = await _call_llm_for_reformulation(
-            request.processed_input, request.input_type, request_id, conversation_context
+            request.processed_input,
+            request.input_type,
+            request_id,
+            conversation_context,
         )
 
         logger.info(
@@ -244,9 +247,7 @@ async def reformulate_query(
         )
 
 
-def _summarize_conversation_context(
-    conversation_history: list, request_id: str
-) -> str:
+def _summarize_conversation_context(conversation_history: list, request_id: str) -> str:
     """
     Summarize conversation history into a brief context string.
 
@@ -275,7 +276,9 @@ def _summarize_conversation_context(
 
     # Truncate if too long
     if len(context_summary) > Config.REFORMULATION.MAX_CONTEXT_LENGTH:
-        context_summary = context_summary[: Config.REFORMULATION.MAX_CONTEXT_LENGTH] + "..."
+        context_summary = (
+            context_summary[: Config.REFORMULATION.MAX_CONTEXT_LENGTH] + "..."
+        )
 
     return context_summary
 
@@ -375,7 +378,9 @@ Output:"""
 
             # Analyze what improvements were made
             had_context = bool(conversation_context)
-            improvements = _detect_improvements(processed_input, reformulated, had_context)
+            improvements = _detect_improvements(
+                processed_input, reformulated, had_context
+            )
 
             logger.info(
                 "Small LLM reformulation complete",

@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 async def call_service(
     url: str,
-    payload: dict[str, Any],
+    payload: Optional[dict[str, Any]],
     request_id: str,
     timeout: int = 10,
     method: str = "POST",
@@ -50,7 +50,7 @@ async def call_service(
 
 async def call_service_safe(
     url: str,
-    payload: dict[str, Any],
+    payload: Optional[dict[str, Any]],
     request_id: str,
     timeout: int = 10,
     method: str = "POST",

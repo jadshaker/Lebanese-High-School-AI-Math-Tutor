@@ -67,7 +67,7 @@ async def cleanup_expired_sessions() -> None:
                 expired.append(sid)
 
         for sid in expired:
-            session = sessions.pop(sid, None)
+            session = sessions.pop(sid)
             if session:
                 sessions_expired_total.inc()
                 sessions_active_total.dec()

@@ -4,10 +4,12 @@ from typing import Any, Optional
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
+    Condition,
     Distance,
     FieldCondition,
     Filter,
     MatchValue,
+    PayloadSchemaType,
     PointStruct,
     Range,
     VectorParams,
@@ -40,17 +42,17 @@ class QdrantRepository:
             await self.client.create_payload_index(
                 collection_name=self.questions_collection,
                 field_name="lesson",
-                field_schema="keyword",
+                field_schema=PayloadSchemaType.KEYWORD,
             )
             await self.client.create_payload_index(
                 collection_name=self.questions_collection,
                 field_name="source",
-                field_schema="keyword",
+                field_schema=PayloadSchemaType.KEYWORD,
             )
             await self.client.create_payload_index(
                 collection_name=self.questions_collection,
                 field_name="confidence",
-                field_schema="float",
+                field_schema=PayloadSchemaType.FLOAT,
             )
 
         if self.nodes_collection not in existing:
@@ -64,12 +66,12 @@ class QdrantRepository:
             await self.client.create_payload_index(
                 collection_name=self.nodes_collection,
                 field_name="question_id",
-                field_schema="keyword",
+                field_schema=PayloadSchemaType.KEYWORD,
             )
             await self.client.create_payload_index(
                 collection_name=self.nodes_collection,
                 field_name="parent_id",
-                field_schema="keyword",
+                field_schema=PayloadSchemaType.KEYWORD,
             )
 
     async def get_collection_counts(self) -> dict[str, int]:
@@ -95,7 +97,7 @@ class QdrantRepository:
         """Search for similar questions"""
         query_filter = None
         if filters:
-            conditions = []
+            conditions: list[Condition] = []
             if filters.lesson:
                 conditions.append(
                     FieldCondition(key="lesson", match=MatchValue(value=filters.lesson))
@@ -128,7 +130,7 @@ class QdrantRepository:
             {
                 "id": str(r.id),
                 "score": r.score,
-                **r.payload,
+                **(r.payload or {}),
             }
             for r in results.points
         ]
@@ -178,7 +180,7 @@ class QdrantRepository:
         )
         if not results:
             return None
-        return {"id": str(results[0].id), **results[0].payload}
+        return {"id": str(results[0].id), **(results[0].payload or {})}
 
     async def update_question(
         self,
@@ -284,7 +286,9 @@ class QdrantRepository:
 
         await self.client.upsert(
             collection_name=self.nodes_collection,
-            points=[PointStruct(id=node_id, vector=user_input_embedding, payload=payload)],
+            points=[
+                PointStruct(id=node_id, vector=user_input_embedding, payload=payload)
+            ],
         )
 
         return node_id
@@ -299,7 +303,7 @@ class QdrantRepository:
         )
         if not results:
             return None
-        return {"id": str(results[0].id), **results[0].payload}
+        return {"id": str(results[0].id), **(results[0].payload or {})}
 
     async def search_children(
         self,
@@ -309,7 +313,7 @@ class QdrantRepository:
         threshold: float = 0.7,
     ) -> dict:
         """Search for similar user inputs among children of a parent node."""
-        conditions = [
+        conditions: list[Condition] = [
             FieldCondition(key="question_id", match=MatchValue(value=question_id))
         ]
 
@@ -318,9 +322,7 @@ class QdrantRepository:
                 FieldCondition(key="parent_id", match=MatchValue(value=parent_id))
             )
         else:
-            conditions.append(
-                FieldCondition(key="depth", match=MatchValue(value=1))
-            )
+            conditions.append(FieldCondition(key="depth", match=MatchValue(value=1)))
 
         results = await self.client.query_points(
             collection_name=self.nodes_collection,
@@ -338,7 +340,7 @@ class QdrantRepository:
                 "match_score": best.score,
                 "matched_node": {
                     "id": str(best.id),
-                    **best.payload,
+                    **(best.payload or {}),
                 },
                 "parent_id": parent_id,
             }
@@ -366,12 +368,14 @@ class QdrantRepository:
                 node = await self.get_interaction(current_id)
                 if not node:
                     break
-                path.append({
-                    "id": node["id"],
-                    "user_input": node["user_input"],
-                    "system_response": node["system_response"],
-                    "depth": node["depth"],
-                })
+                path.append(
+                    {
+                        "id": node["id"],
+                        "user_input": node["user_input"],
+                        "system_response": node["system_response"],
+                        "depth": node["depth"],
+                    }
+                )
                 current_id = node.get("parent_id")
             path.reverse()
 
