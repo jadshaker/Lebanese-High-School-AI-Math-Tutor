@@ -151,9 +151,14 @@ You MUST start your response with either CACHE_VALID or GENERATED on the first l
 
         result = await call_service(
             f"{Config.SERVICES.SMALL_LLM_URL}/v1/chat/completions",
-            {"model": "deepseek-r1:7b", "messages": messages},
+            {
+                "model": Config.MODELS.SMALL_LLM_MODEL_NAME,
+                "messages": messages,
+                "temperature": Config.MODELS.TEMPERATURE,
+                "top_p": Config.MODELS.TOP_P,
+            },
             request_id,
-            timeout=60,
+            timeout=Config.MODELS.TIMEOUT,
         )
 
         response_text = result["choices"][0]["message"]["content"]
@@ -231,9 +236,14 @@ async def _query_small_llm_with_context(
 
         result = await call_service(
             f"{Config.SERVICES.SMALL_LLM_URL}/v1/chat/completions",
-            {"model": "deepseek-r1:7b", "messages": messages},
+            {
+                "model": Config.MODELS.SMALL_LLM_MODEL_NAME,
+                "messages": messages,
+                "temperature": Config.MODELS.TEMPERATURE,
+                "top_p": Config.MODELS.TOP_P,
+            },
             request_id,
-            timeout=60,
+            timeout=Config.MODELS.TIMEOUT,
         )
 
         answer = result["choices"][0]["message"]["content"]
@@ -277,9 +287,14 @@ async def _query_fine_tuned_model(query: str, request_id: str) -> str:
 
         result = await call_service(
             f"{Config.SERVICES.FINE_TUNED_MODEL_URL}/v1/chat/completions",
-            {"model": "tinyllama:latest", "messages": messages},
+            {
+                "model": Config.MODELS.FINE_TUNED_MODEL_NAME,
+                "messages": messages,
+                "temperature": Config.MODELS.TEMPERATURE,
+                "top_p": Config.MODELS.TOP_P,
+            },
             request_id,
-            timeout=60,
+            timeout=Config.MODELS.TIMEOUT,
         )
 
         answer = result["choices"][0]["message"]["content"]
@@ -321,9 +336,14 @@ async def _query_large_llm(query: str, request_id: str) -> str:
 
         result = await call_service(
             f"{Config.SERVICES.LARGE_LLM_URL}/v1/chat/completions",
-            {"model": "gpt-4o-mini", "messages": messages},
+            {
+                "model": Config.MODELS.LARGE_LLM_MODEL_NAME,
+                "messages": messages,
+                "temperature": Config.MODELS.TEMPERATURE,
+                "top_p": Config.MODELS.TOP_P,
+            },
             request_id,
-            timeout=60,
+            timeout=Config.MODELS.TIMEOUT,
         )
 
         answer = result["choices"][0]["message"]["content"]

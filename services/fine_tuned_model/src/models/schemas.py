@@ -25,7 +25,7 @@ class ChatCompletionRequest(BaseModel):
 
 
 class ChatCompletionResponse(BaseModel):
-    """OpenAI-compatible chat completion response (pass-through from Ollama)"""
+    """OpenAI-compatible chat completion response (pass-through from vLLM)"""
 
     model_config = {"extra": "allow"}
 

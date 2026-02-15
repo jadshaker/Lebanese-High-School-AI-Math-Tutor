@@ -1,3 +1,4 @@
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -9,11 +10,12 @@ import requests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from conftest import wait_for_logs, wait_for_metrics
 
-GATEWAY_URL = "http://localhost:8000"
+GATEWAY_URL = os.getenv("GATEWAY_SERVICE_URL", "http://localhost:8000")
 
 
 @pytest.mark.e2e
 @pytest.mark.slow
+@pytest.mark.xdist_group("full_pipeline")
 def test_simple_math_question(mock_external_apis):
     """
     Test asking a simple math question through the complete pipeline.
@@ -35,7 +37,7 @@ def test_simple_math_question(mock_external_apis):
             "messages": [{"role": "user", "content": "What is the derivative of x^2?"}],
         },
         headers={"X-Request-ID": request_id},
-        timeout=180,
+        timeout=360,
     )
 
     assert response.status_code == 200, f"Chat completion failed: {response.text}"
@@ -76,7 +78,7 @@ def test_simple_math_question(mock_external_apis):
     assert request_id_header is not None, "Request ID should be in response headers"
 
     # Verify request tracking works
-    track_response = requests.get(f"{GATEWAY_URL}/track/{request_id}", timeout=10)
+    track_response = requests.get(f"{GATEWAY_URL}/track/{request_id}", timeout=60)
     assert (
         track_response.status_code == 200
     ), f"Tracking request failed: {track_response.text}"
@@ -102,6 +104,7 @@ def test_simple_math_question(mock_external_apis):
 
 @pytest.mark.e2e
 @pytest.mark.slow
+@pytest.mark.xdist_group("full_pipeline")
 def test_cache_behavior_on_repeated_question(mock_external_apis):
     """
     Test cache behavior when asking the same question twice.
@@ -127,7 +130,7 @@ def test_cache_behavior_on_repeated_question(mock_external_apis):
             "messages": [{"role": "user", "content": question}],
         },
         headers={"X-Request-ID": request_id_1},
-        timeout=180,
+        timeout=360,
     )
 
     assert response_1.status_code == 200, f"First request failed: {response_1.text}"
@@ -147,7 +150,7 @@ def test_cache_behavior_on_repeated_question(mock_external_apis):
             "messages": [{"role": "user", "content": question}],
         },
         headers={"X-Request-ID": request_id_2},
-        timeout=180,
+        timeout=360,
     )
 
     assert response_2.status_code == 200, f"Second request failed: {response_2.text}"
@@ -182,6 +185,7 @@ def test_cache_behavior_on_repeated_question(mock_external_apis):
 
 
 @pytest.mark.e2e
+@pytest.mark.xdist_group("no_pod")
 def test_invalid_input_handling():
     """
     Test how the system handles invalid inputs.
@@ -276,6 +280,7 @@ def test_invalid_input_handling():
 
 @pytest.mark.e2e
 @pytest.mark.slow
+@pytest.mark.xdist_group("full_pipeline")
 def test_request_tracking_end_to_end(mock_external_apis):
     """
     Test request tracking across the complete pipeline.
@@ -295,7 +300,7 @@ def test_request_tracking_end_to_end(mock_external_apis):
             "model": "math-tutor",
             "messages": [{"role": "user", "content": "Explain the quadratic formula"}],
         },
-        timeout=180,
+        timeout=360,
     )
 
     assert response.status_code == 200, f"Chat completion failed: {response.text}"
@@ -353,6 +358,7 @@ def test_request_tracking_end_to_end(mock_external_apis):
 
 
 @pytest.mark.e2e
+@pytest.mark.xdist_group("no_pod")
 def test_all_services_healthy():
     """
     Test that all services are healthy before running other tests.

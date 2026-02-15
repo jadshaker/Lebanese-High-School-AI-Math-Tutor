@@ -341,9 +341,14 @@ Redirect them back to the math problem."""
         # Use Fine-tuned Model instead of Small LLM
         result = await call_service(
             f"{Config.SERVICES.FINE_TUNED_MODEL_URL}/v1/chat/completions",
-            {"model": "tinyllama:latest", "messages": messages},
+            {
+                "model": Config.MODELS.FINE_TUNED_MODEL_NAME,
+                "messages": messages,
+                "temperature": Config.MODELS.TEMPERATURE,
+                "top_p": Config.MODELS.TOP_P,
+            },
             request_id,
-            timeout=60,
+            timeout=Config.MODELS.TIMEOUT,
         )
 
         response = result["choices"][0]["message"]["content"]

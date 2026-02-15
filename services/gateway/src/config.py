@@ -28,6 +28,14 @@ class Config:
             "INTENT_CLASSIFIER_SERVICE_URL", "http://intent-classifier:8009"
         )
 
+    class MODELS:
+        SMALL_LLM_MODEL_NAME = os.environ["SMALL_LLM_MODEL_NAME"]
+        LARGE_LLM_MODEL_NAME = os.environ["LARGE_LLM_MODEL_NAME"]
+        FINE_TUNED_MODEL_NAME = os.environ["FINE_TUNED_MODEL_NAME"]
+        TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
+        TOP_P = float(os.getenv("LLM_TOP_P", "0.9"))
+        TIMEOUT = int(os.getenv("LLM_TIMEOUT", "300"))
+
     # Vector cache configuration
     CACHE_TOP_K = int(os.getenv("CACHE_TOP_K", "5"))
 

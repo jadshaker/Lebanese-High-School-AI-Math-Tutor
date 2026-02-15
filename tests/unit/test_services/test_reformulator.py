@@ -1,8 +1,11 @@
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+
+from services.reformulator.src.config import Config
+
+MODEL_NAME = Config.REFORMULATOR_LLM_MODEL_NAME
 
 
 # Module-level setup - load app and create client
@@ -16,10 +19,10 @@ def setup_module(reformulator_app):
 @pytest.mark.unit
 @patch("src.main.urlopen")
 def test_health_endpoint_healthy(mock_urlopen):
-    """Test health check when Small LLM service is reachable"""
-    # Mock Small LLM /health response
+    """Test health check when LLM backend is reachable and model available"""
+    # Mock OpenAI-compatible /v1/models response
     mock_response = MagicMock()
-    mock_response.read.return_value = b'{"status": "healthy"}'
+    mock_response.read.return_value = f'{{"data": [{{"id": "{MODEL_NAME}"}}]}}'.encode()
     mock_response.__enter__ = MagicMock(return_value=mock_response)
     mock_response.__exit__ = MagicMock(return_value=False)
     mock_urlopen.return_value = mock_response
@@ -30,13 +33,15 @@ def test_health_endpoint_healthy(mock_urlopen):
     data = response.json()
     assert data["status"] == "healthy"
     assert data["service"] == "reformulator"
-    assert data["small_llm_service"] == "reachable"
+    assert data["llm_reachable"] is True
+    assert data["model_available"] is True
+    assert "configured_model" in data
 
 
 @pytest.mark.unit
 @patch("src.main.urlopen")
 def test_health_endpoint_degraded(mock_urlopen):
-    """Test health check when Small LLM service is unreachable"""
+    """Test health check when LLM backend is unreachable"""
     mock_urlopen.side_effect = Exception("Connection refused")
 
     response = client.get("/health")
@@ -44,7 +49,8 @@ def test_health_endpoint_degraded(mock_urlopen):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "degraded"
-    assert data["small_llm_service"] == "unreachable"
+    assert data["llm_reachable"] is False
+    assert data["model_available"] is False
 
 
 @pytest.mark.unit
@@ -67,18 +73,17 @@ def test_reformulate_llm_disabled():
 
 @pytest.mark.unit
 @patch("src.main.Config.REFORMULATION.USE_LLM", True)
-@patch("src.main.urlopen")
-def test_reformulate_success(mock_urlopen):
+@patch("src.main.client")
+def test_reformulate_success(mock_openai_client):
     """Test successful reformulation via LLM"""
-    # Mock Small LLM response
-    llm_response = {
-        "choices": [{"message": {"content": "What is the derivative of x^2?"}}]
-    }
+    # Mock OpenAI client response
+    mock_message = MagicMock()
+    mock_message.content = "What is the derivative of x^2?"
+    mock_choice = MagicMock()
+    mock_choice.message = mock_message
     mock_response = MagicMock()
-    mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
-    mock_response.__enter__ = MagicMock(return_value=mock_response)
-    mock_response.__exit__ = MagicMock(return_value=False)
-    mock_urlopen.return_value = mock_response
+    mock_response.choices = [mock_choice]
+    mock_openai_client.chat.completions.create.return_value = mock_response
 
     request_data = {
         "processed_input": "what is derivative of x squared",
@@ -103,10 +108,12 @@ def test_reformulate_missing_fields():
 
 @pytest.mark.unit
 @patch("src.main.Config.REFORMULATION.USE_LLM", True)
-@patch("src.main.urlopen")
-def test_reformulate_llm_error(mock_urlopen):
+@patch("src.main.client")
+def test_reformulate_llm_error(mock_openai_client):
     """Test reformulation when LLM service returns error"""
-    mock_urlopen.side_effect = Exception("Connection error")
+    mock_openai_client.chat.completions.create.side_effect = Exception(
+        "Connection error"
+    )
 
     request_data = {
         "processed_input": "test question",
@@ -121,24 +128,18 @@ def test_reformulate_llm_error(mock_urlopen):
 
 @pytest.mark.unit
 @patch("src.main.Config.REFORMULATION.USE_LLM", True)
-@patch("src.main.urlopen")
-def test_reformulate_removes_think_tags(mock_urlopen):
+@patch("src.main.client")
+def test_reformulate_removes_think_tags(mock_openai_client):
     """Test that reformulation removes <think> tags from DeepSeek-R1 style responses"""
-    # Mock Small LLM response with <think> tags
-    llm_response = {
-        "choices": [
-            {
-                "message": {
-                    "content": "<think>Let me analyze this...</think>What is the derivative of x^2?"
-                }
-            }
-        ]
-    }
+    mock_message = MagicMock()
+    mock_message.content = (
+        "<think>Let me analyze this...</think>What is the derivative of x^2?"
+    )
+    mock_choice = MagicMock()
+    mock_choice.message = mock_message
     mock_response = MagicMock()
-    mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
-    mock_response.__enter__ = MagicMock(return_value=mock_response)
-    mock_response.__exit__ = MagicMock(return_value=False)
-    mock_urlopen.return_value = mock_response
+    mock_response.choices = [mock_choice]
+    mock_openai_client.chat.completions.create.return_value = mock_response
 
     request_data = {
         "processed_input": "what is derivative of x squared",
@@ -156,18 +157,16 @@ def test_reformulate_removes_think_tags(mock_urlopen):
 
 @pytest.mark.unit
 @patch("src.main.Config.REFORMULATION.USE_LLM", True)
-@patch("src.main.urlopen")
-def test_reformulate_removes_quotes(mock_urlopen):
+@patch("src.main.client")
+def test_reformulate_removes_quotes(mock_openai_client):
     """Test that reformulation removes surrounding quotes"""
-    # Mock Small LLM response with quotes
-    llm_response = {
-        "choices": [{"message": {"content": '"What is the derivative of x^2?"'}}]
-    }
+    mock_message = MagicMock()
+    mock_message.content = '"What is the derivative of x^2?"'
+    mock_choice = MagicMock()
+    mock_choice.message = mock_message
     mock_response = MagicMock()
-    mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
-    mock_response.__enter__ = MagicMock(return_value=mock_response)
-    mock_response.__exit__ = MagicMock(return_value=False)
-    mock_urlopen.return_value = mock_response
+    mock_response.choices = [mock_choice]
+    mock_openai_client.chat.completions.create.return_value = mock_response
 
     request_data = {
         "processed_input": "what is derivative of x squared",
@@ -184,16 +183,16 @@ def test_reformulate_removes_quotes(mock_urlopen):
 
 @pytest.mark.unit
 @patch("src.main.Config.REFORMULATION.USE_LLM", True)
-@patch("src.main.urlopen")
-def test_reformulate_empty_response_fallback(mock_urlopen):
+@patch("src.main.client")
+def test_reformulate_empty_response_fallback(mock_openai_client):
     """Test that reformulation falls back to original when LLM returns empty"""
-    # Mock Small LLM response with empty content
-    llm_response = {"choices": [{"message": {"content": ""}}]}
+    mock_message = MagicMock()
+    mock_message.content = ""
+    mock_choice = MagicMock()
+    mock_choice.message = mock_message
     mock_response = MagicMock()
-    mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
-    mock_response.__enter__ = MagicMock(return_value=mock_response)
-    mock_response.__exit__ = MagicMock(return_value=False)
-    mock_urlopen.return_value = mock_response
+    mock_response.choices = [mock_choice]
+    mock_openai_client.chat.completions.create.return_value = mock_response
 
     request_data = {
         "processed_input": "test question",
@@ -210,16 +209,16 @@ def test_reformulate_empty_response_fallback(mock_urlopen):
 
 @pytest.mark.unit
 @patch("src.main.Config.REFORMULATION.USE_LLM", True)
-@patch("src.main.urlopen")
-def test_reformulate_special_characters(mock_urlopen):
+@patch("src.main.client")
+def test_reformulate_special_characters(mock_openai_client):
     """Test reformulation with special characters and unicode"""
-    # Mock Small LLM response
-    llm_response = {"choices": [{"message": {"content": "What is ∫ x² dx?"}}]}
+    mock_message = MagicMock()
+    mock_message.content = "What is ∫ x² dx?"
+    mock_choice = MagicMock()
+    mock_choice.message = mock_message
     mock_response = MagicMock()
-    mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
-    mock_response.__enter__ = MagicMock(return_value=mock_response)
-    mock_response.__exit__ = MagicMock(return_value=False)
-    mock_urlopen.return_value = mock_response
+    mock_response.choices = [mock_choice]
+    mock_openai_client.chat.completions.create.return_value = mock_response
 
     request_data = {
         "processed_input": "integral of x squared",
@@ -236,18 +235,16 @@ def test_reformulate_special_characters(mock_urlopen):
 
 @pytest.mark.unit
 @patch("src.main.Config.REFORMULATION.USE_LLM", True)
-@patch("src.main.urlopen")
-def test_reformulate_detects_improvements(mock_urlopen):
+@patch("src.main.client")
+def test_reformulate_detects_improvements(mock_openai_client):
     """Test that reformulation detects specific improvements made"""
-    # Mock Small LLM response with multiple improvements
-    llm_response = {
-        "choices": [{"message": {"content": "What is the derivative of x^2?"}}]
-    }
+    mock_message = MagicMock()
+    mock_message.content = "What is the derivative of x^2?"
+    mock_choice = MagicMock()
+    mock_choice.message = mock_message
     mock_response = MagicMock()
-    mock_response.read.return_value = json.dumps(llm_response).encode("utf-8")
-    mock_response.__enter__ = MagicMock(return_value=mock_response)
-    mock_response.__exit__ = MagicMock(return_value=False)
-    mock_urlopen.return_value = mock_response
+    mock_response.choices = [mock_choice]
+    mock_openai_client.chat.completions.create.return_value = mock_response
 
     request_data = {
         "processed_input": "what is derivative of x squared",

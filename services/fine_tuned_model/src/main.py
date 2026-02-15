@@ -25,10 +25,11 @@ from src.models.schemas import ChatCompletionRequest, ChatCompletionResponse
 app = FastAPI(title="Fine-Tuned Model Service", version="1.0.0")
 logger = StructuredLogger("fine_tuned_model")
 
-# Initialize OpenAI client pointing to Ollama's OpenAI-compatible endpoint
+# Initialize OpenAI client pointing to LLM backend's OpenAI-compatible endpoint
 client = OpenAI(
     base_url=f"{Config.FINE_TUNED_MODEL_SERVICE_URL}/v1",
-    api_key="dummy",  # Ollama doesn't require authentication
+    api_key=Config.FINE_TUNED_MODEL_API_KEY,
+    timeout=300.0,
 )
 
 
@@ -127,32 +128,33 @@ async def logging_and_metrics_middleware(request: FastAPIRequest, call_next):
 
 @app.get("/health")
 def health_check() -> dict[str, str | bool]:
-    """Health check endpoint that verifies Ollama connectivity and model availability."""
-    ollama_reachable = False
+    """Health check endpoint that verifies LLM backend connectivity and model availability."""
+    llm_reachable = False
     model_available = False
 
     try:
         req = Request(
-            f"{Config.FINE_TUNED_MODEL_SERVICE_URL}/api/tags",
+            f"{Config.FINE_TUNED_MODEL_SERVICE_URL}/v1/models",
             method="GET",
+            headers={"Authorization": f"Bearer {Config.FINE_TUNED_MODEL_API_KEY}"},
         )
 
         with urlopen(req, timeout=5) as response:
             result = json.loads(response.read().decode("utf-8"))
-            ollama_reachable = True
+            llm_reachable = True
 
-            models = result.get("models", [])
+            models = result.get("data", [])
             model_available = any(
-                model.get("name") == Config.FINE_TUNED_MODEL_NAME for model in models
+                model.get("id") == Config.FINE_TUNED_MODEL_NAME for model in models
             )
 
     except Exception:
         pass
 
     return {
-        "status": "healthy" if ollama_reachable and model_available else "degraded",
+        "status": "healthy" if llm_reachable and model_available else "degraded",
         "service": "fine_tuned_model",
-        "ollama_reachable": ollama_reachable,
+        "llm_reachable": llm_reachable,
         "model_available": model_available,
         "configured_model": Config.FINE_TUNED_MODEL_NAME,
     }
@@ -177,17 +179,17 @@ def chat_completions(
 ) -> ChatCompletionResponse:
     """
     OpenAI-compatible chat completions endpoint.
-    Forwards requests to Ollama's OpenAI-compatible API.
+    Forwards requests to the LLM backend's OpenAI-compatible API.
 
     Args:
         request: ChatCompletionRequest with messages and model
         fastapi_request: FastAPI request for extracting request_id
 
     Returns:
-        ChatCompletionResponse from Ollama
+        ChatCompletionResponse from LLM backend
 
     Raises:
-        HTTPException: If Ollama service is unavailable or returns an error
+        HTTPException: If LLM service is unavailable or returns an error
     """
     request_id = getattr(fastapi_request.state, "request_id", generate_request_id())
 
@@ -206,12 +208,12 @@ def chat_completions(
         )
 
         logger.info(
-            "Calling Ollama via OpenAI SDK",
+            "Calling LLM via OpenAI SDK",
             context={"model": model_name},
             request_id=request_id,
         )
 
-        # Call Ollama using OpenAI SDK
+        # Call LLM using OpenAI SDK
         # Build the call parameters explicitly to satisfy mypy's type checking
         from typing import Any
 
@@ -221,7 +223,6 @@ def chat_completions(
             "messages": [
                 {"role": msg.role, "content": msg.content} for msg in request.messages
             ],
-            "extra_body": {"keep_alive": -1},  # Ollama-specific parameter
         }
 
         # Add optional parameters only if they're set
