@@ -1,4 +1,13 @@
+from typing import Optional
+
 from pydantic import BaseModel, Field
+
+
+class ConversationMessage(BaseModel):
+    """A message in the conversation history"""
+
+    role: str = Field(..., description="Role: 'user' or 'assistant'")
+    content: str = Field(..., description="Message content")
 
 
 class ReformulateRequest(BaseModel):
@@ -6,6 +15,9 @@ class ReformulateRequest(BaseModel):
 
     processed_input: str = Field(..., description="Processed user input")
     input_type: str = Field(..., description="Type of input: 'text' or 'image'")
+    conversation_history: Optional[list[ConversationMessage]] = Field(
+        None, description="Previous conversation for context"
+    )
 
 
 class ReformulateResponse(BaseModel):

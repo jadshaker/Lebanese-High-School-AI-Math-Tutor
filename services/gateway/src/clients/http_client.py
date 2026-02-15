@@ -9,7 +9,7 @@ from fastapi import HTTPException
 
 def _call_service_sync(
     url: str,
-    payload: dict[str, Any],
+    payload: Optional[dict[str, Any]],
     request_id: str,
     timeout: int,
     method: str,
@@ -29,7 +29,7 @@ def _call_service_sync(
 
 async def call_service(
     url: str,
-    payload: dict[str, Any],
+    payload: Optional[dict[str, Any]],
     request_id: str,
     timeout: int = 10,
     method: str = "POST",
@@ -64,7 +64,7 @@ async def call_service(
 
 async def call_service_safe(
     url: str,
-    payload: dict[str, Any],
+    payload: Optional[dict[str, Any]],
     request_id: str,
     timeout: int = 10,
     method: str = "POST",

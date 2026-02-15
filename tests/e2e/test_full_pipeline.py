@@ -392,9 +392,12 @@ def test_all_services_healthy():
         "input_processor",
         "reformulator",
         "embedding",
-        "cache",
+        "vector_cache",
         "small_llm",
         "large_llm",
+        "fine_tuned_model",
+        "session",
+        "intent_classifier",
     ]
 
     for service_name in expected_services:
