@@ -55,8 +55,8 @@ python3.14 cli.py test -- -m e2e
 
 **Current Implementation:**
 -  **Unit tests**: ✅ Fully mocked, no external dependencies required
-- **Integration tests**: ⚠️ Require Docker services + real APIs (OpenAI keys + Ollama)
-- **E2E tests**: ⚠️ Require Docker services + real APIs (OpenAI keys + Ollama)
+- **Integration tests**: ⚠️ Require Docker services + real APIs (OpenAI keys + RunPod vLLM)
+- **E2E tests**: ⚠️ Require Docker services + real APIs (OpenAI keys + RunPod vLLM)
 
 **Why integration/E2E tests need real APIs:**
 These tests run against Docker services, which make API calls in separate processes
@@ -69,8 +69,9 @@ that cannot be mocked with standard Python mocking libraries.
 # Ensure Docker services are running
 docker compose up -d
 
-# Ensure Ollama is accessible (HPC SSH tunnel or local Ollama)
-ssh -L 0.0.0.0:11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 node_name
+# Ensure RunPod vLLM endpoints are configured in .env
+# SMALL_LLM_SERVICE_URL, FINE_TUNED_MODEL_SERVICE_URL, REFORMULATOR_LLM_SERVICE_URL
+# See .env.example for all required variables
 
 # Run tests
 python3.14 cli.py test -- -m integration
@@ -115,7 +116,7 @@ Tests are marked with pytest markers to categorize them:
 
 **No external dependencies required.**
 
-Unit tests mock all external services and APIs, so they can run anywhere without Docker or HPC access.
+Unit tests mock all external services and APIs, so they can run anywhere without Docker or RunPod access.
 
 ### Integration Tests
 
@@ -135,9 +136,14 @@ python3.14 cli.py test -- -m integration
 
 1. Start all services (same as above)
 
-2. Ensure HPC SSH tunnel is active:
+2. Verify RunPod vLLM endpoints are configured in `.env`:
 ```bash
-ssh -L 0.0.0.0:11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 node_name
+SMALL_LLM_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
+SMALL_LLM_API_KEY=your_runpod_api_key
+FINE_TUNED_MODEL_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
+FINE_TUNED_MODEL_API_KEY=your_runpod_api_key
+REFORMULATOR_LLM_SERVICE_URL=https://api.runpod.ai/v2/<endpoint_id>/openai
+REFORMULATOR_LLM_API_KEY=your_runpod_api_key
 ```
 
 3. Verify OpenAI API key is set in `.env`:
@@ -145,14 +151,7 @@ ssh -L 0.0.0.0:11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434
 OPENAI_API_KEY=sk-...
 ```
 
-4. Verify model is loaded on HPC:
-```bash
-# On the HPC node
-module load ollama
-ollama run deepseek-r1:7b --keepalive -1m
-```
-
-5. Run tests with real APIs:
+4. Run tests with real APIs:
 ```bash
 python3.14 cli.py test -- -m integration --use-real-apis
 ```
@@ -188,7 +187,7 @@ Unit tests should focus on:
 Unit tests should mock ALL external dependencies:
 
 - **OpenAI API calls**: Mock `openai.ChatCompletion.create()` or `openai.Embedding.create()`
-- **Ollama API calls**: Mock `openai.ChatCompletion.create()` (for Ollama's OpenAI-compatible API)
+- **vLLM API calls**: Mock `openai.ChatCompletion.create()` (for vLLM's OpenAI-compatible API)
 - **Inter-service calls**: Mock `urllib.request.urlopen()` or use `unittest.mock.patch()`
 - **Environment variables**: Mock `os.getenv()` or use `monkeypatch` fixture
 
@@ -255,18 +254,18 @@ curl http://localhost:8000/health
 
 ### Mocking External APIs in Integration Tests
 
-**By default, integration tests mock all external API calls** (OpenAI and Ollama) to:
+**By default, integration tests mock all external API calls** (OpenAI and vLLM) to:
 - Run without OpenAI API keys
-- Run without HPC connection
+- Run without RunPod vLLM endpoints
 - Execute quickly (no real LLM inference)
 - Work in CI/CD environments
 
 **The `mock_external_apis` fixture automatically mocks:**
 - OpenAI Embedding API responses
 - OpenAI Large LLM (GPT-4o-mini) responses
-- Ollama Small LLM (DeepSeek-R1) responses
-- Ollama Reformulator responses
-- Ollama Fine-Tuned Model (DeepSeek-R1) responses
+- vLLM Small LLM (DeepSeek-R1-Distill-Qwen-7B) responses
+- vLLM Reformulator (DeepSeek-R1-Distill-Qwen-7B) responses
+- vLLM Fine-Tuned Model (DeepSeek-R1-Distill-Qwen-7B) responses
 
 **To test against real APIs**, use the `--use-real-apis` flag:
 ```bash
@@ -274,8 +273,8 @@ python3.14 cli.py test -- -m integration --use-real-apis
 ```
 
 This requires:
-1. **SSH tunnel to HPC** (see Prerequisites section above)
-2. **Models loaded in Ollama** on the HPC node
+1. **RunPod vLLM endpoints** configured in `.env` (see `.env.example`)
+2. **Valid RunPod API key** for vLLM services
 3. **Valid OpenAI API key** in `.env`
 
 ### Example Integration Test
@@ -344,8 +343,8 @@ python3.14 cli.py test -- -m e2e --use-real-apis
 When running E2E tests with real APIs (`--use-real-apis` flag), you need:
 
 1. All services running in Docker
-2. HPC SSH tunnel active
-3. Ollama models loaded on HPC
+2. RunPod vLLM endpoints configured in `.env`
+3. Valid RunPod API key for vLLM services
 4. Valid OpenAI API key
 
 ### Recommendation
@@ -356,7 +355,7 @@ When running E2E tests with real APIs (`--use-real-apis` flag), you need:
 
 **Use real APIs when:**
 - Testing actual LLM response quality
-- Debugging HPC connection issues
+- Debugging RunPod endpoint issues
 - Validating end-to-end latency
 - Before major releases (manual verification)
 
@@ -397,7 +396,7 @@ def test_full_pipeline_with_reformulation():
 
 **Key points:**
 - Uses `@pytest.mark.e2e` marker
-- Tests full pipeline with real services and HPC
+- Tests full pipeline with real services and RunPod vLLM
 - Validates complete request/response cycle
 - Slowest test type (multiple service calls + LLM inference)
 
@@ -426,15 +425,15 @@ def test_with_mocked_openai():
         # ...
 ```
 
-### Mocking Ollama (OpenAI-compatible API)
+### Mocking vLLM (OpenAI-compatible API)
 
-Ollama uses the OpenAI-compatible API, so mock it the same way:
+vLLM (on RunPod Serverless) uses the OpenAI-compatible API, so mock it the same way:
 
 ```python
 from unittest.mock import patch, MagicMock
 
 @pytest.mark.unit
-def test_with_mocked_ollama():
+def test_with_mocked_vllm():
     with patch('openai.ChatCompletion.create') as mock_create:
         # Configure mock response
         mock_create.return_value = MagicMock(
@@ -514,18 +513,18 @@ python3.14 cli.py test -- -m integration
 
 **3. `Timeout` errors when testing Small LLM or Fine-tuned Model**
 
-**Cause**: HPC SSH tunnel is not active or Ollama is not running.
+**Cause**: RunPod vLLM endpoint is in cold start or not configured.
 
 **Fix**:
 ```bash
-# Check SSH tunnel
-lsof -i :11434
+# Verify RunPod endpoint URLs and API keys are set in .env
+grep -E "SMALL_LLM_SERVICE_URL|FINE_TUNED_MODEL_SERVICE_URL|REFORMULATOR_LLM_SERVICE_URL" .env
 
-# Re-establish tunnel if needed
-ssh -L 0.0.0.0:11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 node_name
-
-# Verify Ollama is responding
-curl http://localhost:11434/api/tags
+# Test endpoint directly (replace with your endpoint URL and API key)
+curl -s "https://api.runpod.ai/v2/<endpoint_id>/openai/v1/chat/completions" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"deepseek-ai/DeepSeek-R1-Distill-Qwen-7B","messages":[{"role":"user","content":"hi"}]}'
 ```
 
 **4. `OpenAI API key not found` in unit tests**
@@ -545,25 +544,25 @@ with patch('openai.ChatCompletion.create') as mock_create:
 
 **Fix**: Check `.github/workflows/run-tests.yml` for CI-specific environment setup. Pre-merge checks only run unit tests.
 
-### HPC Connection Issues
+### RunPod vLLM Connection Issues
 
 **Symptom**: Tests timeout when calling Small LLM or Fine-tuned Model.
 
 **Diagnosis**:
 ```bash
-# Check if tunnel is active
-lsof -i :11434
+# Check endpoint configuration in .env
+grep -E "SERVICE_URL|API_KEY" .env
 
-# Test Ollama directly
-curl http://localhost:11434/api/tags
-
-# Expected output: List of loaded models
+# Test a RunPod endpoint directly
+curl -s "https://api.runpod.ai/v2/<endpoint_id>/openai/v1/models" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY"
 ```
 
 **Fix**:
-- Ensure SSH tunnel is running with `0.0.0.0` binding (not `localhost`)
-- Verify Ollama is running on HPC node
-- Check that models are loaded with `--keepalive -1m`
+- Verify RunPod endpoint URLs and API keys in `.env` (see `.env.example`)
+- Cold starts can take several minutes; wait and retry
+- Use RunPod `/purge-queue` API to clear stuck jobs if needed
+- Check RunPod dashboard for endpoint status and worker availability
 
 ### Docker Networking Issues
 
@@ -857,8 +856,11 @@ When you call Gateway `/query`, here's what happens:
 2. **Phase 2 - Answer Retrieval** (Gateway orchestrates directly):
    - Calls Embedding (8002) → creates vector embedding
    - Calls Cache (8003) → searches for similar Q&A pairs
-   - Calls Small LLM (8005) → attempts answer with cache context
-   - If confidence < 0.95, calls Large LLM (8001) → gets fresh answer
+   - Routes to appropriate LLM via 4-tier confidence routing:
+     - Tier 1 (>=0.85): Small LLM validates or generates
+     - Tier 2 (0.70-0.85): Small LLM with cache context
+     - Tier 3 (0.50-0.70): Fine-tuned model
+     - Tier 4 (<0.50): Large LLM
    - Saves new answer to cache
 
 3. **Gateway combines results**:
@@ -905,9 +907,9 @@ docker stats
    - Verify port is exposed in docker-compose.yml
 
 2. **Small LLM/Fine-tuned Model timeout:**
-   - Verify SSH tunnel is active
-   - Check Ollama is running on HPC: `curl http://localhost:11434/api/tags`
-   - Verify models are loaded
+   - Verify RunPod endpoint URLs and API keys in `.env`
+   - RunPod cold starts can take several minutes
+   - Check RunPod dashboard for endpoint status
 
 3. **Inter-service communication fails:**
    - Services must use internal Docker network names (e.g., `http://embedding:8002`)
