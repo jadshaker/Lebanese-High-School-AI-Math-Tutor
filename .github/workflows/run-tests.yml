@@ -175,7 +175,7 @@ jobs:
           LARGE_LLM_MODEL_NAME: gpt-4o-mini
         run: |
           echo "Running all tests..."
-          python3.14 -m pytest tests/ --dist loadgroup -n 4 -v --tb=short
+          python3.14 -m pytest tests/ --dist loadgroup -n auto -v --tb=short
 
       - name: Stop Docker Services
         if: always()

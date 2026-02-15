@@ -108,5 +108,6 @@ All 11 services completed:
 - **ALWAYS** activate `.venv` before running dev commands
 - **ALWAYS** update `README.md` when making user-facing changes
 - **ALWAYS** run `python3.14 cli.py clean` before committing
+- **ALWAYS** use agents (Task tool) as needed for parallel work, research, and complex tasks without waiting for explicit user request
 - **NEVER** commit `.env` file
 - Use `terminal-notifier` when needing user input or done with tasks
