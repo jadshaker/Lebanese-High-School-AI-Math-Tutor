@@ -16,7 +16,7 @@ Lebanese High School AI Math Tutor — FastAPI microservices for AI math tutorin
 | Small LLM         | 8005 | vLLM DeepSeek-R1-Distill-Qwen-7B (RunPod Serverless)      |
 | Fine-Tuned Model  | 8006 | vLLM DeepSeek-R1-Distill-Qwen-7B (RunPod Serverless)      |
 | Reformulator      | 8007 | Query improvement via vLLM (RunPod Serverless)            |
-| Session           | 8010 | In-memory session state with TTL cleanup                  |
+| Session           | 8008 | In-memory session state with TTL cleanup                  |
 | Intent Classifier | 8009 | Hybrid rule-based + Small LLM intent classification       |
 | Qdrant            | 6333 | Vector database (external)                                |
 
