@@ -83,7 +83,7 @@ python3.14 cli.py test -- -m e2e          # E2E (Docker + RunPod)
 
 | Type        | Count | Requirements         |
 | ----------- | ----- | -------------------- |
-| Unit        | 81    | None (all mocked)    |
+| Unit        | 107   | None (all mocked)    |
 | Integration | 5     | Docker + RunPod vLLM |
 | E2E         | 5     | Docker + RunPod vLLM |
 
