@@ -22,6 +22,7 @@ External:
 ```
 
 **Pipeline**: Gateway orchestrates two phases:
+
 1. **Data Processing**: Input Processor → Reformulator
 2. **Answer Retrieval**: 4-Tier Confidence Routing
    - **Tier 1 (>=0.85)**: Small LLM validates cached answer or generates new one
@@ -29,113 +30,80 @@ External:
    - **Tier 3 (0.50-0.70)**: Fine-tuned model
    - **Tier 4 (<0.50)**: Large LLM for novel questions
 
-**Tutoring Mode**: Interactive step-by-step problem solving using:
-- Session service for conversation state (with `is_new_branch` optimization to skip cache on new nodes)
-- Intent classifier for understanding student responses
-- Fine-tuned model for generating appropriate tutoring responses
+**Tutoring Mode**: Interactive step-by-step problem solving using Session, Intent Classifier, and Fine-Tuned Model. The `is_new_branch` flag skips cache on new conversation nodes.
 
 ## Getting Started
 
 ### Prerequisites
 
-- Python 3.14+
-- Docker and Docker Compose
-- OpenAI API key
-- vLLM on RunPod Serverless (all LLM services)
+- Python 3.14+, Docker and Docker Compose
+- OpenAI API key, RunPod API key
 
-### Environment Setup
+### Setup
 
-Copy `.env.example` to `.env` and fill in your API keys and RunPod endpoint IDs.
+1. Copy `.env.example` to `.env` and fill in API keys and RunPod endpoint IDs
+2. `docker compose up --build`
+3. Gateway: `http://localhost:8000`, Open WebUI: `http://localhost:3000`
 
-### LLM Backend Options
-
-**Option A: RunPod Serverless (Recommended)**
-
-All three LLM services (Small LLM, Reformulator, Fine-Tuned Model) use vLLM endpoints (`runpod/worker-v1-vllm:v2.11.3`) with `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`. Endpoints scale to zero when idle.
-
-**Option B: AUB HPC via SSH Tunnel**
-
-```bash
-ssh -L 0.0.0.0:11434:localhost:11434 username@octopus.aub.edu.lb -t ssh -L 11434:localhost:11434 node_name
-```
-
-Then set `*_SERVICE_URL=http://host.docker.internal:11434` and `*_API_KEY=dummy` in `.env`.
-
-### Run
-
-```bash
-docker compose up --build
-```
-
-Services: `http://localhost:8000` (Gateway), ports 8001-8010 for individual services.
-
-**UI**: Open WebUI at `http://localhost:3000`
+**LLM Backend**: All three LLM services (Small LLM, Reformulator, Fine-Tuned Model) use RunPod Serverless vLLM (`runpod/worker-v1-vllm:v2.11.3`) with `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`.
 
 ## API
 
-**Gateway** (`http://localhost:8000`):
+Gateway (`http://localhost:8000`):
 
-- `GET /health` — Health check (includes all downstream services)
-- `GET /v1/models` — List available models (OpenAI-compatible)
-- `POST /v1/chat/completions` — OpenAI-compatible chat endpoint
-- `POST /tutoring` — Tutoring interaction endpoint
-- `GET /track/{request_id}` — Trace request across services
+| Endpoint                    | Description                                     |
+| --------------------------- | ----------------------------------------------- |
+| `GET /health`               | Health check (includes all downstream services) |
+| `GET /v1/models`            | List available models (OpenAI-compatible)       |
+| `POST /v1/chat/completions` | OpenAI-compatible chat endpoint                 |
+| `POST /tutoring`            | Tutoring interaction endpoint                   |
+| `GET /track/{request_id}`   | Trace request across services                   |
 
 ```bash
-# OpenAI-compatible chat
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{
-    "model": "math-tutor",
-    "messages": [{"role": "user", "content": "What is the derivative of x^2?"}]
-  }'
+  -d '{"model":"math-tutor","messages":[{"role":"user","content":"What is the derivative of x^2?"}]}'
 ```
 
 ## Development
 
-### Code Quality
-
 ```bash
-python3 cli.py clean   # isort + black + mypy
+python3.14 cli.py clean   # isort + black + mypy (run before committing)
+pytest -n auto             # Run all tests in parallel
 ```
 
 ### Testing
 
 ```bash
-python3.14 cli.py test              # All tests
-python3.14 cli.py test -- -m unit   # Unit tests only (no external deps)
+python3.14 cli.py test                    # All tests
+python3.14 cli.py test -- -m unit         # Unit tests (no external deps)
+python3.14 cli.py test -- -m integration  # Integration (Docker + RunPod)
+python3.14 cli.py test -- -m e2e          # E2E (Docker + RunPod)
 ```
 
-- **Unit tests** (81): Fully mocked, no external dependencies
-- **Integration tests** (5): Require Docker + RunPod/HPC
-- **E2E tests** (5): Require Docker + RunPod/HPC
+| Type        | Count | Requirements         |
+| ----------- | ----- | -------------------- |
+| Unit        | 81    | None (all mocked)    |
+| Integration | 5     | Docker + RunPod vLLM |
+| E2E         | 5     | Docker + RunPod vLLM |
 
-**Parallel execution** (requires `pytest-xdist`):
-```bash
-python3.14 cli.py test -- -m "integration or e2e" --dist loadgroup -n 4
-```
-
-See `TESTING.md` for details.
+Integration/E2E tests mock external APIs by default. Use `--use-real-apis` to test against real endpoints. CI runs the full suite against RunPod Serverless.
 
 ### CI/CD
 
-- **Pre-merge checks** (`.github/workflows/pre-merge-checks.yml`): Code quality + unit tests on every push/PR
-- **Full tests** (`.github/workflows/run-tests.yml`): Integration/E2E tests against RunPod Serverless endpoints
+- **Pre-merge** (`.github/workflows/pre-merge-checks.yml`): isort + black + mypy on every push/PR
+- **Full tests** (`.github/workflows/run-tests.yml`): All tests against RunPod endpoints
 
 ## Observability
 
-- **Prometheus** (`http://localhost:9090`): Metrics collection
-- **Grafana** (`http://localhost:3001`): Dashboards and visualization
-- **Request tracing**: `GET /track/{request_id}` for distributed tracing
+- **Prometheus** (`http://localhost:9090`) — metrics collection from all services via `/metrics` endpoints
+- **Grafana** (`http://localhost:3001`, admin/admin) — pre-configured dashboard with 9 panels (request rate, latency percentiles, cache hit rate, LLM usage, token tracking)
+- **Structured logging** — JSON logs to stdout + `.logs/<service>/app.log` (daily rotation, 7-day retention)
+- **Request tracing** — unique request IDs flow through all services; trace via `GET /track/{request_id}` or `grep "req-<id>" .logs/*/app.log`
 
 ## Data Preprocessing
 
-Tools in `data_preprocessing/` for processing Lebanese math curriculum:
-
-- `pdf_splitter/` — Split PDFs into pages
-- `pdf_to_latex/` — Convert PDFs to LaTeX
-- `extract_exercises/` — Extract exercises
-- `generate_solutions/` — Generate solutions
+Tools in `data_preprocessing/` for processing Lebanese math curriculum: PDF splitting, LaTeX conversion, exercise extraction, solution generation.
 
 ## License
 
