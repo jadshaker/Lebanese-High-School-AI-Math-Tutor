@@ -7,7 +7,7 @@ load_dotenv()
 
 class Config:
     class QDRANT:
-        HOST = os.getenv("QDRANT_HOST", "localhost")
+        HOST = os.environ["QDRANT_HOST"]
         PORT = int(os.getenv("QDRANT_PORT", "6333"))
         GRPC_PORT = int(os.getenv("QDRANT_GRPC_PORT", "6334"))
 

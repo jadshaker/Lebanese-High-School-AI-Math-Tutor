@@ -12,12 +12,12 @@ class Config:
         )
 
     REFORMULATOR_LLM_MODEL_NAME = os.environ["REFORMULATOR_LLM_MODEL_NAME"]
-    REFORMULATOR_LLM_API_KEY = os.getenv("REFORMULATOR_LLM_API_KEY", "dummy")
+    REFORMULATOR_LLM_API_KEY = os.environ["REFORMULATOR_LLM_API_KEY"]
     LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "300"))
 
     class REFORMULATION:
         # Whether to use the LLM for reformulation or just return the input
-        USE_LLM = os.getenv("USE_LLM_FOR_REFORMULATION", "true").lower() == "true"
+        USE_LLM = os.getenv("REFORMULATOR_USE_LLM", "true").lower() == "true"
         # Maximum conversation history messages to include in context
         MAX_CONTEXT_MESSAGES = int(os.getenv("REFORMULATOR_MAX_CONTEXT", "5"))
         # Maximum length of summarized context

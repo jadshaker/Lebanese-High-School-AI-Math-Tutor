@@ -55,5 +55,5 @@ class Config:
     # Tutoring configuration
     class TUTORING:
         MAX_INTERACTION_DEPTH = int(os.getenv("TUTORING_MAX_DEPTH", "5"))
-        ENABLE_TUTORING_MODE = os.getenv("TUTORING_ENABLE", "true").lower() == "true"
+        ENABLE_TUTORING_MODE = os.getenv("TUTORING_ENABLED", "true").lower() == "true"
         CACHE_THRESHOLD = float(os.getenv("TUTORING_INTERACTION_THRESHOLD", "0.85"))
