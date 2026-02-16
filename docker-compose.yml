@@ -1,10 +1,10 @@
 services:
-  # API Gateway - Main entry point (Orchestrates all services directly)
-  gateway:
+  # App - FastAPI application
+  app:
     build:
-      context: services/gateway
+      context: .
       dockerfile: Dockerfile
-    container_name: math-tutor-gateway
+    container_name: math-tutor-app
     ports:
       - '8000:8000'
     env_file:
@@ -12,85 +12,13 @@ services:
       - path: .env.dev
         required: false
     environment:
-      - INPUT_PROCESSOR_SERVICE_URL=http://input-processor:8004
-      - REFORMULATOR_SERVICE_URL=http://reformulator:8007
-      - EMBEDDING_SERVICE_URL=http://embedding:8002
-      - VECTOR_CACHE_SERVICE_URL=http://vector-cache:8003
-      - SMALL_LLM_SERVICE_URL=http://small-llm:8005
-      - LARGE_LLM_SERVICE_URL=http://large-llm:8001
-      - FINE_TUNED_MODEL_SERVICE_URL=http://fine-tuned-model:8006
-      - SESSION_SERVICE_URL=http://session:8008
-      - INTENT_CLASSIFIER_SERVICE_URL=http://intent-classifier:8009
-      - CACHE_TOP_K=${CACHE_TOP_K:-5}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload --no-access-log
     depends_on:
-      - input-processor
-      - reformulator
-      - embedding
-      - vector-cache
-      - small-llm
-      - large-llm
-      - fine-tuned-model
-      - session
-      - intent-classifier
+      - qdrant
     volumes:
-      - ./.logs/gateway:/app/logs
-    networks:
-      - math-tutor-network
-
-  # Large LLM Service
-  large-llm:
-    build:
-      context: services/large_llm
-      dockerfile: Dockerfile
-    container_name: math-tutor-large-llm
-    ports:
-      - '8001:8001'
-    env_file:
-      - .env
-      - path: .env.dev
-        required: false
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload --no-access-log
-    volumes:
-      - ./.logs/large_llm:/app/logs
-    networks:
-      - math-tutor-network
-
-  # Small LLM Service
-  small-llm:
-    build:
-      context: services/small_llm
-      dockerfile: Dockerfile
-    container_name: math-tutor-small-llm
-    ports:
-      - '8005:8005'
-    env_file:
-      - .env
-      - path: .env.dev
-        required: false
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8005 --reload --no-access-log
-    extra_hosts:
-      - 'host.docker.internal:host-gateway'
-    volumes:
-      - ./.logs/small_llm:/app/logs
-    networks:
-      - math-tutor-network
-
-  # Embedding Service
-  embedding:
-    build:
-      context: services/embedding
-      dockerfile: Dockerfile
-    container_name: math-tutor-embedding
-    ports:
-      - '8002:8002'
-    env_file:
-      - .env
-      - path: .env.dev
-        required: false
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8002 --reload --no-access-log
-    volumes:
-      - ./.logs/embedding:/app/logs
+      - ./.logs/app:/app/logs
     networks:
       - math-tutor-network
 
@@ -107,134 +35,6 @@ services:
       - math-tutor-network
     restart: unless-stopped
 
-  # Vector Cache Service (Qdrant-backed)
-  vector-cache:
-    build:
-      context: services/vector_cache
-      dockerfile: Dockerfile
-    container_name: math-tutor-vector-cache
-    ports:
-      - '8003:8003'
-    env_file:
-      - .env
-      - path: .env.dev
-        required: false
-    environment:
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8003 --reload --no-access-log
-    depends_on:
-      - qdrant
-    volumes:
-      - ./.logs/vector_cache:/app/logs
-    networks:
-      - math-tutor-network
-
-  # Input Processor Service
-  input-processor:
-    build:
-      context: services/input_processor
-      dockerfile: Dockerfile
-    container_name: math-tutor-input-processor
-    ports:
-      - '8004:8004'
-    env_file:
-      - .env
-      - path: .env.dev
-        required: false
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8004 --reload --no-access-log
-    volumes:
-      - ./.logs/input_processor:/app/logs
-    networks:
-      - math-tutor-network
-
-  # Fine-Tuned Model Service
-  fine-tuned-model:
-    build:
-      context: services/fine_tuned_model
-      dockerfile: Dockerfile
-    container_name: math-tutor-fine-tuned-model
-    ports:
-      - '8006:8006'
-    env_file:
-      - .env
-      - path: .env.dev
-        required: false
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8006 --reload --no-access-log
-    extra_hosts:
-      - 'host.docker.internal:host-gateway'
-    volumes:
-      - ./.logs/fine_tuned_model:/app/logs
-    networks:
-      - math-tutor-network
-
-  # Reformulator Service
-  reformulator:
-    build:
-      context: services/reformulator
-      dockerfile: Dockerfile
-    container_name: math-tutor-reformulator
-    ports:
-      - '8007:8007'
-    env_file:
-      - .env
-      - path: .env.dev
-        required: false
-    environment:
-      - SMALL_LLM_SERVICE_URL=http://small-llm:8005
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8007 --reload --no-access-log
-    depends_on:
-      - small-llm
-    volumes:
-      - ./.logs/reformulator:/app/logs
-    networks:
-      - math-tutor-network
-
-  # Session Service
-  session:
-    build:
-      context: services/session
-      dockerfile: Dockerfile
-    container_name: math-tutor-session
-    ports:
-      - '8008:8008'
-    env_file:
-      - .env
-      - path: .env.dev
-        required: false
-    environment:
-      - SESSION_TTL_SECONDS=${SESSION_TTL_SECONDS:-3600}
-      - SESSION_MAX_HISTORY=${SESSION_MAX_HISTORY:-50}
-      - SESSION_CLEANUP_INTERVAL=${SESSION_CLEANUP_INTERVAL:-300}
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8008 --reload --no-access-log
-    volumes:
-      - ./.logs/session:/app/logs
-    networks:
-      - math-tutor-network
-
-  # Intent Classifier Service
-  intent-classifier:
-    build:
-      context: services/intent_classifier
-      dockerfile: Dockerfile
-    container_name: math-tutor-intent-classifier
-    ports:
-      - '8009:8009'
-    env_file:
-      - .env
-      - path: .env.dev
-        required: false
-    environment:
-      - SMALL_LLM_SERVICE_URL=http://small-llm:8005
-      - INTENT_USE_LLM_FALLBACK=${INTENT_USE_LLM_FALLBACK:-true}
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8009 --reload --no-access-log
-    depends_on:
-      - small-llm
-    volumes:
-      - ./.logs/intent_classifier:/app/logs
-    networks:
-      - math-tutor-network
-
   # Open WebUI - User-facing frontend
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
@@ -243,7 +43,7 @@ services:
       - '3000:8080'
     environment:
       # API Configuration
-      - OPENAI_API_BASE_URLS=http://gateway:8000/v1
+      - OPENAI_API_BASE_URLS=http://app:8000/v1
       - OPENAI_API_KEYS=dummy-key
 
       # OLLAMA Configuration
@@ -262,7 +62,7 @@ services:
       - SHOW_ADMIN_DETAILS=True
       - ENABLE_COMMUNITY_SHARING=False
     depends_on:
-      - gateway
+      - app
     networks:
       - math-tutor-network
     volumes:

@@ -4,82 +4,53 @@ import sys
 
 
 def clean() -> None:
-    """Run code quality checks on all services, tests, and cli.py"""
-    services_dir = "services"
+    """Run code quality checks on src/, tests/, and cli."""
     failures: list[str] = []
     successes: list[str] = []
 
-    # Process each service individually
-    if os.path.exists(services_dir):
-        for service in sorted(os.listdir(services_dir)):
-            service_path = os.path.join(services_dir, service)
-            requirements_path = os.path.join(service_path, "requirements.txt")
-            src_path = os.path.join(service_path, "src")
+    # Process src/ (the app)
+    if os.path.exists("src"):
+        print(f"\n{'='*60}")
+        print("Processing src...")
+        print(f"{'='*60}")
+        src_failed = False
 
-            if not (os.path.isdir(service_path) and os.path.exists(src_path)):
-                continue
+        print("🧹 Formatting src...")
+        result = subprocess.run(
+            [
+                "autoflake",
+                "--remove-all-unused-imports",
+                "--remove-unused-variables",
+                "--recursive",
+                "src",
+                "-i",
+                "--exclude=__init__.py",
+            ]
+        )
+        if result.returncode != 0:
+            failures.append("src: autoflake failed")
+            src_failed = True
 
-            print(f"\n{'='*60}")
-            print(f"Processing {service} service...")
-            print(f"{'='*60}")
+        result = subprocess.run(
+            ["isort", "src", "--profile", "black"], stdout=subprocess.DEVNULL
+        )
+        if result.returncode != 0:
+            failures.append("src: isort failed")
+            src_failed = True
 
-            service_failed = False
+        result = subprocess.run(["black", "src"], stdout=subprocess.DEVNULL)
+        if result.returncode != 0:
+            failures.append("src: black failed")
+            src_failed = True
 
-            if os.path.isfile(requirements_path):
-                print(f"📦 Installing dependencies for {service}...")
-                result = subprocess.run(
-                    [
-                        "python3.14",
-                        "-m",
-                        "pip",
-                        "install",
-                        "-q",
-                        "-r",
-                        requirements_path,
-                    ]
-                )
-                if result.returncode != 0:
-                    failures.append(f"{service}: dependency installation failed")
-                    service_failed = True
+        print("🔍 Type checking src...")
+        result = subprocess.run(["mypy", "src", "--explicit-package-bases"])
+        if result.returncode != 0:
+            failures.append("src: mypy type check failed")
+            src_failed = True
 
-            print(f"🧹 Formatting {service}...")
-            result = subprocess.run(
-                [
-                    "autoflake",
-                    "--remove-all-unused-imports",
-                    "--remove-unused-variables",
-                    "--recursive",
-                    service_path,
-                    "-i",
-                    "--exclude=__init__.py",
-                ]
-            )
-            if result.returncode != 0:
-                failures.append(f"{service}: autoflake failed")
-                service_failed = True
-
-            result = subprocess.run(
-                ["isort", service_path, "--profile", "black"], stdout=subprocess.DEVNULL
-            )
-            if result.returncode != 0:
-                failures.append(f"{service}: isort failed")
-                service_failed = True
-
-            result = subprocess.run(["black", service_path], stdout=subprocess.DEVNULL)
-            if result.returncode != 0:
-                failures.append(f"{service}: black failed")
-                service_failed = True
-
-            print(f"🔍 Type checking {service}...")
-            result = subprocess.run(
-                ["mypy", "src", "--explicit-package-bases"], cwd=service_path
-            )
-            if result.returncode != 0:
-                failures.append(f"{service}: mypy type check failed")
-                service_failed = True
-
-            if not service_failed:
-                successes.append(service)
+        if not src_failed:
+            successes.append("src")
 
     # Process tests directory
     print(f"\n{'='*60}")
@@ -119,7 +90,7 @@ def clean() -> None:
     if not tests_failed:
         successes.append("tests")
 
-    # Process cli.py + cli/
+    # Process cli.py + commands/
     print(f"\n{'='*60}")
     print("Processing cli...")
     print(f"{'='*60}")

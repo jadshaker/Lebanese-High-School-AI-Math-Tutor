@@ -2,23 +2,40 @@
 
 ## Project Overview
 
-Lebanese High School AI Math Tutor — FastAPI microservices for AI math tutoring (Lebanese curriculum). 11 services communicating via REST, each in its own Docker container.
+Lebanese High School AI Math Tutor — a single FastAPI application for AI math tutoring (Lebanese curriculum). All services consolidated into one container with direct function calls.
 
 ## Architecture
 
-| Service           | Port | Description                                               |
-| ----------------- | ---- | --------------------------------------------------------- |
-| Gateway           | 8000 | API Gateway with 4-tier confidence routing and tutoring   |
-| Large LLM         | 8001 | OpenAI GPT-4o-mini                                        |
-| Embedding         | 8002 | OpenAI text-embedding-3-small                             |
-| Vector Cache      | 8003 | Qdrant-backed vector storage (Q&A + tutoring collections) |
-| Input Processor   | 8004 | Text/image processing                                     |
-| Small LLM         | 8005 | vLLM DeepSeek-R1-Distill-Qwen-7B (RunPod Serverless)      |
-| Fine-Tuned Model  | 8006 | vLLM DeepSeek-R1-Distill-Qwen-7B (RunPod Serverless)      |
-| Reformulator      | 8007 | Query improvement via vLLM (RunPod Serverless)            |
-| Session           | 8008 | In-memory session state with TTL cleanup                  |
-| Intent Classifier | 8009 | Hybrid rule-based + Small LLM intent classification       |
-| Qdrant            | 6333 | Vector database (external)                                |
+| Container | Port | Description |
+| --------- | ---- | ----------- |
+| App | 8000 | Single FastAPI app — all services merged |
+| Qdrant | 6333 | Vector database (external) |
+| Open WebUI | 3000 | Chat UI (external) |
+| Prometheus | 9090 | Metrics collection (external) |
+| Grafana | 3001 | Dashboard (external) |
+
+```
+src/
+├── main.py                         # Unified FastAPI app with lifespan
+├── config.py                       # Single merged Config class
+├── logging_utils.py                # Structured logging
+├── metrics.py                      # All Prometheus metrics
+├── models/schemas.py               # All Pydantic models
+├── clients/
+│   ├── llm.py                      # 4 OpenAI client singletons (small, fine-tuned, large, reformulator)
+│   └── embedding.py                # OpenAI embedding client
+├── services/
+│   ├── input_processor/service.py  # Text processing
+│   ├── reformulator/               # Query improvement (prompts.py + service.py)
+│   ├── intent_classifier/          # Rule-based + LLM classification (prompts.py + service.py)
+│   ├── session/service.py          # In-memory session store + TTL cleanup
+│   └── vector_cache/               # Qdrant operations (repository.py + service.py)
+├── orchestrators/
+│   ├── answer_retrieval/           # 4-tier routing (prompts.py + service.py)
+│   ├── data_processing/service.py  # Input processing + reformulation pipeline
+│   └── tutoring/                   # Tutoring flow (prompts.py + service.py)
+└── routes/admin.py                 # /health, /metrics, /logs, /track
+```
 
 **4-Tier Routing**: Tier 1 (>=0.85) Small LLM validate-or-generate → Tier 2 (0.70-0.85) Small LLM with context → Tier 3 (0.50-0.70) Fine-tuned model → Tier 4 (<0.50) Large LLM
 
@@ -27,27 +44,13 @@ Lebanese High School AI Math Tutor — FastAPI microservices for AI math tutorin
 ## Key Patterns
 
 - **Config**: `Config` class in `config.py` with nested classes. `os.environ[]` for required, `os.getenv()` for optional.
-- **Health checks**: Every service has `GET /health`
+- **Health checks**: `GET /health` checks Qdrant connectivity + session status
 - **Imports**: Absolute from `src` (e.g., `from src.config import Config`)
 - **Code style**: No module-level docstrings; class/function docstrings encouraged
-- **Inter-service calls**: `urllib` for HTTP, `openai` package for LLM calls
-- **Event loop safety**: Sync OpenAI client endpoints use `def` (not `async def`). Gateway uses `asyncio.to_thread`.
-- **LLM backend**: Each LLM service uses a separate RunPod Serverless vLLM endpoint with model `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`
-
-## Service Structure
-
-```
-services/<service-name>/
-├── Dockerfile
-├── requirements.txt
-└── src/
-    ├── __init__.py
-    ├── main.py
-    ├── config.py
-    └── models/
-        ├── __init__.py
-        └── schemas.py
-```
+- **Service calls**: Direct Python function calls (no inter-service HTTP)
+- **Event loop safety**: Sync OpenAI client calls use `asyncio.to_thread()` in async orchestrators
+- **LLM clients**: 4 OpenAI client singletons in `clients/llm.py` — Small LLM, Fine-tuned, Large LLM, Reformulator
+- **LLM backend**: Small LLM, Reformulator, and Fine-Tuned Model use RunPod Serverless vLLM with `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`
 
 ## Environment Variables
 

@@ -10,7 +10,7 @@ import requests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from conftest import wait_for_logs, wait_for_metrics
 
-GATEWAY_URL = os.getenv("GATEWAY_SERVICE_URL", "http://localhost:8000")
+APP_URL = os.getenv("APP_URL", "http://localhost:8000")
 
 
 @pytest.mark.e2e
@@ -21,7 +21,7 @@ def test_simple_math_question(mock_external_apis):
     Test asking a simple math question through the complete pipeline.
 
     This test verifies:
-    - Complete user journey: Data Processing → Answer Retrieval (mocked by default)
+    - Complete user journey: Data Processing -> Answer Retrieval (mocked by default)
     - Response contains reasonable answer
     - OpenAI-compatible format is correct
     - Request tracking works end-to-end
@@ -31,7 +31,7 @@ def test_simple_math_question(mock_external_apis):
     request_id = f"e2e-test-{uuid.uuid4().hex[:8]}"
 
     response = requests.post(
-        f"{GATEWAY_URL}/v1/chat/completions",
+        f"{APP_URL}/v1/chat/completions",
         json={
             "model": "math-tutor",
             "messages": [{"role": "user", "content": "What is the derivative of x^2?"}],
@@ -78,7 +78,7 @@ def test_simple_math_question(mock_external_apis):
     assert request_id_header is not None, "Request ID should be in response headers"
 
     # Verify request tracking works
-    track_response = requests.get(f"{GATEWAY_URL}/track/{request_id}", timeout=60)
+    track_response = requests.get(f"{APP_URL}/track/{request_id}", timeout=60)
     assert (
         track_response.status_code == 200
     ), f"Tracking request failed: {track_response.text}"
@@ -93,7 +93,7 @@ def test_simple_math_question(mock_external_apis):
     services_with_logs = track_data["services"]
     assert len(services_with_logs) > 0, "Should have logs from at least one service"
 
-    print(f"\n✓ Simple Math Question Test:")
+    print(f"\n  Simple Math Question Test:")
     print(f"  Request ID: {request_id}")
     print(f"  Question: What is the derivative of x^2?")
     print(f"  Answer length: {len(answer)} chars")
@@ -124,7 +124,7 @@ def test_cache_behavior_on_repeated_question(mock_external_apis):
 
     # First request
     response_1 = requests.post(
-        f"{GATEWAY_URL}/v1/chat/completions",
+        f"{APP_URL}/v1/chat/completions",
         json={
             "model": "math-tutor",
             "messages": [{"role": "user", "content": question}],
@@ -144,7 +144,7 @@ def test_cache_behavior_on_repeated_question(mock_external_apis):
 
     # Second request with same question
     response_2 = requests.post(
-        f"{GATEWAY_URL}/v1/chat/completions",
+        f"{APP_URL}/v1/chat/completions",
         json={
             "model": "math-tutor",
             "messages": [{"role": "user", "content": question}],
@@ -163,7 +163,7 @@ def test_cache_behavior_on_repeated_question(mock_external_apis):
     assert len(answer_2) > 0
 
     # Wait for metrics to be available (handles Prometheus aggregation delay)
-    metrics_text = wait_for_metrics(GATEWAY_URL, timeout=3.0)
+    metrics_text = wait_for_metrics(APP_URL, timeout=3.0)
 
     # Verify cache-related metrics exist (either hits or misses)
     has_cache_metric = (
@@ -175,7 +175,7 @@ def test_cache_behavior_on_repeated_question(mock_external_apis):
     # Note: Cache stub always returns 0.85 similarity (not exact match)
     # So both requests will trigger LLM calls, but cache was searched
 
-    print(f"\n✓ Cache Behavior Test:")
+    print(f"\n  Cache Behavior Test:")
     print(f"  Question: {question}")
     print(f"  First request ID: {request_id_1}")
     print(f"  First answer length: {len(answer_1)} chars")
@@ -200,7 +200,7 @@ def test_invalid_input_handling():
 
     # Test 1: Empty messages array
     response = requests.post(
-        f"{GATEWAY_URL}/v1/chat/completions",
+        f"{APP_URL}/v1/chat/completions",
         json={"model": "math-tutor", "messages": []},
         headers={"X-Request-ID": request_id},
         timeout=30,
@@ -213,7 +213,7 @@ def test_invalid_input_handling():
 
     # Test 2: Missing messages field
     response = requests.post(
-        f"{GATEWAY_URL}/v1/chat/completions",
+        f"{APP_URL}/v1/chat/completions",
         json={"model": "math-tutor"},
         headers={"X-Request-ID": request_id},
         timeout=30,
@@ -226,7 +226,7 @@ def test_invalid_input_handling():
 
     # Test 3: Messages without user role
     response = requests.post(
-        f"{GATEWAY_URL}/v1/chat/completions",
+        f"{APP_URL}/v1/chat/completions",
         json={
             "model": "math-tutor",
             "messages": [{"role": "system", "content": "You are a tutor"}],
@@ -242,7 +242,7 @@ def test_invalid_input_handling():
 
     # Test 4: Invalid message structure (missing content)
     response = requests.post(
-        f"{GATEWAY_URL}/v1/chat/completions",
+        f"{APP_URL}/v1/chat/completions",
         json={"model": "math-tutor", "messages": [{"role": "user"}]},
         headers={"X-Request-ID": request_id},
         timeout=30,
@@ -255,7 +255,7 @@ def test_invalid_input_handling():
 
     # Test 5: Empty content string
     response = requests.post(
-        f"{GATEWAY_URL}/v1/chat/completions",
+        f"{APP_URL}/v1/chat/completions",
         json={"model": "math-tutor", "messages": [{"role": "user", "content": ""}]},
         headers={"X-Request-ID": request_id},
         timeout=30,
@@ -270,7 +270,7 @@ def test_invalid_input_handling():
         500,
     ], f"Should handle empty content gracefully, got {response.status_code}"
 
-    print(f"\n✓ Invalid Input Handling Test:")
+    print(f"\n  Invalid Input Handling Test:")
     print(f"  Empty messages: Rejected correctly")
     print(f"  Missing messages: Rejected correctly")
     print(f"  No user message: Rejected correctly")
@@ -283,19 +283,19 @@ def test_invalid_input_handling():
 @pytest.mark.xdist_group("full_pipeline")
 def test_request_tracking_end_to_end(mock_external_apis):
     """
-    Test request tracking across the complete pipeline.
+    Test request tracking within the consolidated app.
 
     This test verifies:
-    - Request ID propagates through all services (mocked by default)
-    - Timeline shows services that support /logs endpoint
-    - Logs from multiple services are collected
+    - Request ID propagates through the app pipeline (mocked by default)
+    - Timeline shows the app service logs
+    - Logs are collected and returned
     - Timeline is sorted chronologically
 
     Use --use-real-apis flag to test against real services.
     """
     # Make a complete request through the pipeline
     response = requests.post(
-        f"{GATEWAY_URL}/v1/chat/completions",
+        f"{APP_URL}/v1/chat/completions",
         json={
             "model": "math-tutor",
             "messages": [{"role": "user", "content": "Explain the quadratic formula"}],
@@ -305,14 +305,14 @@ def test_request_tracking_end_to_end(mock_external_apis):
 
     assert response.status_code == 200, f"Chat completion failed: {response.text}"
 
-    # Get the request ID from response headers (gateway generates it)
+    # Get the request ID from response headers (app generates it)
     request_id = response.headers.get("X-Request-ID") or response.headers.get(
         "x-request-id"
     )
     assert request_id is not None, "Request ID should be in response headers"
 
     # Wait for logs to be written (handles async log collection race condition)
-    track_data = wait_for_logs(GATEWAY_URL, request_id, timeout=5.0, min_services=2)
+    track_data = wait_for_logs(APP_URL, request_id, timeout=5.0, min_services=1)
 
     # Verify tracking response structure
     assert "request_id" in track_data
@@ -323,16 +323,9 @@ def test_request_tracking_end_to_end(mock_external_apis):
     services = track_data["services"]
     timeline = track_data["timeline"]
 
-    # Verify we have logs from at least some services
+    # Verify we have logs from at least the app service
     assert len(services) > 0, "Should have logs from at least one service"
     assert len(timeline) > 0, "Should have timeline entries"
-
-    # Verify we have logs from core services
-    core_services = ["gateway", "input-processor", "embedding", "cache"]
-    services_found = [s for s in core_services if s in services]
-    assert (
-        len(services_found) >= 2
-    ), f"Should have logs from at least 2 core services, found: {services_found}"
 
     # Verify timeline structure
     for entry in timeline:
@@ -345,10 +338,9 @@ def test_request_tracking_end_to_end(mock_external_apis):
     timestamps = [entry["log"][:23] for entry in timeline if len(entry["log"]) >= 23]
     assert timestamps == sorted(timestamps), "Timeline should be sorted chronologically"
 
-    print(f"\n✓ Request Tracking End-to-End Test:")
+    print(f"\n  Request Tracking End-to-End Test:")
     print(f"  Request ID: {request_id}")
     print(f"  Services with logs: {list(services.keys())}")
-    print(f"  Core services found: {services_found}")
     print(f"  Total timeline entries: {len(timeline)}")
 
     # Print log counts per service
@@ -361,14 +353,14 @@ def test_request_tracking_end_to_end(mock_external_apis):
 @pytest.mark.xdist_group("no_pod")
 def test_all_services_healthy():
     """
-    Test that all services are healthy before running other tests.
+    Test that the app and its components are healthy.
 
     This test verifies:
-    - Gateway's /health endpoint works
-    - All services report healthy status
-    - Gateway aggregates health from all services
+    - App's /health endpoint works
+    - Components report their status
+    - App health response has the expected structure
     """
-    response = requests.get(f"{GATEWAY_URL}/health", timeout=10)
+    response = requests.get(f"{APP_URL}/health", timeout=10)
 
     assert response.status_code == 200, f"Health check failed: {response.text}"
     data = response.json()
@@ -376,57 +368,36 @@ def test_all_services_healthy():
     # Verify response structure
     assert "status" in data
     assert "service" in data
-    assert data["service"] == "gateway"
-    assert "services" in data
+    assert data["service"] == "app"
+    assert "components" in data
 
-    # Gateway status should be healthy or degraded
+    # App status should be healthy or degraded
     assert data["status"] in [
         "healthy",
         "degraded",
-    ], f"Gateway status should be healthy or degraded, got: {data['status']}"
+    ], f"App status should be healthy or degraded, got: {data['status']}"
 
-    services = data["services"]
+    components = data["components"]
 
-    # All expected services should be present
-    expected_services = [
-        "input_processor",
-        "reformulator",
-        "embedding",
-        "vector_cache",
-        "small_llm",
-        "large_llm",
-        "fine_tuned_model",
-        "session",
-        "intent_classifier",
-    ]
+    # Expected components in consolidated app
+    expected_components = ["qdrant", "session"]
 
-    for service_name in expected_services:
+    for component_name in expected_components:
         assert (
-            service_name in services
-        ), f"Service {service_name} should be in health check"
+            component_name in components
+        ), f"Component {component_name} should be in health check"
 
-        service_health = services[service_name]
-        assert "status" in service_health, f"Service {service_name} should have status"
+    # Verify qdrant component has expected fields
+    qdrant = components["qdrant"]
+    assert "qdrant_connected" in qdrant, "Qdrant component should have qdrant_connected"
 
-        # Service should be healthy (warn if not, but don't fail test)
-        if service_health["status"] != "healthy":
-            print(f"\n⚠️  WARNING: Service {service_name} is not healthy:")
-            print(f"    Status: {service_health['status']}")
-            if "error" in service_health:
-                print(f"    Error: {service_health['error']}")
+    # Verify session component has expected fields
+    session = components["session"]
+    assert "active_sessions" in session, "Session component should have active_sessions"
+    assert "uptime_seconds" in session, "Session component should have uptime_seconds"
 
-    print(f"\n✓ All Services Health Check:")
-    print(f"  Gateway status: {data['status']}")
-    print(f"  Services checked: {len(services)}")
-
-    # Print status of each service
-    for service_name, service_health in services.items():
-        status = service_health.get("status", "unknown")
-        symbol = "✓" if status == "healthy" else "✗"
-        print(f"    {symbol} {service_name}: {status}")
-
-    # Verify at least gateway is healthy
-    assert data["status"] in [
-        "healthy",
-        "degraded",
-    ], f"Gateway should be operational, got: {data['status']}"
+    print(f"\n  App Health Check:")
+    print(f"  App status: {data['status']}")
+    print(f"  Qdrant connected: {qdrant.get('qdrant_connected')}")
+    print(f"  Active sessions: {session.get('active_sessions')}")
+    print(f"  Uptime: {session.get('uptime_seconds')}s")

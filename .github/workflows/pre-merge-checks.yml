@@ -19,17 +19,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          for service in services/*/; do
-            if [ -f "$service/requirements.txt" ]; then
-              pip install -r "$service/requirements.txt"
-            fi
-          done
 
       - name: isort check
-        run: isort --check-only --profile black services
+        run: isort --check-only --profile black src tests cli.py commands
 
       - name: black check
-        run: black --check services
+        run: black --check src tests cli.py commands
 
       - name: mypy check
         env:
@@ -38,9 +33,5 @@ jobs:
           FINE_TUNED_MODEL_NAME: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
           REFORMULATOR_LLM_MODEL_NAME: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
         run: |
-          for service in services/*/; do
-            if [ -d "$service/src" ]; then
-              echo "Type checking $(basename $service)..."
-              (cd "$service" && mypy src --explicit-package-bases)
-            fi
-          done
+          mypy src --explicit-package-bases
+          mypy cli.py commands
