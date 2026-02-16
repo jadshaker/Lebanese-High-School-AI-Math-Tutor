@@ -1,68 +1,26 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 
-# Module-level setup - load app and create client
 @pytest.fixture(scope="module", autouse=True)
-def setup_module(gateway_app):
-    """Set up module-level client for gateway service"""
+def setup_module(app):
+    """Set up module-level client for app service with lifespan mocks."""
     global client
-    client = TestClient(gateway_app)
-
-
-@pytest.mark.unit
-@patch("src.main.urlopen")
-def test_health_endpoint_all_healthy(mock_urlopen):
-    """Test health check when all services are healthy"""
-    # Mock all service health checks
-    mock_response = MagicMock()
-    mock_response.read.return_value = b'{"status": "healthy", "service": "test"}'
-    mock_response.__enter__ = MagicMock(return_value=mock_response)
-    mock_response.__exit__ = MagicMock(return_value=False)
-    mock_urlopen.return_value = mock_response
-
-    response = client.get("/health")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "healthy"
-    assert data["service"] == "gateway"
-    assert "services" in data
-
-
-@pytest.mark.unit
-@patch("src.main.urlopen")
-def test_health_endpoint_degraded(mock_urlopen):
-    """Test health check when some services are unhealthy"""
-
-    # Mock service health checks with one failure
-    def mock_health_side_effect(request, *args, **kwargs):
-        # Check the URL from the Request object
-        url = request.full_url if hasattr(request, "full_url") else str(request)
-        if "large-llm" in url:
-            raise Exception("Service unavailable")
-
-        mock_response = MagicMock()
-        mock_response.read.return_value = b'{"status": "healthy"}'
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
-        mock_response.__exit__ = MagicMock(return_value=False)
-        return mock_response
-
-    mock_urlopen.side_effect = mock_health_side_effect
-
-    response = client.get("/health")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "degraded"
-    assert "services" in data
+    with (
+        patch("src.main.AsyncQdrantClient"),
+        patch("src.main.vector_cache.initialize", new_callable=AsyncMock),
+        patch("src.main.session_service.start_cleanup"),
+        patch("src.main.session_service.stop_cleanup"),
+    ):
+        client = TestClient(app)
+        yield
 
 
 @pytest.mark.unit
 def test_models_endpoint():
-    """Test /v1/models endpoint returns correct model list"""
+    """Test /v1/models endpoint returns correct model list."""
     response = client.get("/v1/models")
 
     assert response.status_code == 200
@@ -74,14 +32,11 @@ def test_models_endpoint():
 
 
 @pytest.mark.unit
-@patch("src.main.process_user_input")
-@patch("src.main.retrieve_answer")
-async def test_chat_completions_success(mock_retrieve, mock_process):
-    """Test successful chat completion through full pipeline"""
-    # Mock processing phase
+@patch("src.main.process_user_input", new_callable=AsyncMock)
+@patch("src.main.retrieve_answer", new_callable=AsyncMock)
+def test_chat_completions_success(mock_retrieve, mock_process):
+    """Test successful chat completion through full pipeline."""
     mock_process.return_value = {"reformulated_query": "What is the derivative of x^2?"}
-
-    # Mock retrieval phase
     mock_retrieve.return_value = {
         "answer": "The derivative of x^2 is 2x",
         "source": "small_llm",
@@ -105,7 +60,7 @@ async def test_chat_completions_success(mock_retrieve, mock_process):
 
 @pytest.mark.unit
 def test_chat_completions_no_user_message():
-    """Test chat completion with no user message"""
+    """Test chat completion with no user message."""
     request_data = {
         "model": "math-tutor",
         "messages": [{"role": "system", "content": "You are a tutor"}],
@@ -119,20 +74,17 @@ def test_chat_completions_no_user_message():
 
 @pytest.mark.unit
 def test_chat_completions_missing_messages():
-    """Test chat completion with missing messages field"""
+    """Test chat completion with missing messages field."""
     response = client.post("/v1/chat/completions", json={"model": "math-tutor"})
-    assert response.status_code == 422  # Validation error
+    assert response.status_code == 422
 
 
 @pytest.mark.unit
-@patch("src.main.process_user_input")
-@patch("src.main.retrieve_answer")
-async def test_chat_completions_extracts_last_user_message(mock_retrieve, mock_process):
-    """Test that chat completion extracts the last user message from conversation"""
-    # Mock processing phase
+@patch("src.main.process_user_input", new_callable=AsyncMock)
+@patch("src.main.retrieve_answer", new_callable=AsyncMock)
+def test_chat_completions_extracts_last_user_message(mock_retrieve, mock_process):
+    """Test that chat completion extracts the last user message from conversation."""
     mock_process.return_value = {"reformulated_query": "Is 4 correct?"}
-
-    # Mock retrieval phase
     mock_retrieve.return_value = {"answer": "Yes, 4 is correct", "source": "small_llm"}
 
     request_data = {
@@ -147,16 +99,15 @@ async def test_chat_completions_extracts_last_user_message(mock_retrieve, mock_p
     response = client.post("/v1/chat/completions", json=request_data)
 
     assert response.status_code == 200
-    # Verify that process_user_input was called with the last user message
     mock_process.assert_called_once()
     call_args = mock_process.call_args[0]
     assert call_args[0] == "Is that correct?"
 
 
 @pytest.mark.unit
-@patch("src.main.process_user_input")
+@patch("src.main.process_user_input", new_callable=AsyncMock)
 def test_chat_completions_processing_error(mock_process):
-    """Test chat completion when processing phase fails"""
+    """Test chat completion when processing phase fails."""
     mock_process.side_effect = Exception("Processing failed")
 
     request_data = {
@@ -171,14 +122,11 @@ def test_chat_completions_processing_error(mock_process):
 
 
 @pytest.mark.unit
-@patch("src.main.process_user_input")
-@patch("src.main.retrieve_answer")
-async def test_chat_completions_retrieval_error(mock_retrieve, mock_process):
-    """Test chat completion when retrieval phase fails"""
-    # Mock processing phase success
+@patch("src.main.process_user_input", new_callable=AsyncMock)
+@patch("src.main.retrieve_answer", new_callable=AsyncMock)
+def test_chat_completions_retrieval_error(mock_retrieve, mock_process):
+    """Test chat completion when retrieval phase fails."""
     mock_process.return_value = {"reformulated_query": "test"}
-
-    # Mock retrieval phase failure
     mock_retrieve.side_effect = Exception("Retrieval failed")
 
     request_data = {
@@ -192,14 +140,11 @@ async def test_chat_completions_retrieval_error(mock_retrieve, mock_process):
 
 
 @pytest.mark.unit
-@patch("src.main.process_user_input")
-@patch("src.main.retrieve_answer")
-async def test_chat_completions_missing_answer_key(mock_retrieve, mock_process):
-    """Test chat completion when retrieval returns unexpected format"""
-    # Mock processing phase success
+@patch("src.main.process_user_input", new_callable=AsyncMock)
+@patch("src.main.retrieve_answer", new_callable=AsyncMock)
+def test_chat_completions_missing_answer_key(mock_retrieve, mock_process):
+    """Test chat completion when retrieval returns unexpected format."""
     mock_process.return_value = {"reformulated_query": "test"}
-
-    # Mock retrieval phase with missing key
     mock_retrieve.return_value = {"source": "small_llm"}
 
     request_data = {
@@ -215,7 +160,7 @@ async def test_chat_completions_missing_answer_key(mock_retrieve, mock_process):
 
 @pytest.mark.unit
 def test_track_request_endpoint():
-    """Test /track/{id} endpoint returns trace structure"""
+    """Test /track/{id} endpoint returns trace structure."""
     request_id = "test-request-123"
 
     response = client.get(f"/track/{request_id}")
@@ -224,41 +169,41 @@ def test_track_request_endpoint():
     data = response.json()
     assert data["request_id"] == request_id
     assert "services" in data
+    assert "app" in data["services"]
+    assert "log_count" in data["services"]["app"]
+    assert "logs" in data["services"]["app"]
     assert "timeline" in data
 
 
 @pytest.mark.unit
-@patch("src.main.process_user_input")
-@patch("src.main.retrieve_answer")
-async def test_chat_completions_special_characters(mock_retrieve, mock_process):
-    """Test chat completion with special characters and unicode"""
-    # Mock processing phase
-    mock_process.return_value = {"reformulated_query": "What is ∫ x² dx?"}
-
-    # Mock retrieval phase
-    mock_retrieve.return_value = {"answer": "∫ x² dx = x³/3 + C", "source": "large_llm"}
+@patch("src.main.process_user_input", new_callable=AsyncMock)
+@patch("src.main.retrieve_answer", new_callable=AsyncMock)
+def test_chat_completions_special_characters(mock_retrieve, mock_process):
+    """Test chat completion with special characters and unicode."""
+    mock_process.return_value = {"reformulated_query": "What is \u222b x\u00b2 dx?"}
+    mock_retrieve.return_value = {
+        "answer": "\u222b x\u00b2 dx = x\u00b3/3 + C",
+        "source": "large_llm",
+    }
 
     request_data = {
         "model": "math-tutor",
-        "messages": [{"role": "user", "content": "What is ∫ x² dx?"}],
+        "messages": [{"role": "user", "content": "What is \u222b x\u00b2 dx?"}],
     }
 
     response = client.post("/v1/chat/completions", json=request_data)
 
     assert response.status_code == 200
     data = response.json()
-    assert "∫" in data["choices"][0]["message"]["content"]
+    assert "\u222b" in data["choices"][0]["message"]["content"]
 
 
 @pytest.mark.unit
-@patch("src.main.process_user_input")
-@patch("src.main.retrieve_answer")
-async def test_chat_completions_long_message(mock_retrieve, mock_process):
-    """Test chat completion with very long user message"""
-    # Mock processing phase
+@patch("src.main.process_user_input", new_callable=AsyncMock)
+@patch("src.main.retrieve_answer", new_callable=AsyncMock)
+def test_chat_completions_long_message(mock_retrieve, mock_process):
+    """Test chat completion with very long user message."""
     mock_process.return_value = {"reformulated_query": "long query"}
-
-    # Mock retrieval phase
     mock_retrieve.return_value = {"answer": "answer", "source": "small_llm"}
 
     long_message = "a" * 10000
@@ -273,14 +218,11 @@ async def test_chat_completions_long_message(mock_retrieve, mock_process):
 
 
 @pytest.mark.unit
-@patch("src.main.process_user_input")
-@patch("src.main.retrieve_answer")
-async def test_chat_completions_response_structure(mock_retrieve, mock_process):
-    """Test that chat completion response has correct OpenAI-compatible structure"""
-    # Mock processing phase
+@patch("src.main.process_user_input", new_callable=AsyncMock)
+@patch("src.main.retrieve_answer", new_callable=AsyncMock)
+def test_chat_completions_response_structure(mock_retrieve, mock_process):
+    """Test that chat completion response has correct OpenAI-compatible structure."""
     mock_process.return_value = {"reformulated_query": "test"}
-
-    # Mock retrieval phase
     mock_retrieve.return_value = {"answer": "test answer", "source": "small_llm"}
 
     request_data = {
@@ -312,3 +254,25 @@ async def test_chat_completions_response_structure(mock_retrieve, mock_process):
     assert choice["message"]["role"] == "assistant"
     assert "content" in choice["message"]
     assert "finish_reason" in choice
+
+
+@pytest.mark.unit
+@patch("src.routes.admin.vector_cache.get_health", new_callable=AsyncMock)
+@patch("src.routes.admin.session_service")
+def test_health_endpoint(mock_session, mock_get_health):
+    """Test /health endpoint returns components structure."""
+    mock_get_health.return_value = {"qdrant_connected": True, "collections": {}}
+    mock_session.get_active_session_count.return_value = 2
+    mock_session.get_uptime.return_value = 123.456
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert data["service"] == "app"
+    assert "components" in data
+    assert "qdrant" in data["components"]
+    assert data["components"]["qdrant"]["qdrant_connected"] is True
+    assert "session" in data["components"]
+    assert data["components"]["session"]["active_sessions"] == 2

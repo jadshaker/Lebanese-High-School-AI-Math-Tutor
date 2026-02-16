@@ -1,27 +1,34 @@
 # Lebanese High School AI Math Tutor
 
-AI-powered math tutoring for Lebanese high school students, built with FastAPI microservices.
+AI-powered math tutoring for Lebanese high school students, built with a single FastAPI application.
 
 ## Architecture
 
 ```
-services/
-├── gateway/            # API Gateway - Orchestrator (Port 8000)
-├── large_llm/          # OpenAI GPT-4o-mini (Port 8001)
-├── embedding/          # OpenAI text-embedding-3-small (Port 8002)
-├── vector_cache/       # Qdrant vector storage (Port 8003)
-├── input_processor/    # Text/image processing (Port 8004)
-├── small_llm/          # vLLM DeepSeek-R1 (Port 8005)
-├── fine_tuned_model/   # vLLM DeepSeek-R1 (Port 8006)
-├── reformulator/       # Query improvement via vLLM (Port 8007)
-├── intent_classifier/  # User intent classification (Port 8009)
-└── session/            # Session state management (Port 8010)
+src/                             # Single consolidated FastAPI application (Port 8000)
+├── main.py                      # Unified app with lifespan, middleware, routes
+├── config.py                    # Single merged Config class
+├── clients/                     # OpenAI client singletons (LLM + Embedding)
+├── services/                    # Business logic modules
+│   ├── input_processor/         # Text/image processing
+│   ├── reformulator/            # Query improvement via vLLM
+│   ├── intent_classifier/       # Hybrid rule-based + LLM classification
+│   ├── session/                 # In-memory session state with TTL cleanup
+│   └── vector_cache/            # Qdrant-backed vector storage
+├── orchestrators/               # Pipeline orchestration
+│   ├── answer_retrieval/        # 4-tier confidence routing
+│   ├── data_processing/         # Input processing + reformulation
+│   └── tutoring/                # Interactive tutoring flow
+└── routes/admin.py              # Health, metrics, logs, tracking
 
 External:
-└── qdrant/             # Vector database (Port 6333)
+├── qdrant/                      # Vector database (Port 6333)
+├── open-webui/                  # Chat UI (Port 3000)
+├── prometheus/                  # Metrics collection (Port 9090)
+└── grafana/                     # Dashboard (Port 3001)
 ```
 
-**Pipeline**: Gateway orchestrates two phases:
+**Pipeline**: The app orchestrates two phases:
 
 1. **Data Processing**: Input Processor → Reformulator
 2. **Answer Retrieval**: 4-Tier Confidence Routing
@@ -43,21 +50,22 @@ External:
 
 1. Copy `.env.example` to `.env` and fill in API keys and RunPod endpoint IDs
 2. `docker compose up --build`
-3. Gateway: `http://localhost:8000`, Open WebUI: `http://localhost:3000`
+3. App API: `http://localhost:8000`, Open WebUI: `http://localhost:3000`
 
-**LLM Backend**: All three LLM services (Small LLM, Reformulator, Fine-Tuned Model) use RunPod Serverless vLLM (`runpod/worker-v1-vllm:v2.11.3`) with `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`.
+**LLM Backend**: Small LLM, Reformulator, and Fine-Tuned Model use RunPod Serverless vLLM (`runpod/worker-v1-vllm:v2.11.3`) with `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`.
 
 ## API
 
-Gateway (`http://localhost:8000`):
+App (`http://localhost:8000`):
 
-| Endpoint                    | Description                                     |
-| --------------------------- | ----------------------------------------------- |
-| `GET /health`               | Health check (includes all downstream services) |
-| `GET /v1/models`            | List available models (OpenAI-compatible)       |
-| `POST /v1/chat/completions` | OpenAI-compatible chat endpoint                 |
-| `POST /tutoring`            | Tutoring interaction endpoint                   |
-| `GET /track/{request_id}`   | Trace request across services                   |
+| Endpoint                    | Description                               |
+| --------------------------- | ----------------------------------------- |
+| `GET /health`               | Health check (Qdrant + session status)    |
+| `GET /v1/models`            | List available models (OpenAI-compatible) |
+| `POST /v1/chat/completions` | OpenAI-compatible chat endpoint           |
+| `POST /tutoring`            | Tutoring interaction endpoint             |
+| `GET /metrics`              | Prometheus metrics                        |
+| `GET /track/{request_id}`   | Trace request logs                        |
 
 ```bash
 curl -X POST http://localhost:8000/v1/chat/completions \
@@ -95,12 +103,6 @@ python3.14 cli.py test -- -m integration  # Integration (Docker + RunPod)
 python3.14 cli.py test -- -m e2e          # E2E (Docker + RunPod)
 ```
 
-| Type        | Count | Requirements         |
-| ----------- | ----- | -------------------- |
-| Unit        | 107   | None (all mocked)    |
-| Integration | 5     | Docker + RunPod vLLM |
-| E2E         | 5     | Docker + RunPod vLLM |
-
 Integration/E2E tests mock external APIs by default. Use `--use-real-apis` to test against real endpoints. CI runs the full suite against RunPod Serverless.
 
 ### CI/CD
@@ -110,10 +112,10 @@ Integration/E2E tests mock external APIs by default. Use `--use-real-apis` to te
 
 ## Observability
 
-- **Prometheus** (`http://localhost:9090`) — metrics collection from all services via `/metrics` endpoints
+- **Prometheus** (`http://localhost:9090`) — metrics collection via `/metrics` endpoint
 - **Grafana** (`http://localhost:3001`, admin/admin) — pre-configured dashboard with 9 panels (request rate, latency percentiles, cache hit rate, LLM usage, token tracking)
-- **Structured logging** — JSON logs to stdout + `.logs/<service>/app.log` (daily rotation, 7-day retention)
-- **Request tracing** — unique request IDs flow through all services; trace via `GET /track/{request_id}` or `grep "req-<id>" .logs/*/app.log`
+- **Structured logging** — JSON logs to stdout + `.logs/app/app.log` (daily rotation, 7-day retention)
+- **Request tracing** — unique request IDs; trace via `GET /track/{request_id}`
 
 ## Data Preprocessing
 

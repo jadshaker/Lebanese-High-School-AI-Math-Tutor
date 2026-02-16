@@ -1,183 +1,110 @@
 import pytest
-from fastapi.testclient import TestClient
+from fastapi import HTTPException
 
+from tests.unit.test_services.conftest import _ensure_env, _ensure_path, _mock_logging
 
-# Module-level setup - load app and create client
-@pytest.fixture(scope="module", autouse=True)
-def setup_module(input_processor_app):
-    """Set up module-level client for input_processor service"""
-    global client
-    client = TestClient(input_processor_app)
+_ensure_env()
+_ensure_path()
+_mock_logging()
 
-
-@pytest.mark.unit
-def test_health_endpoint():
-    """Test health check endpoint returns correct structure"""
-    response = client.get("/health")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "healthy"
-    assert data["service"] == "input_processor"
-    assert "message" in data
+from src.services.input_processor.service import process_input
 
 
 @pytest.mark.unit
 def test_process_text_success():
-    """Test successful text processing"""
-    request_data = {
-        "input": "  What is the derivative of x^2?  ",
-        "type": "text",
-    }
+    """Test successful text processing strips whitespace and normalizes spacing."""
+    result = process_input("  What is the derivative of x^2?  ", "text", "req-1")
 
-    response = client.post("/process", json=request_data)
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["processed_input"] == "What is the derivative of x^2?"
-    assert data["input_type"] == "text"
-    assert "metadata" in data
-    assert "preprocessing_applied" in data["metadata"]
+    assert result.processed_input == "What is the derivative of x^2?"
+    assert result.input_type == "text"
+    assert "preprocessing_applied" in result.metadata
 
 
 @pytest.mark.unit
 def test_process_text_normalizes_spacing():
-    """Test that text processing normalizes multiple spaces"""
-    request_data = {
-        "input": "What   is    the    derivative?",
-        "type": "text",
-    }
+    """Test that multiple spaces are collapsed to a single space."""
+    result = process_input("What   is    the    derivative?", "text", "req-2")
 
-    response = client.post("/process", json=request_data)
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["processed_input"] == "What is the derivative?"
+    assert result.processed_input == "What is the derivative?"
 
 
 @pytest.mark.unit
 def test_process_text_empty_input():
-    """Test processing empty text returns error"""
-    request_data = {
-        "input": "   ",
-        "type": "text",
-    }
+    """Test that empty (whitespace-only) input raises HTTPException 400."""
+    with pytest.raises(HTTPException) as exc_info:
+        process_input("   ", "text", "req-3")
 
-    response = client.post("/process", json=request_data)
-
-    assert response.status_code == 400
-    assert "empty" in response.json()["detail"].lower()
+    assert exc_info.value.status_code == 400
+    assert "empty" in exc_info.value.detail.lower()
 
 
 @pytest.mark.unit
 def test_process_text_too_long():
-    """Test processing text that exceeds maximum length"""
-    request_data = {
-        "input": "a" * 100000,  # Very long input
-        "type": "text",
-    }
+    """Test that input exceeding max length raises HTTPException 400."""
+    with pytest.raises(HTTPException) as exc_info:
+        process_input("a" * 100_000, "text", "req-4")
 
-    response = client.post("/process", json=request_data)
-
-    assert response.status_code == 400
-    assert "maximum length" in response.json()["detail"].lower()
+    assert exc_info.value.status_code == 400
+    assert "maximum length" in exc_info.value.detail.lower()
 
 
 @pytest.mark.unit
 def test_process_image_stub():
-    """Test image processing (stub mode)"""
-    request_data = {
-        "input": "base64_encoded_image_data_here",
-        "type": "image",
-    }
+    """Test image processing stub returns expected structure."""
+    result = process_input("base64_encoded_image_data_here", "image", "req-5")
 
-    response = client.post("/process", json=request_data)
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["input_type"] == "image"
-    assert "not yet implemented" in data["metadata"]["note"]
+    assert result.input_type == "image"
+    assert "not yet implemented" in result.metadata["note"]
+    assert "planned_features" in result.metadata
 
 
 @pytest.mark.unit
 def test_process_invalid_type():
-    """Test processing with invalid input type"""
-    request_data = {
-        "input": "test",
-        "type": "audio",
-    }
+    """Test that an unsupported input type raises HTTPException 400."""
+    with pytest.raises(HTTPException) as exc_info:
+        process_input("test", "audio", "req-6")
 
-    response = client.post("/process", json=request_data)
-
-    assert response.status_code == 400
-    assert "invalid input type" in response.json()["detail"].lower()
-
-
-@pytest.mark.unit
-def test_process_missing_fields():
-    """Test processing with missing required fields"""
-    response = client.post("/process", json={"input": "test"})
-    assert response.status_code == 422  # Validation error
+    assert exc_info.value.status_code == 400
+    assert "invalid input type" in exc_info.value.detail.lower()
 
 
 @pytest.mark.unit
 def test_process_special_characters():
-    """Test processing text with special characters and unicode"""
-    request_data = {
-        "input": "  ∫ x² dx = ? 你好 مرحبا  ",
-        "type": "text",
-    }
+    """Test that unicode and special characters are preserved."""
+    result = process_input(
+        "  \u222b x\u00b2 dx = ? \u4f60\u597d \u0645\u0631\u062d\u0628\u0627  ",
+        "text",
+        "req-7",
+    )
 
-    response = client.post("/process", json=request_data)
-
-    assert response.status_code == 200
-    data = response.json()
-    assert "∫" in data["processed_input"]
-    assert "²" in data["processed_input"]
-    assert "你好" in data["processed_input"]
+    assert "\u222b" in result.processed_input
+    assert "\u00b2" in result.processed_input
+    assert "\u4f60\u597d" in result.processed_input
+    assert "\u0645\u0631\u062d\u0628\u0627" in result.processed_input
 
 
 @pytest.mark.unit
 def test_process_metadata_includes_lengths():
-    """Test that metadata includes original and processed lengths"""
-    request_data = {
-        "input": "  test  ",
-        "type": "text",
-    }
+    """Test that metadata contains original_length and processed_length."""
+    result = process_input("  test  ", "text", "req-8")
 
-    response = client.post("/process", json=request_data)
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["metadata"]["original_length"] == 8
-    assert data["metadata"]["processed_length"] == 4
+    assert result.metadata["original_length"] == 8
+    assert result.metadata["processed_length"] == 4
 
 
 @pytest.mark.unit
 def test_process_already_clean_text():
-    """Test processing text that's already clean"""
-    request_data = {
-        "input": "What is the derivative of x^2?",
-        "type": "text",
-    }
+    """Test that already-clean text passes through unchanged."""
+    clean = "What is the derivative of x^2?"
+    result = process_input(clean, "text", "req-9")
 
-    response = client.post("/process", json=request_data)
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["processed_input"] == "What is the derivative of x^2?"
+    assert result.processed_input == clean
 
 
 @pytest.mark.unit
 def test_process_text_with_newlines():
-    """Test processing text with newlines"""
-    request_data = {
-        "input": "What is\nthe derivative\nof x^2?",
-        "type": "text",
-    }
+    """Test that newlines are normalized to spaces."""
+    result = process_input("What is\nthe derivative\nof x^2?", "text", "req-10")
 
-    response = client.post("/process", json=request_data)
-
-    assert response.status_code == 200
-    data = response.json()
-    # Newlines should be normalized to spaces
-    assert "\n" not in data["processed_input"]
+    assert "\n" not in result.processed_input
+    assert result.processed_input == "What is the derivative of x^2?"

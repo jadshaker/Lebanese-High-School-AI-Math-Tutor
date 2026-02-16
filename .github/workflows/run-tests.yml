@@ -37,10 +37,16 @@ jobs:
           SMALL_LLM_SERVICE_URL=https://api.runpod.ai/v2/${SMALL_LLM_ENDPOINT_ID}/openai
           SMALL_LLM_MODEL_NAME=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
           SMALL_LLM_API_KEY=$RUNPOD_API_KEY
+          SMALL_LLM_TEMPERATURE=0.7
+          SMALL_LLM_TOP_P=0.9
+          SMALL_LLM_TIMEOUT=300
 
           REFORMULATOR_LLM_SERVICE_URL=https://api.runpod.ai/v2/${REFORMULATOR_ENDPOINT_ID}/openai
           REFORMULATOR_LLM_MODEL_NAME=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
           REFORMULATOR_LLM_API_KEY=$RUNPOD_API_KEY
+          REFORMULATOR_LLM_TEMPERATURE=0.6
+          REFORMULATOR_LLM_TOP_P=0.9
+          REFORMULATOR_LLM_TIMEOUT=300
 
           EMBEDDING_MODEL=text-embedding-3-small
           EMBEDDING_DIMENSIONS=1536
@@ -48,8 +54,17 @@ jobs:
           FINE_TUNED_MODEL_SERVICE_URL=https://api.runpod.ai/v2/${FINE_TUNED_ENDPOINT_ID}/openai
           FINE_TUNED_MODEL_NAME=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
           FINE_TUNED_MODEL_API_KEY=$RUNPOD_API_KEY
+          FINE_TUNED_MODEL_TEMPERATURE=0.7
+          FINE_TUNED_MODEL_TOP_P=0.9
+          FINE_TUNED_MODEL_TIMEOUT=300
 
           LARGE_LLM_MODEL_NAME=gpt-4o-mini
+          LARGE_LLM_TEMPERATURE=0.7
+          LARGE_LLM_TOP_P=0.9
+          LARGE_LLM_TIMEOUT=300
+
+          INTENT_CLASSIFIER_LLM_TEMPERATURE=0.1
+          INTENT_CLASSIFIER_LLM_MAX_TOKENS=50
 
           CACHE_TOP_K=5
           QDRANT_HOST=qdrant
@@ -71,10 +86,6 @@ jobs:
           INTENT_USE_LLM_FALLBACK=true
 
           REFORMULATOR_USE_LLM=true
-
-          LLM_TEMPERATURE=0.7
-          LLM_TOP_P=0.9
-          LLM_TIMEOUT=300
           EOF
 
           echo "✓ .env file created with RunPod Serverless endpoints"
@@ -119,53 +130,34 @@ jobs:
 
       - name: Check Service Health
         run: |
-          echo "Waiting for all services to become healthy..."
-
-          SERVICES=(
-            "gateway:8000"
-            "large-llm:8001"
-            "embedding:8002"
-            "vector-cache:8003"
-            "input-processor:8004"
-            "small-llm:8005"
-            "fine-tuned-model:8006"
-            "reformulator:8007"
-            "intent-classifier:8009"
-            "session:8008"
-          )
+          echo "Waiting for app to become healthy..."
 
           TIMEOUT=120
           INTERVAL=5
+          ELAPSED=0
 
-          for service in "${SERVICES[@]}"; do
-            name="${service%:*}"
-            port="${service#*:}"
-            echo "Waiting for $name..."
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/health" || echo "000")
 
-            ELAPSED=0
-            while [ $ELAPSED -lt $TIMEOUT ]; do
-              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port/health" || echo "000")
-
-              if [ "$HTTP_CODE" = "200" ]; then
-                echo "  ✓ $name is healthy (HTTP $HTTP_CODE)"
-                break
-              fi
-
-              echo "  Waiting for $name (HTTP $HTTP_CODE, elapsed: ${ELAPSED}s)..."
-              sleep $INTERVAL
-              ELAPSED=$((ELAPSED + INTERVAL))
-            done
-
-            if [ $ELAPSED -ge $TIMEOUT ]; then
-              echo "  ✗ Timeout waiting for $name to become healthy"
-              echo "Service logs:"
-              docker compose logs --tail=50 "$name"
-              exit 1
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "  ✓ app is healthy (HTTP $HTTP_CODE)"
+              break
             fi
+
+            echo "  Waiting for app (HTTP $HTTP_CODE, elapsed: ${ELAPSED}s)..."
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
           done
 
+          if [ $ELAPSED -ge $TIMEOUT ]; then
+            echo "  ✗ Timeout waiting for app to become healthy"
+            echo "Service logs:"
+            docker compose logs --tail=50 app
+            exit 1
+          fi
+
           echo ""
-          echo "✓ All services are healthy"
+          echo "✓ App is healthy"
 
       - name: Run All Tests
         env:

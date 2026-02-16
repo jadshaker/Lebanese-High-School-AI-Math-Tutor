@@ -1,211 +1,177 @@
 import pytest
-from fastapi.testclient import TestClient
+
+from tests.unit.test_services.conftest import _ensure_env, _ensure_path, _mock_logging
+
+_ensure_env()
+_ensure_path()
+_mock_logging()
+
+from src.models.schemas import MessageRole, SessionPhase
+from src.services.session import service as session_service
 
 
-# Module-level setup - load app and create client
-@pytest.fixture(scope="module", autouse=True)
-def setup_module(session_app):
-    """Set up module-level client for session service"""
-    global client
-    client = TestClient(session_app)
-
-
-@pytest.mark.unit
-def test_health_endpoint():
-    """Test health check endpoint returns correct structure"""
-    response = client.get("/health")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "healthy"
-    assert data["service"] == "session"
-    assert "active_sessions" in data
+@pytest.fixture(autouse=True)
+def clear_sessions():
+    session_service.sessions.clear()
+    yield
+    session_service.sessions.clear()
 
 
 @pytest.mark.unit
 def test_create_session_success():
-    """Test successful session creation"""
-    request_data = {
-        "initial_query": "What is the derivative of x^2?",
-    }
+    """Test successful session creation with an initial query."""
+    session = session_service.create_session(
+        initial_query="What is the derivative of x^2?",
+        request_id="req-1",
+    )
 
-    response = client.post("/sessions", json=request_data)
-
-    assert response.status_code == 201
-    data = response.json()
-    assert "session_id" in data
-    assert "created_at" in data
+    assert session.session_id.startswith("sess_")
+    assert session.original_query == "What is the derivative of x^2?"
+    assert session.phase == SessionPhase.INITIAL
+    assert len(session.messages) == 1
+    assert session.messages[0].role == MessageRole.USER
 
 
 @pytest.mark.unit
 def test_create_session_auto_id():
-    """Test session creation with auto-generated ID"""
-    request_data = {"initial_query": "What is integration?"}
+    """Test that auto-generated session IDs follow the expected format."""
+    s1 = session_service.create_session(request_id="req-2")
+    s2 = session_service.create_session(request_id="req-3")
 
-    response = client.post("/sessions", json=request_data)
-
-    assert response.status_code == 201
-    data = response.json()
-    assert data["session_id"].startswith("sess_")
+    assert s1.session_id.startswith("sess_")
+    assert s2.session_id.startswith("sess_")
+    assert s1.session_id != s2.session_id
 
 
 @pytest.mark.unit
 def test_get_session_success():
-    """Test getting an existing session"""
-    # First create a session
-    create_response = client.post(
-        "/sessions",
-        json={"initial_query": "Test question"},
+    """Test retrieving an existing session by ID."""
+    created = session_service.create_session(
+        initial_query="Test question",
+        request_id="req-4",
     )
-    assert create_response.status_code == 201
-    session_id = create_response.json()["session_id"]
 
-    # Then get it
-    response = client.get(f"/sessions/{session_id}")
+    fetched = session_service.get_session(created.session_id)
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["session_id"] == session_id
-    assert data["original_query"] == "Test question"
+    assert fetched is not None
+    assert fetched.session_id == created.session_id
+    assert fetched.original_query == "Test question"
 
 
 @pytest.mark.unit
 def test_get_session_not_found():
-    """Test getting a non-existent session"""
-    response = client.get("/sessions/non-existent-session")
-    assert response.status_code == 404
+    """Test that retrieving a non-existent session returns None."""
+    result = session_service.get_session("non-existent-session")
+
+    assert result is None
 
 
 @pytest.mark.unit
 def test_delete_session_success():
-    """Test deleting an existing session"""
-    # First create a session
-    create_response = client.post(
-        "/sessions",
-        json={"initial_query": "Test question"},
+    """Test deleting a session and verifying it is gone."""
+    created = session_service.create_session(
+        initial_query="Test question",
+        request_id="req-5",
     )
-    session_id = create_response.json()["session_id"]
 
-    # Then delete it
-    response = client.delete(f"/sessions/{session_id}")
-    assert response.status_code == 204
+    deleted = session_service.delete_session(created.session_id, request_id="req-5")
+    assert deleted is True
 
-    # Verify it's gone
-    get_response = client.get(f"/sessions/{session_id}")
-    assert get_response.status_code == 404
+    fetched = session_service.get_session(created.session_id)
+    assert fetched is None
 
 
 @pytest.mark.unit
 def test_delete_session_not_found():
-    """Test deleting a non-existent session"""
-    response = client.delete("/sessions/non-existent-delete")
-    assert response.status_code == 404
+    """Test that deleting a non-existent session returns False."""
+    result = session_service.delete_session("non-existent-delete", request_id="req-6")
+
+    assert result is False
 
 
 @pytest.mark.unit
 def test_update_tutoring_state():
-    """Test updating tutoring state"""
-    # First create a session
-    create_response = client.post(
-        "/sessions",
-        json={"initial_query": "Test question"},
-    )
-    session_id = create_response.json()["session_id"]
+    """Test updating question_id, current_node_id, and depth on a session."""
+    created = session_service.create_session(request_id="req-7")
 
-    # Update tutoring state via PATCH
-    response = client.patch(
-        f"/sessions/{session_id}/tutoring",
-        json={"question_id": "q-123", "current_node_id": "node-1", "depth": 1},
+    state = session_service.update_tutoring_state(
+        created.session_id,
+        question_id="q-123",
+        current_node_id="node-1",
+        depth=1,
+        request_id="req-7",
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["question_id"] == "q-123"
-    assert data["current_node_id"] == "node-1"
-    assert data["depth"] == 1
+    assert state is not None
+    assert state.question_id == "q-123"
+    assert state.current_node_id == "node-1"
+    assert state.depth == 1
 
 
 @pytest.mark.unit
 def test_update_tutoring_state_not_found():
-    """Test updating tutoring state for non-existent session"""
-    response = client.patch(
-        "/sessions/non-existent-tutoring/tutoring",
-        json={"question_id": "q-123", "depth": 1},
+    """Test that updating tutoring state for a missing session returns None."""
+    result = session_service.update_tutoring_state(
+        "non-existent-tutoring",
+        question_id="q-123",
+        depth=1,
+        request_id="req-8",
     )
-    assert response.status_code == 404
+
+    assert result is None
 
 
 @pytest.mark.unit
 def test_add_message_to_session():
-    """Test adding a message to session"""
-    # First create a session
-    create_response = client.post(
-        "/sessions",
-        json={"initial_query": "Test question"},
-    )
-    session_id = create_response.json()["session_id"]
+    """Test adding a user message to a session."""
+    created = session_service.create_session(request_id="req-9")
 
-    # Add a message
-    response = client.post(
-        f"/sessions/{session_id}/messages",
-        json={"role": "user", "content": "I understand"},
+    message = session_service.add_message(
+        created.session_id,
+        MessageRole.USER,
+        "I understand",
+        request_id="req-9",
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["role"] == "user"
-    assert data["content"] == "I understand"
+    assert message is not None
+    assert message.role == MessageRole.USER
+    assert message.content == "I understand"
 
 
 @pytest.mark.unit
 def test_add_multiple_messages():
-    """Test adding multiple messages to session"""
-    # First create a session
-    create_response = client.post(
-        "/sessions",
-        json={},
-    )
-    session_id = create_response.json()["session_id"]
+    """Test adding multiple messages and verifying the count."""
+    created = session_service.create_session(request_id="req-10")
 
-    # Add messages
-    client.post(
-        f"/sessions/{session_id}/messages",
-        json={"role": "user", "content": "Message 1"},
+    session_service.add_message(
+        created.session_id, MessageRole.USER, "Message 1", request_id="req-10"
     )
-    client.post(
-        f"/sessions/{session_id}/messages",
-        json={"role": "assistant", "content": "Response 1"},
+    session_service.add_message(
+        created.session_id, MessageRole.ASSISTANT, "Response 1", request_id="req-10"
     )
 
-    # Get messages via messages endpoint
-    response = client.get(f"/sessions/{session_id}/messages")
-    data = response.json()
+    messages = session_service.get_messages(created.session_id)
 
-    assert data["total_count"] == 2
-    assert data["messages"][0]["content"] == "Message 1"
-    assert data["messages"][1]["content"] == "Response 1"
+    assert messages is not None
+    assert len(messages) == 2
+    assert messages[0].content == "Message 1"
+    assert messages[1].content == "Response 1"
 
 
 @pytest.mark.unit
 def test_session_phase_update():
-    """Test session phase is updated correctly"""
-    # Create session
-    create_response = client.post(
-        "/sessions",
-        json={"initial_query": "Test question"},
+    """Test updating a session phase via update_session."""
+    created = session_service.create_session(
+        initial_query="Test question",
+        request_id="req-11",
     )
-    session_id = create_response.json()["session_id"]
+    assert created.phase == SessionPhase.INITIAL
 
-    # Get session to check initial phase
-    get_response = client.get(f"/sessions/{session_id}")
-    assert get_response.json()["phase"] == "initial"
-
-    # Update phase via PATCH
-    patch_response = client.patch(
-        f"/sessions/{session_id}",
-        json={"phase": "tutoring"},
+    updated = session_service.update_session(
+        created.session_id,
+        phase=SessionPhase.TUTORING,
+        request_id="req-11",
     )
-    assert patch_response.status_code == 200
 
-    # Verify phase changed
-    response = client.get(f"/sessions/{session_id}")
-    assert response.json()["phase"] == "tutoring"
+    assert updated is not None
+    assert updated.phase == SessionPhase.TUTORING
