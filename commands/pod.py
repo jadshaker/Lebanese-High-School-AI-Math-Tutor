@@ -12,9 +12,8 @@ VLLM_API_KEY = "dev-key"
 DOCKER_IMAGE = "jadshaker/vllm-openai:latest"
 
 GPU_PREFERENCES: list[dict[str, str]] = [
-    {"id": "NVIDIA RTX A5000", "name": "RTX A5000 24GB"},
-    {"id": "NVIDIA RTX 4090", "name": "RTX 4090 24GB"},
     {"id": "NVIDIA A40", "name": "A40 48GB"},
+    {"id": "NVIDIA RTX A6000", "name": "RTX A6000 48GB"},
 ]
 
 # (model_name_env_var, url_env_var, api_key_env_var, port, gpu_index)
@@ -80,7 +79,7 @@ def _build_startup_cmd() -> str:
             f"--max-model-len 4096 --host 0.0.0.0 --api-key {VLLM_API_KEY} &"
         )
     vllm_starts = " ".join(cmds)
-    script = f"export HF_HOME=/workspace/huggingface && {vllm_starts} wait"
+    script = f"export HF_HOME=/root/.cache/huggingface && {vllm_starts} wait"
     # Escaped double quotes — the RunPod SDK wraps docker_args in "..." for GraphQL
     return f'bash -c \\"{script}\\"'
 
@@ -174,12 +173,10 @@ def start() -> None:
                 image_name=DOCKER_IMAGE,
                 gpu_type_id=gpu["id"],
                 gpu_count=GPU_COUNT,
-                volume_in_gb=100,
-                container_disk_in_gb=20,
+                volume_in_gb=0,
+                container_disk_in_gb=100,
                 ports=",".join(f"{p}/http" for _, _, _, p, _ in SERVICES),
-                volume_mount_path="/workspace",
                 docker_args=_build_startup_cmd(),
-                env={"HF_HOME": "/workspace/huggingface"},
             )
             used_gpu = gpu
             print(f"  Created: {pod['id']}")
@@ -195,6 +192,7 @@ def start() -> None:
         sys.exit(1)
 
     pod_id: str = pod["id"]
+    _write_env_dev(pod_id)
 
     print("\nWaiting for pod...")
     _wait_for_pod_running(pod_id)
@@ -202,7 +200,6 @@ def start() -> None:
     print("\nWaiting for vLLM (downloading models on first start)...")
     _wait_for_vllm_ready(pod_id)
 
-    _write_env_dev(pod_id)
     print("\nDev pod ready! Run: docker compose up --build")
 
 

@@ -1,18 +1,36 @@
 import logging
 import uuid
 from datetime import datetime
-from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Any, Optional
+
+LOG_DIR = Path("/app/logs")
+KEEP_DAYS = 7
+
+
+def _today_log_file() -> Path:
+    """Return path to today's log file (e.g. app-2026-02-16.log)."""
+    return LOG_DIR / f"app-{datetime.utcnow().strftime('%Y-%m-%d')}.log"
+
+
+def _cleanup_old_logs() -> None:
+    """Delete log files older than KEEP_DAYS."""
+    cutoff = datetime.utcnow().timestamp() - (KEEP_DAYS * 86400)
+    for f in LOG_DIR.glob("app-*.log"):
+        try:
+            if f.stat().st_mtime < cutoff:
+                f.unlink()
+        except OSError:
+            pass
 
 
 class StructuredLogger:
     """
-    Structured logger that outputs logs in uvicorn-style format for readability.
+    Structured logger that outputs logs in uvicorn-style format.
 
     Logs to both:
     - Console (stdout) - for Docker logs
-    - File (with daily rotation) - for persistent storage
+    - File (date-based, e.g. app-2026-02-16.log) - 7 days retained
     """
 
     def __init__(self, service_name: str):
@@ -29,20 +47,15 @@ class StructuredLogger:
         console_handler.setFormatter(logging.Formatter("%(message)s"))
         self.logger.addHandler(console_handler)
 
-        # File handler (for persistent logs with daily rotation)
-        log_dir = Path("/app/logs")
-        log_dir.mkdir(parents=True, exist_ok=True)
-        log_file = log_dir / "app.log"
-
-        file_handler = TimedRotatingFileHandler(
-            log_file,
-            when="midnight",
-            interval=1,
-            backupCount=7,
-            encoding="utf-8",
+        # Date-based file handler
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(
+            _today_log_file(), mode="a", encoding="utf-8"
         )
         file_handler.setFormatter(logging.Formatter("%(message)s"))
         self.logger.addHandler(file_handler)
+
+        _cleanup_old_logs()
 
     def log(
         self,
@@ -111,24 +124,19 @@ def generate_request_id() -> str:
 
 
 def get_logs_by_request_id(request_id: str, max_lines: int = 1000) -> list[str]:
-    """Read logs from file and filter by request ID."""
-    log_file = Path("/app/logs/app.log")
+    """Search log files for entries matching a request ID."""
+    matching_logs: list[str] = []
+    log_files = sorted(LOG_DIR.glob("app-*.log"), reverse=True)
 
-    if not log_file.exists():
-        return []
-
-    matching_logs = []
-
-    try:
-        with open(log_file, "r", encoding="utf-8") as f:
-            all_lines = f.readlines()
-            recent_lines = (
-                all_lines[-max_lines:] if len(all_lines) > max_lines else all_lines
-            )
-            for line in recent_lines:
-                if request_id in line:
-                    matching_logs.append(line.strip())
-    except Exception:
-        pass
+    for log_file in log_files:
+        try:
+            with open(log_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    if request_id in line:
+                        matching_logs.append(line.strip())
+                        if len(matching_logs) >= max_lines:
+                            return matching_logs
+        except Exception:
+            pass
 
     return matching_logs
