@@ -56,9 +56,12 @@ Defined in `.env` (not committed). See `.env.example` for all required variables
 ## Commands
 
 ```bash
-python3.14 cli.py clean   # isort + black + mypy
-pytest -n auto             # Run tests in parallel
-docker compose up --build  # Run all services
+python3.14 cli.py clean          # isort + black + mypy
+pytest -n auto                   # Run tests in parallel
+docker compose up --build        # Run all services
+
+python3.14 cli.py pod start      # Create dev GPU pod (3 vLLM instances), generate .env.dev
+python3.14 cli.py pod stop       # Destroy pod, delete .env.dev
 ```
 
 ## Testing

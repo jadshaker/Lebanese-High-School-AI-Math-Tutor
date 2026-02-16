@@ -213,6 +213,9 @@ latex/
 json/
 solutions/
 
+# Dev pod
+.env.dev
+
 # Service logs
 .logs/**/*.log
 .logs/**/*.log.*

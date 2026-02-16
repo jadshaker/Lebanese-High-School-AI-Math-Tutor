@@ -68,9 +68,23 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 ## Development
 
 ```bash
-python3.14 cli.py clean   # isort + black + mypy (run before committing)
+python3.14 cli.py clean    # isort + black + mypy (run before committing)
 pytest -n auto             # Run all tests in parallel
 ```
+
+### Dev Pod (Local Development Mode)
+
+For faster iteration without serverless cold starts, spin up a RunPod pod with 3 GPUs, each running its own vLLM instance:
+
+```bash
+python3.14 cli.py pod start      # Create 3-GPU pod, wait for vLLM, generate .env.dev
+docker compose up --build        # Services use dev pod instead of serverless
+python3.14 cli.py pod stop       # Destroy pod, delete .env.dev (back to serverless)
+```
+
+**How it works**: `pod start` creates a 3-GPU pod where each vLLM instance is pinned to its own GPU via `CUDA_VISIBLE_DEVICES` (ports 8000-8002). It writes `.env.dev` which overrides the serverless URLs in `.env`. Docker Compose loads `.env.dev` automatically when it exists. `pod stop` destroys the pod and deletes `.env.dev` so services fall back to serverless.
+
+**GPU fallback**: Tries A40, RTX A5000, RTX 4090, RTX A4000 in order until available.
 
 ### Testing
 

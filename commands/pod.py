@@ -1,0 +1,224 @@
+import os
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+import runpod  # type: ignore[import-untyped]
+
+ENV_DEV_FILE = Path(".env.dev")
+VLLM_API_KEY = "dev-key"
+DOCKER_IMAGE = "jadshaker/vllm-openai:latest"
+
+GPU_PREFERENCES: list[dict[str, str]] = [
+    {"id": "NVIDIA A40", "name": "A40 48GB"},
+    {"id": "NVIDIA RTX A5000", "name": "RTX A5000 24GB"},
+    {"id": "NVIDIA RTX 4090", "name": "RTX 4090 24GB"},
+    {"id": "NVIDIA RTX A4000", "name": "RTX A4000 16GB"},
+]
+
+# (model_name_env_var, url_env_var, api_key_env_var, port, gpu_index)
+SERVICES: list[tuple[str, str, str, int, int]] = [
+    ("SMALL_LLM_MODEL_NAME", "SMALL_LLM_SERVICE_URL", "SMALL_LLM_API_KEY", 8000, 0),
+    (
+        "FINE_TUNED_MODEL_NAME",
+        "FINE_TUNED_MODEL_SERVICE_URL",
+        "FINE_TUNED_MODEL_API_KEY",
+        8001,
+        1,
+    ),
+    (
+        "REFORMULATOR_LLM_MODEL_NAME",
+        "REFORMULATOR_LLM_SERVICE_URL",
+        "REFORMULATOR_LLM_API_KEY",
+        8002,
+        2,
+    ),
+]
+
+GPU_COUNT = 3
+
+
+def _read_env_var(name: str) -> str:
+    """Read a variable from os.environ, falling back to .env file."""
+    val = os.environ.get(name)
+    if val:
+        return val
+    env_path = Path(".env")
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            stripped = line.strip()
+            if stripped.startswith(f"{name}=") and not stripped.startswith("#"):
+                return stripped.split("=", 1)[1].strip().strip("'\"")
+    print(f"Error: {name} not found in environment or .env")
+    sys.exit(1)
+
+
+def _read_env_dev_var(name: str) -> str | None:
+    """Read a variable from .env.dev, returns None if not found."""
+    if not ENV_DEV_FILE.exists():
+        return None
+    for line in ENV_DEV_FILE.read_text().splitlines():
+        stripped = line.strip()
+        if stripped.startswith(f"{name}=") and not stripped.startswith("#"):
+            return stripped.split("=", 1)[1].strip().strip("'\"")
+    return None
+
+
+def _build_startup_cmd() -> str:
+    """Build docker startup command for 3 vLLM instances.
+
+    Each instance is pinned to its own GPU via CUDA_VISIBLE_DEVICES.
+    Model names are read from .env so each instance serves the right model.
+    """
+    cmds = []
+    for model_var, _, _, port, gpu_idx in SERVICES:
+        model = _read_env_var(model_var)
+        cmds.append(
+            f"CUDA_VISIBLE_DEVICES={gpu_idx} vllm serve {model} "
+            f"--port {port} --gpu-memory-utilization 0.9 "
+            f"--max-model-len 4096 --host 0.0.0.0 --api-key {VLLM_API_KEY} &"
+        )
+    vllm_starts = " ".join(cmds)
+    script = f"export HF_HOME=/workspace/huggingface && {vllm_starts} wait"
+    # Escaped double quotes — the RunPod SDK wraps docker_args in "..." for GraphQL
+    return f'bash -c \\"{script}\\"'
+
+
+def _wait_for_pod_running(pod_id: str, timeout: int = 300) -> None:
+    """Poll until pod status is RUNNING."""
+    start = time.time()
+    while time.time() - start < timeout:
+        pod: dict = runpod.get_pod(pod_id)  # type: ignore[assignment]
+        status = pod.get("desiredStatus", "?")
+        if status == "RUNNING":
+            print("  Pod is RUNNING")
+            return
+        elapsed = int(time.time() - start)
+        print(f"  {status} ({elapsed}s)")
+        time.sleep(10)
+    print(f"Error: Pod not RUNNING after {timeout}s")
+    sys.exit(1)
+
+
+def _wait_for_vllm_ready(pod_id: str, timeout: int = 900) -> None:
+    """Poll all 3 vLLM /v1/models endpoints until they respond."""
+    ports = [port for _, _, _, port, _ in SERVICES]
+    ready: set[int] = set()
+    start = time.time()
+
+    while time.time() - start < timeout and len(ready) < len(ports):
+        for port in ports:
+            if port in ready:
+                continue
+            url = f"https://{pod_id}-{port}.proxy.runpod.net/v1/models"
+            try:
+                req = urllib.request.Request(
+                    url,
+                    headers={
+                        "Authorization": f"Bearer {VLLM_API_KEY}",
+                        "User-Agent": "curl/8.0",
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    if resp.status == 200:
+                        ready.add(port)
+                        print(f"  Port {port} ready")
+            except (urllib.error.URLError, TimeoutError, OSError):
+                pass
+        if len(ready) < len(ports):
+            elapsed = int(time.time() - start)
+            print(f"  Waiting for {sorted(set(ports) - ready)}... ({elapsed}s)")
+            time.sleep(15)
+
+    if len(ready) < len(ports):
+        print(
+            f"Error: vLLM not ready on ports {sorted(set(ports) - ready)} after {timeout}s"
+        )
+        print("Check pod logs: https://www.runpod.io/console/pods")
+        sys.exit(1)
+
+
+def _write_env_dev(pod_id: str) -> None:
+    """Generate .env.dev with pod ID, URLs, and API keys."""
+    lines = ["# Auto-generated by cli.py pod start — do not edit"]
+    lines.append(f"RUNPOD_POD_ID={pod_id}")
+    for _, url_var, key_var, port, _ in SERVICES:
+        lines.append(f"{url_var}=https://{pod_id}-{port}.proxy.runpod.net")
+        lines.append(f"{key_var}={VLLM_API_KEY}")
+    ENV_DEV_FILE.write_text("\n".join(lines) + "\n")
+
+
+def start() -> None:
+    """Create a RunPod GPU pod with 3 vLLM instances (one per GPU)."""
+    if ENV_DEV_FILE.exists():
+        existing_id = _read_env_dev_var("RUNPOD_POD_ID")
+        print(f"Error: Dev pod already exists (ID: {existing_id})")
+        sys.exit(1)
+
+    runpod.api_key = _read_env_var("RUNPOD_API_KEY")
+
+    print("Creating dev pod...")
+    for model_var, _, _, port, gpu_idx in SERVICES:
+        print(f"  GPU {gpu_idx} / Port {port}: {_read_env_var(model_var)}")
+
+    pod = None
+    used_gpu = None
+    for i, gpu in enumerate(GPU_PREFERENCES):
+        print(
+            f"\n[{i + 1}/{len(GPU_PREFERENCES)}] Trying {GPU_COUNT}x {gpu['name']}..."
+        )
+        try:
+            pod = runpod.create_pod(
+                name="math-tutor-dev",
+                image_name=DOCKER_IMAGE,
+                gpu_type_id=gpu["id"],
+                gpu_count=GPU_COUNT,
+                volume_in_gb=100,
+                container_disk_in_gb=20,
+                ports=",".join(f"{p}/http" for _, _, _, p, _ in SERVICES),
+                volume_mount_path="/workspace",
+                docker_args=_build_startup_cmd(),
+                env={"HF_HOME": "/workspace/huggingface"},
+            )
+            used_gpu = gpu
+            print(f"  Created: {pod['id']}")
+            break
+        except Exception as e:
+            print(f"  Failed: {e}")
+
+    if not pod or not used_gpu:
+        print(
+            "\nError: All GPU types unavailable. "
+            "Check https://www.runpod.io/console/gpu-cloud"
+        )
+        sys.exit(1)
+
+    pod_id: str = pod["id"]
+
+    print("\nWaiting for pod...")
+    _wait_for_pod_running(pod_id)
+
+    print("\nWaiting for vLLM (downloading models on first start)...")
+    _wait_for_vllm_ready(pod_id)
+
+    _write_env_dev(pod_id)
+    print("\nDev pod ready! Run: docker compose up --build")
+
+
+def terminate() -> None:
+    """Destroy the dev pod and clean up."""
+    pod_id = _read_env_dev_var("RUNPOD_POD_ID")
+    if not pod_id:
+        print("Error: No dev pod found (.env.dev missing or no RUNPOD_POD_ID)")
+        sys.exit(1)
+
+    runpod.api_key = _read_env_var("RUNPOD_API_KEY")
+    try:
+        runpod.terminate_pod(pod_id)
+    except Exception as e:
+        print(f"Warning: {e}")
+
+    ENV_DEV_FILE.unlink(missing_ok=True)
+    print("Pod terminated, .env.dev deleted. Services will use serverless.")
