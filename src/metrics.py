@@ -93,45 +93,11 @@ gateway_errors_total = Counter(
     ["error_type"],
 )
 
-# === LLM Proxy Metrics ===
-
-llm_requests_total = Counter(
-    "llm_requests_total",
-    "Total LLM requests",
-    ["model"],
-)
-
-llm_tokens_total = Counter(
-    "llm_tokens_total",
-    "Total LLM tokens used",
-    ["model", "type"],
-)
-
-llm_latency_seconds = Histogram(
-    "llm_latency_seconds",
-    "LLM call latency in seconds",
-    ["model"],
-    buckets=[0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0],
-)
-
 # === Embedding Metrics ===
-
-embedding_requests_total = Counter(
-    "embedding_requests_total",
-    "Total embedding requests",
-    ["model"],
-)
 
 embedding_dimensions = Gauge(
     "embedding_dimensions",
     "Configured embedding dimensions",
-)
-
-embedding_latency_seconds = Histogram(
-    "embedding_latency_seconds",
-    "Embedding API latency in seconds",
-    ["model"],
-    buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 2.5, 5.0, 10.0],
 )
 
 # === Vector Cache Metrics ===

@@ -12,10 +12,9 @@ VLLM_API_KEY = "dev-key"
 DOCKER_IMAGE = "jadshaker/vllm-openai:latest"
 
 GPU_PREFERENCES: list[dict[str, str]] = [
-    {"id": "NVIDIA A40", "name": "A40 48GB"},
     {"id": "NVIDIA RTX A5000", "name": "RTX A5000 24GB"},
     {"id": "NVIDIA RTX 4090", "name": "RTX 4090 24GB"},
-    {"id": "NVIDIA RTX A4000", "name": "RTX A4000 16GB"},
+    {"id": "NVIDIA A40", "name": "A40 48GB"},
 ]
 
 # (model_name_env_var, url_env_var, api_key_env_var, port, gpu_index)
