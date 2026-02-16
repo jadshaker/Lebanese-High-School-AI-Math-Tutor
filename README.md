@@ -92,7 +92,7 @@ python3.14 cli.py pod stop       # Destroy pod, delete .env.dev (back to serverl
 
 **How it works**: `pod start` creates a 3-GPU pod where each vLLM instance is pinned to its own GPU via `CUDA_VISIBLE_DEVICES` (ports 8000-8002). It writes `.env.dev` which overrides the serverless URLs in `.env`. Docker Compose loads `.env.dev` automatically when it exists. `pod stop` destroys the pod and deletes `.env.dev` so services fall back to serverless.
 
-**GPU fallback**: Tries A40, RTX A5000, RTX 4090, RTX A4000 in order until available.
+**GPU fallback**: Tries A40 48GB, RTX A6000 48GB in order until available.
 
 ### Testing
 
@@ -113,8 +113,8 @@ Integration/E2E tests mock external APIs by default. Use `--use-real-apis` to te
 ## Observability
 
 - **Prometheus** (`http://localhost:9090`) — metrics collection via `/metrics` endpoint
-- **Grafana** (`http://localhost:3001`, admin/admin) — pre-configured dashboard with 9 panels (request rate, latency percentiles, cache hit rate, LLM usage, token tracking)
-- **Structured logging** — JSON logs to stdout + `.logs/app/app.log` (daily rotation, 7-day retention)
+- **Grafana** (`http://localhost:3001`, admin/admin) — pre-configured dashboard with 13 panels across 5 rows (overview stats, pipeline performance, LLM & cache, sessions & tutoring, app health)
+- **Structured logging** — logs to stdout + `.logs/app/app-YYYY-MM-DD.log` (date-based files, 7-day retention)
 - **Request tracing** — unique request IDs; trace via `GET /track/{request_id}`
 
 ## Data Preprocessing
