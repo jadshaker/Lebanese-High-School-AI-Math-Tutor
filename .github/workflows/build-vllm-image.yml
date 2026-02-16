@@ -2,6 +2,9 @@ name: Build vLLM Image
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 105-setup-dev-mode
 
 jobs:
   build:
