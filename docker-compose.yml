@@ -9,6 +9,8 @@ services:
       - '8000:8000'
     env_file:
       - .env
+      - path: .env.dev
+        required: false
     environment:
       - INPUT_PROCESSOR_SERVICE_URL=http://input-processor:8004
       - REFORMULATOR_SERVICE_URL=http://reformulator:8007
@@ -46,13 +48,15 @@ services:
       - '8001:8001'
     env_file:
       - .env
+      - path: .env.dev
+        required: false
     command: uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload --no-access-log
     volumes:
       - ./.logs/large_llm:/app/logs
     networks:
       - math-tutor-network
 
-  # Small LLM Service (Ollama)
+  # Small LLM Service
   small-llm:
     build:
       context: services/small_llm
@@ -62,6 +66,8 @@ services:
       - '8005:8005'
     env_file:
       - .env
+      - path: .env.dev
+        required: false
     command: uvicorn src.main:app --host 0.0.0.0 --port 8005 --reload --no-access-log
     extra_hosts:
       - 'host.docker.internal:host-gateway'
@@ -80,6 +86,8 @@ services:
       - '8002:8002'
     env_file:
       - .env
+      - path: .env.dev
+        required: false
     command: uvicorn src.main:app --host 0.0.0.0 --port 8002 --reload --no-access-log
     volumes:
       - ./.logs/embedding:/app/logs
@@ -109,6 +117,8 @@ services:
       - '8003:8003'
     env_file:
       - .env
+      - path: .env.dev
+        required: false
     environment:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
@@ -130,13 +140,15 @@ services:
       - '8004:8004'
     env_file:
       - .env
+      - path: .env.dev
+        required: false
     command: uvicorn src.main:app --host 0.0.0.0 --port 8004 --reload --no-access-log
     volumes:
       - ./.logs/input_processor:/app/logs
     networks:
       - math-tutor-network
 
-  # Fine-Tuned Model Service (Ollama)
+  # Fine-Tuned Model Service
   fine-tuned-model:
     build:
       context: services/fine_tuned_model
@@ -146,6 +158,8 @@ services:
       - '8006:8006'
     env_file:
       - .env
+      - path: .env.dev
+        required: false
     command: uvicorn src.main:app --host 0.0.0.0 --port 8006 --reload --no-access-log
     extra_hosts:
       - 'host.docker.internal:host-gateway'
@@ -164,6 +178,8 @@ services:
       - '8007:8007'
     env_file:
       - .env
+      - path: .env.dev
+        required: false
     environment:
       - SMALL_LLM_SERVICE_URL=http://small-llm:8005
     command: uvicorn src.main:app --host 0.0.0.0 --port 8007 --reload --no-access-log
@@ -184,6 +200,8 @@ services:
       - '8008:8008'
     env_file:
       - .env
+      - path: .env.dev
+        required: false
     environment:
       - SESSION_TTL_SECONDS=${SESSION_TTL_SECONDS:-3600}
       - SESSION_MAX_HISTORY=${SESSION_MAX_HISTORY:-50}
@@ -204,6 +222,8 @@ services:
       - '8009:8009'
     env_file:
       - .env
+      - path: .env.dev
+        required: false
     environment:
       - SMALL_LLM_SERVICE_URL=http://small-llm:8005
       - INTENT_USE_LLM_FALLBACK=${INTENT_USE_LLM_FALLBACK:-true}
