@@ -142,10 +142,10 @@ def _call_llm_for_reformulation(
 
 def _clean_llm_response(response: str) -> str:
     """Clean the LLM response to extract only the reformulated question."""
-    if "<think>" in response:
-        parts = response.split("</think>")
-        if len(parts) > 1:
-            response = parts[1].strip()
+    if "</think>" in response:
+        response = response.split("</think>")[-1].strip()
+    elif "<think>" in response:
+        response = response.split("<think>")[0].strip()
 
     prefixes = [
         "Reformulated question:",

@@ -1,5 +1,4 @@
 import asyncio
-import re
 import time
 
 from src.clients.embedding import embedding_client
@@ -115,8 +114,10 @@ async def _search_cache(embedding: list[float], request_id: str) -> list[dict]:
 
 def _clean_llm_response(response: str) -> str:
     """Strip <think>...</think> blocks from DeepSeek-R1 style responses."""
-    if "<think>" in response:
-        response = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
+    if "</think>" in response:
+        response = response.split("</think>")[-1].strip()
+    elif "<think>" in response:
+        response = response.split("<think>")[0].strip()
     return response
 
 
@@ -232,7 +233,7 @@ async def _query_small_llm_with_context(
             small_llm_client.chat.completions.create, **call_params  # type: ignore[arg-type]
         )
 
-        answer = result.choices[0].message.content or ""
+        answer = _clean_llm_response(result.choices[0].message.content or "")
         duration = time.time() - start_time
         gateway_small_llm_duration_seconds.observe(duration)
         gateway_llm_calls_total.labels(llm_service="small_llm_context").inc()
@@ -280,7 +281,7 @@ async def _query_fine_tuned_model(query: str, request_id: str) -> str:
             fine_tuned_client.chat.completions.create, **call_params  # type: ignore[arg-type]
         )
 
-        answer = result.choices[0].message.content or ""
+        answer = _clean_llm_response(result.choices[0].message.content or "")
         duration = time.time() - start_time
         gateway_llm_calls_total.labels(llm_service="fine_tuned").inc()
 
@@ -329,7 +330,7 @@ async def _query_large_llm(query: str, request_id: str) -> str:
             large_llm_client.chat.completions.create, **call_params  # type: ignore[arg-type]
         )
 
-        answer = result.choices[0].message.content or ""
+        answer = _clean_llm_response(result.choices[0].message.content or "")
         duration = time.time() - start_time
         gateway_large_llm_duration_seconds.observe(duration)
         gateway_llm_calls_total.labels(llm_service="large_llm").inc()

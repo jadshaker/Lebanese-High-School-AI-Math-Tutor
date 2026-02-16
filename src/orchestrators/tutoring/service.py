@@ -1,5 +1,4 @@
 import asyncio
-import re
 import time
 from typing import Any, Optional
 
@@ -275,10 +274,10 @@ async def _generate_tutoring_response(
         gateway_llm_calls_total.labels(llm_service="fine_tuned_tutoring").inc()
 
         # Clean <think> tags
-        if "<think>" in response:
-            response = re.sub(
-                r"<think>.*?</think>", "", response, flags=re.DOTALL
-            ).strip()
+        if "</think>" in response:
+            response = response.split("</think>")[-1].strip()
+        elif "<think>" in response:
+            response = response.split("<think>")[0].strip()
 
         logger.info(
             f"  ✓ Fine-Tuned Model tutoring ({duration:.1f}s): {len(response)} chars",
