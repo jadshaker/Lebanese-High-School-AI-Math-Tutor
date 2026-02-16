@@ -344,11 +344,12 @@ Redirect them back to the math problem."""
             {
                 "model": Config.MODELS.FINE_TUNED_MODEL_NAME,
                 "messages": messages,
-                "temperature": Config.MODELS.TEMPERATURE,
-                "top_p": Config.MODELS.TOP_P,
+                "temperature": Config.MODELS.FINE_TUNED_MODEL_TEMPERATURE,
+                "top_p": Config.MODELS.FINE_TUNED_MODEL_TOP_P,
+                "max_tokens": Config.MODELS.FINE_TUNED_MODEL_MAX_TOKENS,
             },
             request_id,
-            timeout=Config.MODELS.TIMEOUT,
+            timeout=Config.MODELS.FINE_TUNED_MODEL_TIMEOUT,
         )
 
         response = result["choices"][0]["message"]["content"]

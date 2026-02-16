@@ -30,7 +30,11 @@ app = FastAPI(title="Math Tutor API Large LLM Service")
 logger = StructuredLogger("large_llm")
 
 # Initialize OpenAI client
-client = OpenAI(api_key=Config.API_KEYS.OPENAI) if Config.API_KEYS.OPENAI else None
+client = (
+    OpenAI(api_key=Config.API_KEYS.OPENAI, timeout=Config.LARGE_LLM_TIMEOUT)
+    if Config.API_KEYS.OPENAI
+    else None
+)
 
 
 @app.middleware("http")

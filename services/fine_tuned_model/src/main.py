@@ -29,7 +29,7 @@ logger = StructuredLogger("fine_tuned_model")
 client = OpenAI(
     base_url=f"{Config.FINE_TUNED_MODEL_SERVICE_URL}/v1",
     api_key=Config.FINE_TUNED_MODEL_API_KEY,
-    timeout=300.0,
+    timeout=Config.FINE_TUNED_MODEL_TIMEOUT,
 )
 
 

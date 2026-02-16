@@ -9,3 +9,4 @@ class Config:
     SMALL_LLM_SERVICE_URL = os.environ["SMALL_LLM_SERVICE_URL"]
     SMALL_LLM_MODEL_NAME = os.environ["SMALL_LLM_MODEL_NAME"]
     SMALL_LLM_API_KEY = os.environ["SMALL_LLM_API_KEY"]
+    SMALL_LLM_TIMEOUT = float(os.getenv("SMALL_LLM_TIMEOUT", "300"))

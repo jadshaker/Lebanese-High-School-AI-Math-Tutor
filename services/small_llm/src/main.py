@@ -29,7 +29,7 @@ logger = StructuredLogger("small_llm")
 client = OpenAI(
     base_url=f"{Config.SMALL_LLM_SERVICE_URL}/v1",
     api_key=Config.SMALL_LLM_API_KEY,
-    timeout=300.0,
+    timeout=Config.SMALL_LLM_TIMEOUT,
 )
 
 

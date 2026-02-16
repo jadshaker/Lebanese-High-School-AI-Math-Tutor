@@ -23,7 +23,7 @@ logger = StructuredLogger("reformulator")
 client = OpenAI(
     base_url=f"{Config.SERVICES.REFORMULATOR_LLM_URL}/v1",
     api_key=Config.REFORMULATOR_LLM_API_KEY,
-    timeout=Config.LLM_TIMEOUT,
+    timeout=Config.REFORMULATOR_LLM_TIMEOUT,
 )
 
 
@@ -355,8 +355,9 @@ Output:"""
         response = client.chat.completions.create(
             model=Config.REFORMULATOR_LLM_MODEL_NAME,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.6,
-            top_p=0.9,
+            temperature=Config.REFORMULATOR_LLM_TEMPERATURE,
+            top_p=Config.REFORMULATOR_LLM_TOP_P,
+            max_tokens=Config.REFORMULATOR_LLM_MAX_TOKENS,
         )
         reformulated = (response.choices[0].message.content or "").strip()
 

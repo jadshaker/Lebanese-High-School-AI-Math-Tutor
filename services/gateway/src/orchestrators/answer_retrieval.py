@@ -154,11 +154,12 @@ You MUST start your response with either CACHE_VALID or GENERATED on the first l
             {
                 "model": Config.MODELS.SMALL_LLM_MODEL_NAME,
                 "messages": messages,
-                "temperature": Config.MODELS.TEMPERATURE,
-                "top_p": Config.MODELS.TOP_P,
+                "temperature": Config.MODELS.SMALL_LLM_TEMPERATURE,
+                "top_p": Config.MODELS.SMALL_LLM_TOP_P,
+                "max_tokens": Config.MODELS.SMALL_LLM_MAX_TOKENS,
             },
             request_id,
-            timeout=Config.MODELS.TIMEOUT,
+            timeout=Config.MODELS.SMALL_LLM_TIMEOUT,
         )
 
         response_text = result["choices"][0]["message"]["content"]
@@ -239,11 +240,12 @@ async def _query_small_llm_with_context(
             {
                 "model": Config.MODELS.SMALL_LLM_MODEL_NAME,
                 "messages": messages,
-                "temperature": Config.MODELS.TEMPERATURE,
-                "top_p": Config.MODELS.TOP_P,
+                "temperature": Config.MODELS.SMALL_LLM_TEMPERATURE,
+                "top_p": Config.MODELS.SMALL_LLM_TOP_P,
+                "max_tokens": Config.MODELS.SMALL_LLM_MAX_TOKENS,
             },
             request_id,
-            timeout=Config.MODELS.TIMEOUT,
+            timeout=Config.MODELS.SMALL_LLM_TIMEOUT,
         )
 
         answer = result["choices"][0]["message"]["content"]
@@ -290,11 +292,12 @@ async def _query_fine_tuned_model(query: str, request_id: str) -> str:
             {
                 "model": Config.MODELS.FINE_TUNED_MODEL_NAME,
                 "messages": messages,
-                "temperature": Config.MODELS.TEMPERATURE,
-                "top_p": Config.MODELS.TOP_P,
+                "temperature": Config.MODELS.FINE_TUNED_MODEL_TEMPERATURE,
+                "top_p": Config.MODELS.FINE_TUNED_MODEL_TOP_P,
+                "max_tokens": Config.MODELS.FINE_TUNED_MODEL_MAX_TOKENS,
             },
             request_id,
-            timeout=Config.MODELS.TIMEOUT,
+            timeout=Config.MODELS.FINE_TUNED_MODEL_TIMEOUT,
         )
 
         answer = result["choices"][0]["message"]["content"]
@@ -339,11 +342,12 @@ async def _query_large_llm(query: str, request_id: str) -> str:
             {
                 "model": Config.MODELS.LARGE_LLM_MODEL_NAME,
                 "messages": messages,
-                "temperature": Config.MODELS.TEMPERATURE,
-                "top_p": Config.MODELS.TOP_P,
+                "temperature": Config.MODELS.LARGE_LLM_TEMPERATURE,
+                "top_p": Config.MODELS.LARGE_LLM_TOP_P,
+                "max_tokens": Config.MODELS.LARGE_LLM_MAX_TOKENS,
             },
             request_id,
-            timeout=Config.MODELS.TIMEOUT,
+            timeout=Config.MODELS.LARGE_LLM_TIMEOUT,
         )
 
         answer = result["choices"][0]["message"]["content"]

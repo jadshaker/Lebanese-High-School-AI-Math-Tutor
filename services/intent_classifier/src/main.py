@@ -246,8 +246,8 @@ def classify_llm_based(
     payload = {
         "model": "math-tutor",
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.1,
-        "max_tokens": 50,
+        "temperature": Config.CLASSIFIER.LLM_TEMPERATURE,
+        "max_tokens": Config.CLASSIFIER.LLM_MAX_TOKENS,
     }
 
     logger.info(

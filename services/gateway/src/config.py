@@ -30,11 +30,33 @@ class Config:
 
     class MODELS:
         SMALL_LLM_MODEL_NAME = os.environ["SMALL_LLM_MODEL_NAME"]
-        LARGE_LLM_MODEL_NAME = os.environ["LARGE_LLM_MODEL_NAME"]
+        SMALL_LLM_TEMPERATURE = float(os.getenv("SMALL_LLM_TEMPERATURE", "0.7"))
+        SMALL_LLM_TOP_P = float(os.getenv("SMALL_LLM_TOP_P", "0.9"))
+        _small_llm_max_tokens = os.getenv("SMALL_LLM_MAX_TOKENS")
+        SMALL_LLM_MAX_TOKENS: int | None = (
+            int(_small_llm_max_tokens) if _small_llm_max_tokens else None
+        )
+        SMALL_LLM_TIMEOUT = int(os.getenv("SMALL_LLM_TIMEOUT", "300"))
+
         FINE_TUNED_MODEL_NAME = os.environ["FINE_TUNED_MODEL_NAME"]
-        TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
-        TOP_P = float(os.getenv("LLM_TOP_P", "0.9"))
-        TIMEOUT = int(os.getenv("LLM_TIMEOUT", "300"))
+        FINE_TUNED_MODEL_TEMPERATURE = float(
+            os.getenv("FINE_TUNED_MODEL_TEMPERATURE", "0.7")
+        )
+        FINE_TUNED_MODEL_TOP_P = float(os.getenv("FINE_TUNED_MODEL_TOP_P", "0.9"))
+        _fine_tuned_max_tokens = os.getenv("FINE_TUNED_MODEL_MAX_TOKENS")
+        FINE_TUNED_MODEL_MAX_TOKENS: int | None = (
+            int(_fine_tuned_max_tokens) if _fine_tuned_max_tokens else None
+        )
+        FINE_TUNED_MODEL_TIMEOUT = int(os.getenv("FINE_TUNED_MODEL_TIMEOUT", "300"))
+
+        LARGE_LLM_MODEL_NAME = os.environ["LARGE_LLM_MODEL_NAME"]
+        LARGE_LLM_TEMPERATURE = float(os.getenv("LARGE_LLM_TEMPERATURE", "0.7"))
+        LARGE_LLM_TOP_P = float(os.getenv("LARGE_LLM_TOP_P", "0.9"))
+        _large_llm_max_tokens = os.getenv("LARGE_LLM_MAX_TOKENS")
+        LARGE_LLM_MAX_TOKENS: int | None = (
+            int(_large_llm_max_tokens) if _large_llm_max_tokens else None
+        )
+        LARGE_LLM_TIMEOUT = int(os.getenv("LARGE_LLM_TIMEOUT", "300"))
 
     # Vector cache configuration
     CACHE_TOP_K = int(os.getenv("CACHE_TOP_K", "5"))

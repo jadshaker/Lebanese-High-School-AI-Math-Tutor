@@ -13,7 +13,15 @@ class Config:
 
     REFORMULATOR_LLM_MODEL_NAME = os.environ["REFORMULATOR_LLM_MODEL_NAME"]
     REFORMULATOR_LLM_API_KEY = os.environ["REFORMULATOR_LLM_API_KEY"]
-    LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "300"))
+    REFORMULATOR_LLM_TEMPERATURE = float(
+        os.getenv("REFORMULATOR_LLM_TEMPERATURE", "0.6")
+    )
+    REFORMULATOR_LLM_TOP_P = float(os.getenv("REFORMULATOR_LLM_TOP_P", "0.9"))
+    _reformulator_max_tokens = os.getenv("REFORMULATOR_LLM_MAX_TOKENS")
+    REFORMULATOR_LLM_MAX_TOKENS: int | None = (
+        int(_reformulator_max_tokens) if _reformulator_max_tokens else None
+    )
+    REFORMULATOR_LLM_TIMEOUT = float(os.getenv("REFORMULATOR_LLM_TIMEOUT", "300"))
 
     class REFORMULATION:
         # Whether to use the LLM for reformulation or just return the input
