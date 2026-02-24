@@ -1,3 +1,5 @@
+import asyncio
+import hashlib
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -10,17 +12,21 @@ from src.config import Config
 from src.logging_utils import StructuredLogger, generate_request_id
 from src.metrics import (
     gateway_errors_total,
+    gateway_filtered_requests_total,
+    gateway_tutoring_followups_total,
     http_request_duration_seconds,
     http_requests_total,
     service_health_status,
 )
 from src.models.schemas import (
     ChatCompletionChoice,
+    ChatMessage,
     ChatCompletionMessageResponse,
     ChatCompletionRequest,
     ChatCompletionResponse,
     Model,
     ModelListResponse,
+    SessionPhase,
     TutoringRequest,
     TutoringResponse,
 )
@@ -32,6 +38,99 @@ from src.services.session import service as session_service
 from src.services.vector_cache import service as vector_cache
 
 logger = StructuredLogger("gateway")
+
+# Open WebUI sends automated requests (title gen, tag gen, follow-up suggestions)
+# through /v1/chat/completions. These must not enter the pipeline or pollute the cache.
+_OPENWEBUI_JUNK_PREFIXES = (
+    "### Task:\nSuggest",
+    "### Task:\nGenerate a concise",
+    "### Task:\nGenerate 1-3",
+    "### Task: Suggest",
+    "### Task: Generate a concise",
+    "### Task: Generate 1-3",
+)
+
+_GREETING_WORDS = frozenset(
+    {
+        "hello",
+        "hi",
+        "hey",
+        "good morning",
+        "good evening",
+        "good afternoon",
+        "thanks",
+        "thank you",
+        "bye",
+        "goodbye",
+        "merci",
+        "bonjour",
+        "bonsoir",
+        "salut",
+    }
+)
+
+
+def _is_openwebui_system_request(user_message: str) -> bool:
+    """Detect Open WebUI automated system requests."""
+    return any(user_message.strip().startswith(p) for p in _OPENWEBUI_JUNK_PREFIXES)
+
+
+def _is_simple_greeting(message: str) -> bool:
+    """Detect simple greetings that don't need the full pipeline."""
+    normalized = message.strip().lower().rstrip("!.,?")
+    return normalized in _GREETING_WORDS
+
+
+# Maps conversation key (hash of first user message) → session_id.
+# Entries are cleaned up when the underlying session expires (see _cleanup_stale_conversations).
+_conversation_sessions: dict[str, str] = {}
+
+
+def _cleanup_stale_conversations() -> None:
+    """Remove conversation keys whose sessions no longer exist."""
+    stale = [
+        key
+        for key, sid in _conversation_sessions.items()
+        if session_service.get_session(sid) is None
+    ]
+    for key in stale:
+        del _conversation_sessions[key]
+    if stale:
+        logger.info(
+            "Cleaned up stale conversation keys",
+            context={"count": len(stale), "remaining": len(_conversation_sessions)},
+        )
+
+
+def _derive_conversation_key(messages: list[ChatMessage]) -> str:
+    """Derive a stable key for this conversation from its first user message."""
+    first_user_msg = next(
+        (msg.content for msg in messages if msg.role == "user"), ""
+    )
+    return hashlib.sha256(first_user_msg.encode()).hexdigest()[:16]
+
+
+def _count_user_messages(messages: list[ChatMessage]) -> int:
+    """Count user messages in the conversation."""
+    return sum(1 for msg in messages if msg.role == "user")
+
+
+def _make_short_circuit_response(
+    content: str, model: str
+) -> ChatCompletionResponse:
+    """Build a minimal ChatCompletionResponse without running the pipeline."""
+    return ChatCompletionResponse(
+        id=f"chatcmpl-{uuid.uuid4().hex[:8]}",
+        created=int(time.time()),
+        model=model,
+        choices=[
+            ChatCompletionChoice(
+                index=0,
+                message=ChatCompletionMessageResponse(content=content),
+                finish_reason="stop",
+            )
+        ],
+    )
 
 
 @asynccontextmanager
@@ -51,10 +150,20 @@ async def lifespan(app: FastAPI):
     # Start session cleanup
     session_service.start_cleanup()
 
+    # Periodically clean up stale conversation keys
+    async def _periodic_conversation_cleanup() -> None:
+        while True:
+            await asyncio.sleep(Config.CLEANUP.INTERVAL_SECONDS)
+            _cleanup_stale_conversations()
+
+    conversation_cleanup_task = asyncio.create_task(_periodic_conversation_cleanup())
+
     service_health_status.labels(service="app").set(2)
     logger.info("App ready")
 
     yield
+
+    conversation_cleanup_task.cancel()
 
     # Shutdown
     logger.info("Shutting down...")
@@ -194,6 +303,123 @@ async def chat_completions(
                 detail="No user message found in request",
             )
 
+        # ===== FILTER: Open WebUI system requests =====
+        if _is_openwebui_system_request(user_message):
+            logger.info(
+                "Filtered Open WebUI system request",
+                context={"message_prefix": user_message[:60]},
+                request_id=request_id,
+            )
+            gateway_filtered_requests_total.labels(reason="openwebui_system").inc()
+            return _make_short_circuit_response(
+                "I'm a math tutor for Lebanese high school students. Ask me a math question!",
+                request.model,
+            )
+
+        # ===== FILTER: Simple greetings =====
+        if _is_simple_greeting(user_message):
+            logger.info(
+                "Handled greeting",
+                context={"message": user_message[:60]},
+                request_id=request_id,
+            )
+            gateway_filtered_requests_total.labels(reason="greeting").inc()
+            return _make_short_circuit_response(
+                "Hello! I'm your math tutor for the Lebanese high school curriculum. "
+                "I can help with algebra, geometry, calculus, trigonometry, and more. "
+                "What would you like to work on?",
+                request.model,
+            )
+
+        # ===== CONVERSATION HISTORY =====
+        # Extract prior user/assistant messages for reformulator context
+        conversation_history = [
+            msg
+            for msg in request.messages
+            if msg.role in ("user", "assistant")
+        ]
+        # Remove the last entry if it's the current user message
+        if (
+            conversation_history
+            and conversation_history[-1].content == user_message
+        ):
+            conversation_history = conversation_history[:-1]
+        # Pass None instead of empty list for cleaner downstream checks
+        if not conversation_history:
+            conversation_history = None
+
+        # ===== ROUTING: First question vs tutoring follow-up =====
+        conversation_key = _derive_conversation_key(request.messages)
+        user_msg_count = _count_user_messages(request.messages)
+        is_follow_up = (
+            user_msg_count > 1
+            and conversation_key in _conversation_sessions
+        )
+
+        if is_follow_up:
+            # ===== TUTORING FOLLOW-UP =====
+            session_id = _conversation_sessions[conversation_key]
+            session = session_service.get_session(session_id)
+
+            if session and session.tutoring.question_id:
+                logger.info(
+                    "Routing to tutoring follow-up",
+                    context={
+                        "session_id": session_id,
+                        "question_id": session.tutoring.question_id,
+                        "user_message": user_message[:100],
+                        "depth": session.tutoring.depth,
+                    },
+                    request_id=request_id,
+                )
+                gateway_tutoring_followups_total.inc()
+
+                result = await handle_tutoring_interaction(
+                    session_id=session_id,
+                    original_question=session.original_query or "",
+                    original_answer=session.retrieved_answer or "",
+                    question_id=session.tutoring.question_id,
+                    user_response=user_message,
+                    request_id=request_id,
+                )
+
+                answer = result["tutor_message"]
+
+                logger.info(
+                    "Tutoring follow-up completed",
+                    context={
+                        "session_id": session_id,
+                        "intent": result["intent"],
+                        "is_complete": result["is_complete"],
+                        "cache_hit": result["cache_hit"],
+                    },
+                    request_id=request_id,
+                )
+
+                return ChatCompletionResponse(
+                    id=f"chatcmpl-{uuid.uuid4().hex[:8]}",
+                    created=int(time.time()),
+                    model=request.model,
+                    choices=[
+                        ChatCompletionChoice(
+                            index=0,
+                            message=ChatCompletionMessageResponse(
+                                content=answer
+                            ),
+                            finish_reason="stop",
+                        )
+                    ],
+                )
+
+            # Session expired or missing question_id — fall through to Q&A
+            logger.info(
+                "Session expired or incomplete, falling through to Q&A",
+                context={"session_id": session_id},
+                request_id=request_id,
+            )
+            del _conversation_sessions[conversation_key]
+
+        # ===== FIRST QUESTION: Full Q&A Pipeline =====
         logger.info(
             "Starting chat completion pipeline",
             context={
@@ -207,8 +433,25 @@ async def chat_completions(
         pipeline_start = time.time()
 
         # ===== DATA PROCESSING =====
-        processing_result = await process_user_input(user_message, request_id)
+        processing_result = await process_user_input(
+            user_message, request_id, conversation_history=conversation_history
+        )
         reformulated_query = processing_result["reformulated_query"]
+
+        # ===== FILTER: Non-math content =====
+        if not processing_result.get("is_math_related", True):
+            logger.info(
+                "Filtered non-math query",
+                context={"user_message": user_message[:100]},
+                request_id=request_id,
+            )
+            gateway_filtered_requests_total.labels(reason="non_math").inc()
+            return _make_short_circuit_response(
+                "I'm a math tutor specialized in the Lebanese high school curriculum. "
+                "I can help with algebra, geometry, calculus, trigonometry, and other math topics. "
+                "Please ask me a math question!",
+                request.model,
+            )
 
         # ===== ANSWER RETRIEVAL =====
         retrieval_result = await retrieve_answer(
@@ -216,6 +459,44 @@ async def chat_completions(
         )
         answer = retrieval_result["answer"]
         source = retrieval_result["source"]
+        question_id = retrieval_result.get("question_id", "")
+
+        # ===== CREATE SESSION for tutoring follow-ups =====
+        # Only create a session (and enable tutoring routing) when we have a
+        # valid question_id.  Without one the tutoring system cannot function
+        # (it needs the ID to search/store graph nodes in Qdrant).
+        if question_id:
+            session = session_service.create_session(
+                initial_query=user_message, request_id=request_id
+            )
+            session_service.update_session(
+                session.session_id,
+                phase=SessionPhase.TUTORING,
+                retrieved_answer=answer,
+                retrieval_source=source,
+                request_id=request_id,
+            )
+            session_service.update_tutoring_state(
+                session.session_id,
+                question_id=question_id,
+                request_id=request_id,
+            )
+            _conversation_sessions[conversation_key] = session.session_id
+        else:
+            logger.warning(
+                "No question_id from retrieval — tutoring follow-ups disabled for this conversation",
+                request_id=request_id,
+            )
+
+        logger.info(
+            "Session created for conversation",
+            context={
+                "session_id": session.session_id,
+                "conversation_key": conversation_key,
+                "question_id": question_id,
+            },
+            request_id=request_id,
+        )
 
         # ===== LATENCY SUMMARY =====
         total_duration = round(time.time() - pipeline_start, 3)

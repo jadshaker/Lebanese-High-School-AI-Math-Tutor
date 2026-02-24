@@ -203,45 +203,66 @@ async def _generate_tutoring_response(
                 path_context += f"  Student: {step.get('user_input', '')}\n"
                 path_context += f"  Tutor: {step.get('system_response', '')}\n"
 
+        def _safe_fmt(template: str, **kwargs: str) -> str:
+            """Substitute {key} placeholders without crashing on user content with braces."""
+            result = template
+            for key, value in kwargs.items():
+                result = result.replace(f"{{{key}}}", value)
+            return result
+
         # Build prompt based on intent
         if intent == "skip":
-            system_prompt = TUTORING_SKIP_PROMPT.format(
-                question=question, answer=answer
+            system_prompt = _safe_fmt(
+                TUTORING_SKIP_PROMPT, question=question, answer=answer
             )
             user_prompt = "Give me the answer directly."
             is_complete = True
 
         elif intent == "affirmative":
-            system_prompt = TUTORING_AFFIRMATIVE_PROMPT.format(
-                question=question, answer=answer, path_context=path_context
+            system_prompt = _safe_fmt(
+                TUTORING_AFFIRMATIVE_PROMPT,
+                question=question,
+                answer=answer,
+                path_context=path_context,
             )
             user_prompt = f"Student says: {user_response}"
             is_complete = depth >= Config.TUTORING.MAX_INTERACTION_DEPTH
 
         elif intent == "negative":
-            system_prompt = TUTORING_NEGATIVE_PROMPT.format(
-                question=question, answer=answer, path_context=path_context
+            system_prompt = _safe_fmt(
+                TUTORING_NEGATIVE_PROMPT,
+                question=question,
+                answer=answer,
+                path_context=path_context,
             )
             user_prompt = f"Student says they don't understand: {user_response}"
             is_complete = False
 
         elif intent == "partial":
-            system_prompt = TUTORING_PARTIAL_PROMPT.format(
-                question=question, answer=answer, path_context=path_context
+            system_prompt = _safe_fmt(
+                TUTORING_PARTIAL_PROMPT,
+                question=question,
+                answer=answer,
+                path_context=path_context,
             )
             user_prompt = f"Student partially understands: {user_response}"
             is_complete = False
 
         elif intent == "question":
-            system_prompt = TUTORING_QUESTION_PROMPT.format(
-                question=question, answer=answer, path_context=path_context
+            system_prompt = _safe_fmt(
+                TUTORING_QUESTION_PROMPT,
+                question=question,
+                answer=answer,
+                path_context=path_context,
             )
             user_prompt = f"Student asks: {user_response}"
             is_complete = False
 
         else:  # off_topic
-            system_prompt = TUTORING_OFF_TOPIC_PROMPT.format(
-                question=question, path_context=path_context
+            system_prompt = _safe_fmt(
+                TUTORING_OFF_TOPIC_PROMPT,
+                question=question,
+                path_context=path_context,
             )
             user_prompt = f"Student says: {user_response}"
             is_complete = False

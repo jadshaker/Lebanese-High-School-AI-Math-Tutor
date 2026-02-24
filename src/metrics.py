@@ -87,6 +87,17 @@ gateway_confidence = Histogram(
     buckets=[0, 0.5, 0.7, 0.85, 0.9, 0.95, 1.0],
 )
 
+gateway_filtered_requests_total = Counter(
+    "gateway_filtered_requests_total",
+    "Total requests filtered before pipeline",
+    ["reason"],
+)
+
+gateway_tutoring_followups_total = Counter(
+    "gateway_tutoring_followups_total",
+    "Total follow-up messages routed to tutoring",
+)
+
 gateway_errors_total = Counter(
     "gateway_errors_total",
     "Total errors",

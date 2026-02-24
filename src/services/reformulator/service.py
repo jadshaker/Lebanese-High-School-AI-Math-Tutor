@@ -48,7 +48,7 @@ def reformulate_query(
         )
 
     # Call LLM to reformulate
-    reformulated, improvements = _call_llm_for_reformulation(
+    reformulated, improvements, is_math_related = _call_llm_for_reformulation(
         processed_input, input_type, request_id, conversation_context
     )
 
@@ -57,6 +57,7 @@ def reformulate_query(
         context={
             "reformulated_length": len(reformulated),
             "improvements_count": len(improvements),
+            "is_math_related": is_math_related,
         },
         request_id=request_id,
     )
@@ -65,6 +66,7 @@ def reformulate_query(
         reformulated_query=reformulated,
         original_input=processed_input,
         improvements_made=improvements,
+        is_math_related=is_math_related,
     )
 
 
@@ -96,16 +98,17 @@ def _call_llm_for_reformulation(
     input_type: str,
     request_id: str,
     conversation_context: str = "",
-) -> tuple[str, list[str]]:
-    """Call the LLM to reformulate the query."""
+) -> tuple[str, list[str], bool]:
+    """Call the LLM to reformulate the query. Returns (reformulated, improvements, is_math_related)."""
     context_section = ""
     if conversation_context:
         context_section = f"\nPrevious conversation context:\n{conversation_context}\n"
 
-    prompt = REFORMULATION_PROMPT.format(
-        context_section=context_section,
-        processed_input=processed_input,
-    )
+    # Use Template-style substitution to avoid KeyError when user input
+    # contains curly braces (e.g., "{x | x > 0}").
+    prompt = REFORMULATION_PROMPT.replace(
+        "{context_section}", context_section
+    ).replace("{processed_input}", processed_input)
 
     try:
         response = reformulator_client.chat.completions.create(
@@ -115,18 +118,32 @@ def _call_llm_for_reformulation(
             top_p=Config.REFORMULATOR_LLM.TOP_P,
             max_tokens=Config.REFORMULATOR_LLM.MAX_TOKENS,
         )
-        reformulated = (response.choices[0].message.content or "").strip()
+        raw_response = (response.choices[0].message.content or "").strip()
 
-        # Clean up the response
-        reformulated = _clean_llm_response(reformulated)
+        # Clean think tags first
+        raw_response = _clean_llm_response(raw_response)
+
+        # Parse MATH/NOT_MATH classification from first line
+        is_math_related = True  # default to True to avoid false rejections
+        lines = raw_response.split("\n", 1)
+        first_line = lines[0].strip().upper()
+        if first_line in ("MATH", "NOT_MATH"):
+            is_math_related = first_line == "MATH"
+            reformulated = lines[1].strip() if len(lines) > 1 else processed_input
+        else:
+            # LLM didn't follow format — treat entire response as reformulated text
+            reformulated = raw_response
+
+        # Clean remaining prefixes
+        reformulated = _clean_reformulation_prefixes(reformulated)
 
         if not reformulated or len(reformulated) < 3:
-            return processed_input, ["none (reformulation failed)"]
+            return processed_input, ["none (reformulation failed)"], is_math_related
 
         had_context = bool(conversation_context)
         improvements = _detect_improvements(processed_input, reformulated, had_context)
 
-        return reformulated, improvements
+        return reformulated, improvements, is_math_related
 
     except Exception as e:
         logger.error(
@@ -141,12 +158,16 @@ def _call_llm_for_reformulation(
 
 
 def _clean_llm_response(response: str) -> str:
-    """Clean the LLM response to extract only the reformulated question."""
+    """Remove think tags from LLM response."""
     if "</think>" in response:
         response = response.split("</think>")[-1].strip()
     elif "<think>" in response:
         response = response.split("<think>")[0].strip()
+    return response.strip()
 
+
+def _clean_reformulation_prefixes(response: str) -> str:
+    """Clean common LLM prefixes and formatting from a reformulated query."""
     prefixes = [
         "Reformulated question:",
         "Reformulated:",

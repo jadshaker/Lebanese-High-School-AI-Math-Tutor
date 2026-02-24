@@ -164,6 +164,9 @@ class ReformulateResponse(BaseModel):
     improvements_made: list[str] = Field(
         default_factory=list, description="List of improvements applied"
     )
+    is_math_related: bool = Field(
+        default=True, description="Whether the input is math-related"
+    )
 
 
 # === Embedding Schemas ===

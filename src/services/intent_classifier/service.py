@@ -58,7 +58,7 @@ def classify_llm_based(
     text: str, context: Optional[str], request_id: str
 ) -> IntentCategory:
     """Classify using Small LLM."""
-    prompt = CLASSIFICATION_PROMPT.format(response=text)
+    prompt = CLASSIFICATION_PROMPT.replace("{response}", text)
     if context:
         prompt = f'Tutor\'s question: "{context}"\n\n{prompt}'
 

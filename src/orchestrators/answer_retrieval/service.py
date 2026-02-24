@@ -166,17 +166,33 @@ async def _validate_or_generate_with_small_llm(
         answer_text = lines[1].strip() if len(lines) > 1 else ""
 
         if prefix == "CACHE_VALID":
+            # Use extracted answer, or fall back to the original cached answer
             answer = answer_text if answer_text else cached_answer
             cache_reused = True
             logger.info(
                 f"  ✓ Small LLM validate-or-generate ({duration:.1f}s): CACHE_VALID ({len(answer)} chars)",
                 request_id=request_id,
             )
-        else:
-            answer = answer_text if answer_text else response_text
+        elif answer_text:
+            # GENERATED (or other prefix) with actual answer content
+            answer = answer_text
             cache_reused = False
             logger.info(
                 f"  ✓ Small LLM validate-or-generate ({duration:.1f}s): GENERATED ({len(answer)} chars)",
+                request_id=request_id,
+            )
+        else:
+            # LLM didn't follow the format — use full response, stripping known prefixes
+            answer = response_text
+            for known_prefix in ("GENERATED", "CACHE_VALID"):
+                if answer.upper().startswith(known_prefix):
+                    answer = answer[len(known_prefix) :].strip()
+            # If still empty after stripping, this is a genuinely empty response — raise to trigger fallback
+            if not answer:
+                raise ValueError("Small LLM returned empty answer")
+            cache_reused = False
+            logger.info(
+                f"  ✓ Small LLM validate-or-generate ({duration:.1f}s): GENERATED/unformatted ({len(answer)} chars)",
                 request_id=request_id,
             )
 
@@ -358,13 +374,13 @@ async def _save_to_cache(
     answer: str,
     embedding: list[float],
     request_id: str,
-) -> None:
-    """Save Q&A pair to vector cache (non-critical)."""
+) -> str:
+    """Save Q&A pair to vector cache (non-critical). Returns question_id."""
     start_time = time.time()
     try:
         logger.info("  → Vector Cache Save", request_id=request_id)
 
-        await vector_cache.add_question(
+        question_id = await vector_cache.add_question(
             question_text=original_query,
             reformulated_text=reformulated_query,
             answer_text=answer,
@@ -375,6 +391,7 @@ async def _save_to_cache(
         duration = time.time() - start_time
         gateway_cache_save_duration_seconds.observe(duration)
         logger.info(f"  ✓ Vector Cache Save ({duration:.2f}s)", request_id=request_id)
+        return question_id
 
     except Exception as e:
         duration = time.time() - start_time
@@ -383,6 +400,7 @@ async def _save_to_cache(
             f"Cache save failed ({duration:.2f}s): {str(e)} (non-critical)",
             request_id=request_id,
         )
+        return ""
 
 
 async def retrieve_answer(
@@ -412,6 +430,7 @@ async def retrieve_answer(
     source = tier.value
     used_cache = False
     cache_reused = None
+    question_id = ""
 
     if tier == ConfidenceTier.TIER_1_SMALL_LLM_VALIDATE_OR_GENERATE:
         cached_question = cached_results[0]["question_text"]
@@ -428,10 +447,11 @@ async def retrieve_answer(
                 gateway_cache_hits_total.inc()
                 used_cache = True
                 source = f"{tier.value}_cache_reused"
+                question_id = cached_results[0].get("id", "")
             else:
                 gateway_cache_misses_total.inc()
                 source = f"{tier.value}_generated"
-                await _save_to_cache(
+                question_id = await _save_to_cache(
                     original_query, query, answer, embedding, request_id
                 )
 
@@ -443,12 +463,16 @@ async def retrieve_answer(
             gateway_cache_misses_total.inc()
             answer = await _query_large_llm(query, request_id)
             source = f"{tier.value}_fallback"
-            await _save_to_cache(original_query, query, answer, embedding, request_id)
+            question_id = await _save_to_cache(
+                original_query, query, answer, embedding, request_id
+            )
 
     elif tier == ConfidenceTier.TIER_2_SMALL_LLM_CONTEXT:
         gateway_cache_misses_total.inc()
         answer = await _query_small_llm_with_context(query, cached_results, request_id)
-        await _save_to_cache(original_query, query, answer, embedding, request_id)
+        question_id = await _save_to_cache(
+            original_query, query, answer, embedding, request_id
+        )
 
     elif tier == ConfidenceTier.TIER_3_FINE_TUNED:
         gateway_cache_misses_total.inc()
@@ -461,12 +485,16 @@ async def retrieve_answer(
             )
             answer = await _query_large_llm(query, request_id)
             source = f"{tier.value}_fallback"
-        await _save_to_cache(original_query, query, answer, embedding, request_id)
+        question_id = await _save_to_cache(
+            original_query, query, answer, embedding, request_id
+        )
 
     else:
         gateway_cache_misses_total.inc()
         answer = await _query_large_llm(query, request_id)
-        await _save_to_cache(original_query, query, answer, embedding, request_id)
+        question_id = await _save_to_cache(
+            original_query, query, answer, embedding, request_id
+        )
 
     logger.info(
         f"4-Tier Answer Retrieval Pipeline: Completed - {source} ({len(answer)} chars)",
@@ -480,4 +508,5 @@ async def retrieve_answer(
         "confidence": top_confidence,
         "used_cache": used_cache,
         "cache_reused": cache_reused,
+        "question_id": question_id,
     }
