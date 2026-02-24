@@ -541,7 +541,7 @@
       },
       "targets": [
         {
-          "expr": "increase(gateway_llm_calls_total{llm_service=\"small_llm\"}[5m])",
+          "expr": "increase(gateway_llm_calls_total{llm_service=~\"small_llm.*\"}[5m])",
           "legendFormat": "Small LLM",
           "refId": "A"
         },
@@ -551,14 +551,9 @@
           "refId": "B"
         },
         {
-          "expr": "increase(gateway_llm_calls_total{llm_service=\"fine_tuned\"}[5m])",
+          "expr": "increase(gateway_llm_calls_total{llm_service=~\"fine_tuned.*\"}[5m])",
           "legendFormat": "Fine-Tuned",
           "refId": "C"
-        },
-        {
-          "expr": "increase(gateway_llm_calls_total{llm_service=\"reformulator\"}[5m])",
-          "legendFormat": "Reformulator",
-          "refId": "D"
         }
       ],
       "title": "LLM Calls by Service",
