@@ -99,6 +99,47 @@ def test_classify_skip():
 
 
 @pytest.mark.unit
+def test_classify_correction():
+    """Test classification of correction responses via rule-based matching."""
+    test_cases = [
+        "no it is 2x^5 + 4x^-3",
+        "no, the question is about integrals",
+        "I meant the derivative of sin(x)",
+        "actually it is 3x^2 + 1",
+        "sorry, my question was about limits",
+        "wait, the equation is y = 2x + 3",
+        "that's not what I asked",
+        "I made a mistake",
+        "no, I mean the integral of x^3",
+    ]
+
+    for text in test_cases:
+        result = classify_text(text, None, "req-correction")
+        assert result.intent == IntentCategory.CORRECTION, f"Failed for: {text}"
+
+
+@pytest.mark.unit
+def test_bare_no_is_negative():
+    """Test that a bare 'no' (without correction content) is still NEGATIVE."""
+    test_cases = [
+        "no",
+        "No.",
+        "no!",
+    ]
+
+    for text in test_cases:
+        result = classify_text(text, None, "req-bare-no")
+        assert result.intent == IntentCategory.NEGATIVE, f"Failed for: {text}"
+
+
+@pytest.mark.unit
+def test_correction_beats_negative():
+    """Test that CORRECTION takes priority when both could match."""
+    result = classify_text("no it is 2x^5 + 4x^-3", None, "req-priority")
+    assert result.intent == IntentCategory.CORRECTION
+
+
+@pytest.mark.unit
 def test_classify_with_context():
     """Test classification with context still resolves correctly."""
     result = classify_text("yes", "Do you understand derivatives?", "req-6")

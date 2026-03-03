@@ -194,6 +194,7 @@ class IntentCategory(str, Enum):
 
     AFFIRMATIVE = "affirmative"
     NEGATIVE = "negative"
+    CORRECTION = "correction"
     PARTIAL = "partial"
     QUESTION = "question"
     SKIP = "skip"

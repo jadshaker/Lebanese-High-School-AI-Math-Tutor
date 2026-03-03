@@ -46,6 +46,12 @@ def classify_rule_based(
         intent = list(matches.keys())[0]
         return intent, 0.95, matches[intent]
 
+    # Priority: CORRECTION takes precedence over NEGATIVE when both match
+    if IntentCategory.CORRECTION in matches and IntentCategory.NEGATIVE in matches:
+        del matches[IntentCategory.NEGATIVE]
+        if len(matches) == 1:
+            return IntentCategory.CORRECTION, 0.95, matches[IntentCategory.CORRECTION]
+
     best_intent = max(matches, key=lambda k: len(matches[k]))
     total_matches = sum(len(v) for v in matches.values())
     best_matches = len(matches[best_intent])
@@ -90,6 +96,7 @@ def classify_llm_based(
         intent_map = {
             "AFFIRMATIVE": IntentCategory.AFFIRMATIVE,
             "NEGATIVE": IntentCategory.NEGATIVE,
+            "CORRECTION": IntentCategory.CORRECTION,
             "PARTIAL": IntentCategory.PARTIAL,
             "QUESTION": IntentCategory.QUESTION,
             "SKIP": IntentCategory.SKIP,

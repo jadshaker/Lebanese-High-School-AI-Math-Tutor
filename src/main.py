@@ -482,21 +482,20 @@ async def chat_completions(
                 request_id=request_id,
             )
             _conversation_sessions[conversation_key] = session.session_id
+            logger.info(
+                "Session created for conversation",
+                context={
+                    "session_id": session.session_id,
+                    "conversation_key": conversation_key,
+                    "question_id": question_id,
+                },
+                request_id=request_id,
+            )
         else:
             logger.warning(
                 "No question_id from retrieval — tutoring follow-ups disabled for this conversation",
                 request_id=request_id,
             )
-
-        logger.info(
-            "Session created for conversation",
-            context={
-                "session_id": session.session_id,
-                "conversation_key": conversation_key,
-                "question_id": question_id,
-            },
-            request_id=request_id,
-        )
 
         # ===== LATENCY SUMMARY =====
         total_duration = round(time.time() - pipeline_start, 3)

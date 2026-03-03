@@ -5,6 +5,7 @@ Classify the user's response into ONE of these categories:
 
 - AFFIRMATIVE: User confirms, agrees, or indicates understanding (yes, I know, got it, understood, correct, right)
 - NEGATIVE: User denies, disagrees, or indicates lack of understanding (no, I don't know, never learned, unfamiliar, confused)
+- CORRECTION: User corrects or restates their original question/problem (no it is 2x^5, I meant the integral of..., actually the equation is..., sorry I made a mistake)
 - PARTIAL: User partially understands or is uncertain (somewhat, a little, not sure, maybe, kind of)
 - QUESTION: User asks for clarification or more information (what do you mean, can you explain, how, why)
 - SKIP: User wants to skip explanation and get the answer (just tell me, give me the answer, skip)
@@ -14,7 +15,7 @@ Context: The tutor asked a diagnostic question to gauge the student's understand
 
 User response: "{response}"
 
-Reply with ONLY the category name (AFFIRMATIVE, NEGATIVE, PARTIAL, QUESTION, SKIP, or OFF_TOPIC)."""
+Reply with ONLY the category name (AFFIRMATIVE, NEGATIVE, CORRECTION, PARTIAL, QUESTION, SKIP, or OFF_TOPIC)."""
 
 INTENT_PATTERNS: dict[IntentCategory, list[str]] = {
     IntentCategory.AFFIRMATIVE: [
@@ -39,8 +40,27 @@ INTENT_PATTERNS: dict[IntentCategory, list[str]] = {
         r"\bi remember\b",
         r"\blearned\s+(it|that|this)\b",
     ],
+    IntentCategory.CORRECTION: [
+        # "no" followed by a correction phrase
+        r"\bno\b[,.]?\s*(it\s+is|it's|the\s+question\s+is|i\s+meant|i\s+mean|actually|rather|instead)",
+        # "no" followed by mathematical content
+        r"\bno\b[,.]?\s+.+([a-z]\s*[\^]|\d+\s*[a-z]|\d+\s*[\^]|\bx\b|\by\b|\bintegral\b|\bderivative\b|\bequation\b|\bfunction\b|\blimit\b|\bsin\b|\bcos\b|\btan\b|\blog\b|\bln\b)",
+        # Explicit correction phrases
+        r"\bi\s+meant\b",
+        r"\bi\s+mean\b",
+        r"\bactually\s+(it|the|my)\b",
+        r"\blet\s+me\s+correct\b",
+        r"\bsorry\b[,.]?\s*(it|the|i|my)\b",
+        r"\bwait\b[,.]?\s*(it|the|i|my)\b",
+        r"\bmy\s+(question|problem)\s+(is|was)\b",
+        r"\bthe\s+(correct|right|actual)\s+(question|problem|equation)\b",
+        r"\bi\s+made\s+a\s+mistake\b",
+        r"\bthat'?s\s+not\s+(what\s+i|right|correct)\b",
+        r"\bwhat\s+i\s+meant\b",
+    ],
     IntentCategory.NEGATIVE: [
-        r"\bno\b",
+        # Bare "no" only when it is the entire message
+        r"^no[.!]?$",
         r"\bnope\b",
         r"\bnah\b",
         r"\bnot\s+really\b",

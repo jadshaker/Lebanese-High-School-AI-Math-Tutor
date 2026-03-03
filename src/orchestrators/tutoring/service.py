@@ -11,6 +11,9 @@ from src.metrics import (
     gateway_errors_total,
     gateway_llm_calls_total,
 )
+from src.models.schemas import SessionPhase
+from src.orchestrators.answer_retrieval.service import retrieve_answer
+from src.orchestrators.data_processing.service import process_user_input
 from src.orchestrators.tutoring.prompts import (
     TUTORING_AFFIRMATIVE_PROMPT,
     TUTORING_NEGATIVE_PROMPT,
@@ -215,7 +218,7 @@ async def _generate_tutoring_response(
             system_prompt = _safe_fmt(
                 TUTORING_SKIP_PROMPT, question=question, answer=answer
             )
-            user_prompt = "Give me the answer directly."
+            user_prompt = "The student wants the answer directly."
             is_complete = True
 
         elif intent == "affirmative":
@@ -225,7 +228,7 @@ async def _generate_tutoring_response(
                 answer=answer,
                 path_context=path_context,
             )
-            user_prompt = f"Student says: {user_response}"
+            user_prompt = f'The student confirms understanding and says: "{user_response}"\n\nGuide them to the next step.'
             is_complete = depth >= Config.TUTORING.MAX_INTERACTION_DEPTH
 
         elif intent == "negative":
@@ -235,7 +238,7 @@ async def _generate_tutoring_response(
                 answer=answer,
                 path_context=path_context,
             )
-            user_prompt = f"Student says they don't understand: {user_response}"
+            user_prompt = f'The student does not understand and says: "{user_response}"\n\nSimplify your explanation of the current step.'
             is_complete = False
 
         elif intent == "partial":
@@ -245,7 +248,7 @@ async def _generate_tutoring_response(
                 answer=answer,
                 path_context=path_context,
             )
-            user_prompt = f"Student partially understands: {user_response}"
+            user_prompt = f'The student partially understands and says: "{user_response}"\n\nClarify what they are confused about.'
             is_complete = False
 
         elif intent == "question":
@@ -255,7 +258,7 @@ async def _generate_tutoring_response(
                 answer=answer,
                 path_context=path_context,
             )
-            user_prompt = f"Student asks: {user_response}"
+            user_prompt = f'The student asks: "{user_response}"\n\nAnswer their question and guide them back to the problem.'
             is_complete = False
 
         else:  # off_topic
@@ -264,7 +267,7 @@ async def _generate_tutoring_response(
                 question=question,
                 path_context=path_context,
             )
-            user_prompt = f"Student says: {user_response}"
+            user_prompt = f'The student says (off-topic): "{user_response}"\n\nRedirect them back to the math problem.'
             is_complete = False
 
         messages = [
@@ -455,6 +458,59 @@ async def handle_tutoring_interaction(
     context = f"The tutor is teaching: {original_question}"
     intent_result = await _classify_intent(user_response, context, request_id)
     intent = intent_result["intent"]
+
+    # Step 5b: CORRECTION — re-run full pipeline with corrected question
+    if intent == "correction":
+        logger.info(
+            "CORRECTION detected — re-running answer retrieval pipeline",
+            context={"corrected_input": user_response[:100]},
+            request_id=request_id,
+        )
+
+        processing_result = await process_user_input(user_response, request_id)
+        corrected_query = processing_result["reformulated_query"]
+
+        retrieval_result = await retrieve_answer(
+            corrected_query, request_id, original_query=user_response
+        )
+        new_answer = retrieval_result["answer"]
+        new_question_id = retrieval_result.get("question_id", "")
+
+        session_service.reset_tutoring_state(session_id, request_id=request_id)
+
+        session_service.update_session(
+            session_id,
+            phase=SessionPhase.TUTORING,
+            original_query=user_response,
+            reformulated_query=corrected_query,
+            retrieved_answer=new_answer,
+            retrieval_source=retrieval_result.get("source", ""),
+            request_id=request_id,
+        )
+
+        if new_question_id:
+            session_service.update_tutoring_state(
+                session_id,
+                question_id=new_question_id,
+                request_id=request_id,
+            )
+
+        logger.info(
+            "CORRECTION pipeline completed",
+            context={
+                "new_question_id": new_question_id,
+                "answer_length": len(new_answer),
+            },
+            request_id=request_id,
+        )
+
+        return {
+            "tutor_message": f"Got it! Let me help you with the corrected question.\n\n{new_answer}",
+            "is_complete": False,
+            "next_prompt": "Do you understand this step? Would you like me to explain further?",
+            "intent": "correction",
+            "cache_hit": False,
+        }
 
     # Step 6: Get conversation path for context
     conversation_path: list[dict] = []
