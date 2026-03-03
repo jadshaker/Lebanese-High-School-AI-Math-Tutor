@@ -353,6 +353,44 @@ class QdrantRepository:
             "parent_id": parent_id,
         }
 
+    async def search_children_candidates(
+        self,
+        question_id: str,
+        parent_id: Optional[str],
+        user_input_embedding: list[float],
+        threshold: float = 0.5,
+        top_k: int = 5,
+    ) -> list[dict]:
+        """Search for top-K similar user inputs among children of a parent node."""
+        conditions: list[Condition] = [
+            FieldCondition(key="question_id", match=MatchValue(value=question_id))
+        ]
+
+        if parent_id:
+            conditions.append(
+                FieldCondition(key="parent_id", match=MatchValue(value=parent_id))
+            )
+        else:
+            conditions.append(FieldCondition(key="depth", match=MatchValue(value=1)))
+
+        results = await self.client.query_points(
+            collection_name=self.nodes_collection,
+            query=user_input_embedding,
+            limit=top_k,
+            score_threshold=threshold,
+            query_filter=Filter(must=conditions),
+            with_payload=True,
+        )
+
+        return [
+            {
+                "id": str(r.id),
+                "score": r.score,
+                **(r.payload or {}),
+            }
+            for r in results.points
+        ]
+
     async def get_all_children(
         self, question_id: str, parent_id: Optional[str]
     ) -> list[dict]:

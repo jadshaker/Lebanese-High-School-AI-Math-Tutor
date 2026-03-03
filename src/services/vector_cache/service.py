@@ -144,6 +144,25 @@ async def search_children(
     return result
 
 
+async def search_children_candidates(
+    question_id: str,
+    parent_id: Optional[str],
+    user_input_embedding: list[float],
+    threshold: float = 0.5,
+    top_k: int = 5,
+    request_id: str = "",
+) -> list[dict]:
+    """Search for top-K similar tutoring interactions among children of current node."""
+    repository = get_repo()
+    return await repository.search_children_candidates(
+        question_id=question_id,
+        parent_id=parent_id,
+        user_input_embedding=user_input_embedding,
+        threshold=threshold,
+        top_k=top_k,
+    )
+
+
 async def add_interaction(
     question_id: str,
     parent_id: Optional[str],

@@ -1,22 +1,25 @@
 import asyncio
+import re
 import time
 from typing import Any, Optional
 
 from src.clients.embedding import embedding_client
-from src.clients.llm import fine_tuned_client
+from src.clients.llm import fine_tuned_client, small_llm_client
 from src.config import Config
 from src.logging_utils import StructuredLogger
 from src.metrics import (
     gateway_embedding_duration_seconds,
     gateway_errors_total,
     gateway_llm_calls_total,
+    gateway_small_llm_duration_seconds,
 )
 from src.models.schemas import SessionPhase
-from src.orchestrators.answer_retrieval.service import retrieve_answer
+from src.orchestrators.answer_retrieval.service import _clean_llm_response, retrieve_answer
 from src.orchestrators.data_processing.service import process_user_input
 from src.orchestrators.tutoring.prompts import (
     TUTORING_AFFIRMATIVE_PROMPT,
     TUTORING_NEGATIVE_PROMPT,
+    TUTORING_NODE_IDENTITY_SYSTEM_PROMPT,
     TUTORING_OFF_TOPIC_PROMPT,
     TUTORING_PARTIAL_PROMPT,
     TUTORING_QUESTION_PROMPT,
@@ -28,6 +31,87 @@ from src.services.session import service as session_service
 from src.services.vector_cache import service as vector_cache
 
 logger = StructuredLogger("gateway")
+
+
+async def _check_tutoring_node_identity(
+    user_response: str, candidates: list[dict], request_id: str
+) -> dict | None:
+    """Ask the small LLM if the student's response is identical to any cached response.
+
+    Returns the matched node dict (with id, system_response, etc.) or None.
+    """
+    if not candidates:
+        return None
+
+    start_time = time.time()
+    try:
+        cached_list = ""
+        for i, node in enumerate(candidates[:5], 1):
+            cached_list += f"{i}. {node.get('user_input', '')}\n"
+
+        messages = [
+            {"role": "system", "content": TUTORING_NODE_IDENTITY_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": f"New student response: {user_response}\n\nCached student responses:\n{cached_list}",
+            },
+        ]
+
+        logger.info(
+            "  → Small LLM (tutoring node identity check)", request_id=request_id
+        )
+
+        call_params: dict[str, Any] = {
+            "model": Config.SMALL_LLM.MODEL_NAME,
+            "messages": messages,
+            "temperature": 0.0,
+            "max_tokens": 512,
+        }
+
+        result = await asyncio.to_thread(
+            small_llm_client.chat.completions.create, **call_params  # type: ignore[arg-type]
+        )
+
+        response_text = _clean_llm_response(
+            result.choices[0].message.content or ""
+        ).strip()
+        duration = time.time() - start_time
+        gateway_small_llm_duration_seconds.observe(duration)
+        gateway_llm_calls_total.labels(
+            llm_service="small_llm_tutoring_node_identity"
+        ).inc()
+
+        logger.info(
+            f"  ✓ Small LLM tutoring node identity ({duration:.1f}s): {response_text}",
+            request_id=request_id,
+        )
+
+        match = re.search(r"\bMATCH\s+(\d+)\b", response_text, re.IGNORECASE)
+        if match:
+            try:
+                idx = int(match.group(1)) - 1
+                if 0 <= idx < len(candidates):
+                    matched_node = candidates[idx]
+                    logger.info(
+                        f"Tutoring node identity match: cached node #{idx + 1}",
+                        context={"node_id": matched_node.get("id", "")},
+                        request_id=request_id,
+                    )
+                    return matched_node
+            except (ValueError, IndexError):
+                pass
+
+        logger.info("No tutoring node identity match found", request_id=request_id)
+        return None
+
+    except Exception as e:
+        duration = time.time() - start_time
+        gateway_small_llm_duration_seconds.observe(duration)
+        logger.warning(
+            f"Tutoring node identity check failed ({duration:.1f}s): {str(e)} — treating as no match",
+            request_id=request_id,
+        )
+        return None
 
 
 async def _classify_intent(text: str, context: str | None, request_id: str) -> dict:
@@ -93,47 +177,6 @@ async def _embed_text(text: str, request_id: str) -> list[float]:
             f"Embedding failed ({duration:.1f}s): {str(e)}", request_id=request_id
         )
         raise
-
-
-async def _search_tutoring_cache(
-    question_id: str,
-    parent_node_id: Optional[str],
-    user_embedding: list[float],
-    request_id: str,
-) -> dict:
-    """Search for cached tutoring response among children of current node."""
-    start_time = time.time()
-    try:
-        logger.info(
-            f"  → Vector Cache (search children, parent={parent_node_id})",
-            request_id=request_id,
-        )
-
-        result = await vector_cache.search_children(
-            question_id=question_id,
-            parent_id=parent_node_id,
-            user_input_embedding=user_embedding,
-            threshold=Config.TUTORING.CACHE_THRESHOLD,
-            request_id=request_id,
-        )
-
-        duration = time.time() - start_time
-        is_hit = result.get("is_cache_hit", False)
-        score = result.get("match_score")
-
-        logger.info(
-            f"  ✓ Vector Cache search ({duration:.2f}s): hit={is_hit}, score={score}",
-            request_id=request_id,
-        )
-        return result
-
-    except Exception as e:
-        duration = time.time() - start_time
-        logger.warning(
-            f"Tutoring cache search failed ({duration:.2f}s): {str(e)} (non-critical)",
-            request_id=request_id,
-        )
-        return {"is_cache_hit": False, "match_score": None, "matched_node": None}
 
 
 async def _save_tutoring_interaction(
@@ -429,68 +472,90 @@ async def handle_tutoring_interaction(
             },
         )
 
-        # Step 3: Search cache for matching child node
-        cache_result = await _search_tutoring_cache(
-            question_id=question_id,
-            parent_node_id=current_node_id,
-            user_embedding=user_embedding,
-            request_id=request_id,
-        )
-
-        # Step 4: Check for cache hit
-        if cache_result.get("is_cache_hit") and cache_result.get("matched_node"):
-            matched_node = cache_result["matched_node"]
-            new_node_id = matched_node["id"]
-            tutor_response = matched_node["system_response"]
-            new_depth = matched_node.get("depth", depth + 1)
-
+        # Step 3: Search cache for top-K candidate children
+        try:
             logger.info(
-                f"Tutoring cache HIT: node_id={new_node_id}, score={cache_result['match_score']:.2f}",
+                f"  → Vector Cache (search children candidates, parent={current_node_id})",
                 request_id=request_id,
             )
-
-            # Emit cache_hit and position_update events
-            await event_bus.publish(
-                session_id,
-                {
-                    "type": "cache_hit",
-                    "matched_node_id": new_node_id,
-                    "score": cache_result["match_score"],
-                },
-            )
-            await event_bus.publish(
-                session_id,
-                {
-                    "type": "position_update",
-                    "current_node_id": new_node_id,
-                    "depth": new_depth,
-                },
-            )
-
-            # Update session with the matched node (following existing path)
-            session_service.update_tutoring_state(
-                session_id=session_id,
-                current_node_id=new_node_id,
+            candidates = await vector_cache.search_children_candidates(
                 question_id=question_id,
-                depth=new_depth,
-                is_new_branch=False,
+                parent_id=current_node_id,
+                user_input_embedding=user_embedding,
+                threshold=0.5,
+                top_k=5,
                 request_id=request_id,
             )
+            logger.info(
+                f"  ✓ Vector Cache search: {len(candidates)} candidates found",
+                request_id=request_id,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Tutoring cache search failed: {str(e)} (non-critical)",
+                request_id=request_id,
+            )
+            candidates = []
 
-            is_complete = new_depth >= Config.TUTORING.MAX_INTERACTION_DEPTH
-            next_prompt = (
-                None
-                if is_complete
-                else "Do you understand? Would you like me to explain further?"
+        # Step 4: LLM identity check on candidates
+        if candidates:
+            matched_node = await _check_tutoring_node_identity(
+                user_response, candidates, request_id
             )
 
-            return {
-                "tutor_message": tutor_response,
-                "is_complete": is_complete,
-                "next_prompt": next_prompt,
-                "intent": "cached",
-                "cache_hit": True,
-            }
+            if matched_node:
+                new_node_id = matched_node["id"]
+                tutor_response = matched_node["system_response"]
+                new_depth = matched_node.get("depth", depth + 1)
+                match_score = matched_node.get("score", 0)
+
+                logger.info(
+                    f"Tutoring cache HIT (LLM verified): node_id={new_node_id}",
+                    request_id=request_id,
+                )
+
+                # Emit cache_hit and position_update events
+                await event_bus.publish(
+                    session_id,
+                    {
+                        "type": "cache_hit",
+                        "matched_node_id": new_node_id,
+                        "score": match_score,
+                    },
+                )
+                await event_bus.publish(
+                    session_id,
+                    {
+                        "type": "position_update",
+                        "current_node_id": new_node_id,
+                        "depth": new_depth,
+                    },
+                )
+
+                # Update session with the matched node (following existing path)
+                session_service.update_tutoring_state(
+                    session_id=session_id,
+                    current_node_id=new_node_id,
+                    question_id=question_id,
+                    depth=new_depth,
+                    is_new_branch=False,
+                    request_id=request_id,
+                )
+
+                is_complete = new_depth >= Config.TUTORING.MAX_INTERACTION_DEPTH
+                next_prompt = (
+                    None
+                    if is_complete
+                    else "Do you understand? Would you like me to explain further?"
+                )
+
+                return {
+                    "tutor_message": tutor_response,
+                    "is_complete": is_complete,
+                    "next_prompt": next_prompt,
+                    "intent": "cached",
+                    "cache_hit": True,
+                }
 
     # Step 5: Cache miss (or skipped) - classify intent
     logger.info("Tutoring cache MISS: generating new response", request_id=request_id)
