@@ -1,4 +1,5 @@
 import asyncio
+import re
 import time
 
 from src.clients.embedding import embedding_client
@@ -19,6 +20,7 @@ from src.metrics import (
 )
 from src.models.schemas import ConfidenceTier
 from src.orchestrators.answer_retrieval.prompts import (
+    QUESTION_IDENTITY_SYSTEM_PROMPT,
     TIER_2_CONTEXT_PREFIX,
     TIER_2_CONTEXT_SUFFIX,
     TIER_3_SYSTEM_PROMPT,
@@ -119,6 +121,88 @@ def _clean_llm_response(response: str) -> str:
     elif "<think>" in response:
         response = response.split("<think>")[0].strip()
     return response
+
+
+async def _check_question_identity(
+    query: str, cached_results: list[dict], request_id: str
+) -> str | None:
+    """Ask the small LLM if the new question is identical to any cached question.
+
+    Returns the question_id of the matching cached question, or None.
+    """
+    if not cached_results:
+        return None
+
+    start_time = time.time()
+    try:
+        candidates = ""
+        for i, cached in enumerate(cached_results[:5], 1):
+            candidates += f"{i}. {cached.get('question_text', '')}\n"
+
+        messages = [
+            {"role": "system", "content": QUESTION_IDENTITY_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": f"New question: {query}\n\nCached questions:\n{candidates}",
+            },
+        ]
+
+        logger.info("  → Small LLM (question identity check)", request_id=request_id)
+
+        from typing import Any
+
+        call_params: dict[str, Any] = {
+            "model": Config.SMALL_LLM.MODEL_NAME,
+            "messages": messages,
+            "temperature": 0.0,
+            "max_tokens": 512,
+        }
+
+        result = await asyncio.to_thread(
+            small_llm_client.chat.completions.create, **call_params  # type: ignore[arg-type]
+        )
+
+        response_text = _clean_llm_response(
+            result.choices[0].message.content or ""
+        ).strip()
+        duration = time.time() - start_time
+        gateway_small_llm_duration_seconds.observe(duration)
+        gateway_llm_calls_total.labels(llm_service="small_llm_identity_check").inc()
+
+        logger.info(
+            f"  ✓ Small LLM identity check ({duration:.1f}s): {response_text}",
+            request_id=request_id,
+        )
+
+        # Parse response — scan for "MATCH <number>" anywhere in the text
+        # The model may include reasoning before the answer
+        match = re.search(r"\bMATCH\s+(\d+)\b", response_text, re.IGNORECASE)
+        if match:
+            try:
+                idx = int(match.group(1)) - 1  # 1-indexed → 0-indexed
+                if 0 <= idx < len(cached_results):
+                    matched_id = cached_results[idx].get("id", "")
+                    if matched_id:
+                        logger.info(
+                            f"Question identity match: cached question #{idx + 1}",
+                            context={"question_id": matched_id},
+                            request_id=request_id,
+                        )
+                        return matched_id
+            except (ValueError, IndexError):
+                pass
+
+        logger.info("No question identity match found", request_id=request_id)
+        return None
+
+    except Exception as e:
+        duration = time.time() - start_time
+        gateway_small_llm_duration_seconds.observe(duration)
+        logger.warning(
+            f"Question identity check failed ({duration:.1f}s): {str(e)} — treating as no match",
+            request_id=request_id,
+        )
+        return None
 
 
 async def _validate_or_generate_with_small_llm(
@@ -431,8 +515,10 @@ async def retrieve_answer(
     used_cache = False
     cache_reused = None
     question_id = ""
+    reused_question = False
 
     if tier == ConfidenceTier.TIER_1_SMALL_LLM_VALIDATE_OR_GENERATE:
+        # Tier 1 already handles reuse via CACHE_VALID — no identity check needed
         cached_question = cached_results[0]["question_text"]
         cached_answer = cached_results[0]["answer_text"]
 
@@ -448,6 +534,7 @@ async def retrieve_answer(
                 used_cache = True
                 source = f"{tier.value}_cache_reused"
                 question_id = cached_results[0].get("id", "")
+                reused_question = True
             else:
                 gateway_cache_misses_total.inc()
                 source = f"{tier.value}_generated"
@@ -467,33 +554,60 @@ async def retrieve_answer(
                 original_query, query, answer, embedding, request_id
             )
 
-    elif tier == ConfidenceTier.TIER_2_SMALL_LLM_CONTEXT:
-        gateway_cache_misses_total.inc()
-        answer = await _query_small_llm_with_context(query, cached_results, request_id)
-        question_id = await _save_to_cache(
-            original_query, query, answer, embedding, request_id
-        )
-
-    elif tier == ConfidenceTier.TIER_3_FINE_TUNED:
-        gateway_cache_misses_total.inc()
-        try:
-            answer = await _query_fine_tuned_model(query, request_id)
-        except Exception:
-            logger.warning(
-                "Tier 3: Fine-tuned failed, falling back to Large LLM",
-                request_id=request_id,
-            )
-            answer = await _query_large_llm(query, request_id)
-            source = f"{tier.value}_fallback"
-        question_id = await _save_to_cache(
-            original_query, query, answer, embedding, request_id
-        )
-
     else:
-        gateway_cache_misses_total.inc()
-        answer = await _query_large_llm(query, request_id)
-        question_id = await _save_to_cache(
-            original_query, query, answer, embedding, request_id
+        # Tiers 2/3/4: Run LLM identity check to see if this question
+        # is identical to a cached one (reuse its question_id + tree)
+        identical_question_id: str | None = None
+        if cached_results:
+            identical_question_id = await _check_question_identity(
+                query, cached_results, request_id
+            )
+
+        if tier == ConfidenceTier.TIER_2_SMALL_LLM_CONTEXT:
+            gateway_cache_misses_total.inc()
+            answer = await _query_small_llm_with_context(
+                query, cached_results, request_id
+            )
+
+        elif tier == ConfidenceTier.TIER_3_FINE_TUNED:
+            gateway_cache_misses_total.inc()
+            try:
+                answer = await _query_fine_tuned_model(query, request_id)
+            except Exception:
+                logger.warning(
+                    "Tier 3: Fine-tuned failed, falling back to Large LLM",
+                    request_id=request_id,
+                )
+                answer = await _query_large_llm(query, request_id)
+                source = f"{tier.value}_fallback"
+
+        else:
+            gateway_cache_misses_total.inc()
+            answer = await _query_large_llm(query, request_id)
+
+        # After generating the answer, decide question_id
+        if identical_question_id:
+            question_id = identical_question_id
+            reused_question = True
+            try:
+                await vector_cache.get_repo().update_question(
+                    question_id, answer_text=answer
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to update reused question answer: {e} (non-critical)",
+                    request_id=request_id,
+                )
+        else:
+            question_id = await _save_to_cache(
+                original_query, query, answer, embedding, request_id
+            )
+
+    if reused_question:
+        logger.info(
+            "Reusing existing question_id (LLM identity match)",
+            context={"question_id": question_id},
+            request_id=request_id,
         )
 
     logger.info(
@@ -509,4 +623,5 @@ async def retrieve_answer(
         "used_cache": used_cache,
         "cache_reused": cache_reused,
         "question_id": question_id,
+        "reused_question": reused_question,
     }

@@ -127,5 +127,9 @@ class Config:
         TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
         MAX_HISTORY_LENGTH = int(os.getenv("SESSION_MAX_HISTORY", "50"))
 
+    class DASHBOARD:
+        ENABLED = os.getenv("DASHBOARD_ENABLED", "true").lower() == "true"
+        WS_HEARTBEAT_SECONDS = int(os.getenv("DASHBOARD_WS_HEARTBEAT", "30"))
+
     class CLEANUP:
         INTERVAL_SECONDS = int(os.getenv("SESSION_CLEANUP_INTERVAL", "300"))

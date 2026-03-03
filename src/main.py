@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi import Request as FastAPIRequest
+from fastapi.middleware.cors import CORSMiddleware
 from qdrant_client import AsyncQdrantClient
 
 from src.config import Config
@@ -20,10 +21,10 @@ from src.metrics import (
 )
 from src.models.schemas import (
     ChatCompletionChoice,
-    ChatMessage,
     ChatCompletionMessageResponse,
     ChatCompletionRequest,
     ChatCompletionResponse,
+    ChatMessage,
     Model,
     ModelListResponse,
     SessionPhase,
@@ -34,6 +35,8 @@ from src.orchestrators.answer_retrieval.service import retrieve_answer
 from src.orchestrators.data_processing.service import process_user_input
 from src.orchestrators.tutoring.service import handle_tutoring_interaction
 from src.routes.admin import router as admin_router
+from src.routes.graph import router as graph_router
+from src.services import event_bus
 from src.services.session import service as session_service
 from src.services.vector_cache import service as vector_cache
 
@@ -104,9 +107,7 @@ def _cleanup_stale_conversations() -> None:
 
 def _derive_conversation_key(messages: list[ChatMessage]) -> str:
     """Derive a stable key for this conversation from its first user message."""
-    first_user_msg = next(
-        (msg.content for msg in messages if msg.role == "user"), ""
-    )
+    first_user_msg = next((msg.content for msg in messages if msg.role == "user"), "")
     return hashlib.sha256(first_user_msg.encode()).hexdigest()[:16]
 
 
@@ -115,9 +116,7 @@ def _count_user_messages(messages: list[ChatMessage]) -> int:
     return sum(1 for msg in messages if msg.role == "user")
 
 
-def _make_short_circuit_response(
-    content: str, model: str
-) -> ChatCompletionResponse:
+def _make_short_circuit_response(content: str, model: str) -> ChatCompletionResponse:
     """Build a minimal ChatCompletionResponse without running the pipeline."""
     return ChatCompletionResponse(
         id=f"chatcmpl-{uuid.uuid4().hex[:8]}",
@@ -175,8 +174,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Math Tutor API", lifespan=lifespan)
 
-# Include admin routes
+# CORS middleware for graph dashboard iframe
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include routes
 app.include_router(admin_router)
+app.include_router(graph_router)
 
 
 @app.middleware("http")
@@ -334,15 +343,10 @@ async def chat_completions(
         # ===== CONVERSATION HISTORY =====
         # Extract prior user/assistant messages for reformulator context
         conversation_history = [
-            msg
-            for msg in request.messages
-            if msg.role in ("user", "assistant")
+            msg for msg in request.messages if msg.role in ("user", "assistant")
         ]
         # Remove the last entry if it's the current user message
-        if (
-            conversation_history
-            and conversation_history[-1].content == user_message
-        ):
+        if conversation_history and conversation_history[-1].content == user_message:
             conversation_history = conversation_history[:-1]
         # Pass None instead of empty list for cleaner downstream checks
         if not conversation_history:
@@ -351,10 +355,7 @@ async def chat_completions(
         # ===== ROUTING: First question vs tutoring follow-up =====
         conversation_key = _derive_conversation_key(request.messages)
         user_msg_count = _count_user_messages(request.messages)
-        is_follow_up = (
-            user_msg_count > 1
-            and conversation_key in _conversation_sessions
-        )
+        is_follow_up = user_msg_count > 1 and conversation_key in _conversation_sessions
 
         if is_follow_up:
             # ===== TUTORING FOLLOW-UP =====
@@ -403,9 +404,7 @@ async def chat_completions(
                     choices=[
                         ChatCompletionChoice(
                             index=0,
-                            message=ChatCompletionMessageResponse(
-                                content=answer
-                            ),
+                            message=ChatCompletionMessageResponse(content=answer),
                             finish_reason="stop",
                         )
                     ],
@@ -460,6 +459,8 @@ async def chat_completions(
         answer = retrieval_result["answer"]
         source = retrieval_result["source"]
         question_id = retrieval_result.get("question_id", "")
+        reused_question = retrieval_result.get("reused_question", False)
+        confidence = retrieval_result.get("confidence", 0)
 
         # ===== CREATE SESSION for tutoring follow-ups =====
         # Only create a session (and enable tutoring routing) when we have a
@@ -482,6 +483,21 @@ async def chat_completions(
                 request_id=request_id,
             )
             _conversation_sessions[conversation_key] = session.session_id
+
+            # Emit session_created event for graph visualization
+            await event_bus.publish(
+                session.session_id,
+                {
+                    "type": "session_created",
+                    "session_id": session.session_id,
+                    "question_id": question_id,
+                    "depth": 0,
+                    "reused_question": reused_question,
+                    "confidence": confidence,
+                    "source": source,
+                },
+            )
+
             logger.info(
                 "Session created for conversation",
                 context={

@@ -11,11 +11,7 @@ from src.metrics import (
     llm_fallback_errors_total,
     llm_fallback_total,
 )
-from src.models.schemas import (
-    ClassificationMethod,
-    ClassifyResponse,
-    IntentCategory,
-)
+from src.models.schemas import ClassificationMethod, ClassifyResponse, IntentCategory
 from src.services.intent_classifier.prompts import (
     CLASSIFICATION_PROMPT,
     INTENT_PATTERNS,

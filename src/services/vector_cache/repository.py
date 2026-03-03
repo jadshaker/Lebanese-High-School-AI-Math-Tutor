@@ -353,6 +353,47 @@ class QdrantRepository:
             "parent_id": parent_id,
         }
 
+    async def get_all_children(
+        self, question_id: str, parent_id: Optional[str]
+    ) -> list[dict]:
+        """Get ALL children of a parent node (not just best match)."""
+        conditions: list[Condition] = [
+            FieldCondition(key="question_id", match=MatchValue(value=question_id))
+        ]
+
+        if parent_id:
+            conditions.append(
+                FieldCondition(key="parent_id", match=MatchValue(value=parent_id))
+            )
+        else:
+            conditions.append(FieldCondition(key="depth", match=MatchValue(value=1)))
+
+        results, _ = await self.client.scroll(
+            collection_name=self.nodes_collection,
+            scroll_filter=Filter(must=conditions),
+            with_payload=True,
+            with_vectors=False,
+            limit=100,
+        )
+
+        return [{"id": str(r.id), **(r.payload or {})} for r in results]
+
+    async def get_full_tree(self, question_id: str) -> list[dict]:
+        """Get ALL nodes for a question to build the complete tree."""
+        conditions: list[Condition] = [
+            FieldCondition(key="question_id", match=MatchValue(value=question_id))
+        ]
+
+        results, _ = await self.client.scroll(
+            collection_name=self.nodes_collection,
+            scroll_filter=Filter(must=conditions),
+            with_payload=True,
+            with_vectors=False,
+            limit=500,
+        )
+
+        return [{"id": str(r.id), **(r.payload or {})} for r in results]
+
     async def get_conversation_path(
         self, question_id: str, node_id: Optional[str]
     ) -> dict:

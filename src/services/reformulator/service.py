@@ -106,9 +106,9 @@ def _call_llm_for_reformulation(
 
     # Use Template-style substitution to avoid KeyError when user input
     # contains curly braces (e.g., "{x | x > 0}").
-    prompt = REFORMULATION_PROMPT.replace(
-        "{context_section}", context_section
-    ).replace("{processed_input}", processed_input)
+    prompt = REFORMULATION_PROMPT.replace("{context_section}", context_section).replace(
+        "{processed_input}", processed_input
+    )
 
     try:
         response = reformulator_client.chat.completions.create(

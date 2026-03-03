@@ -22,6 +22,7 @@ from src.orchestrators.tutoring.prompts import (
     TUTORING_QUESTION_PROMPT,
     TUTORING_SKIP_PROMPT,
 )
+from src.services import event_bus
 from src.services.intent_classifier.service import classify_text
 from src.services.session import service as session_service
 from src.services.vector_cache import service as vector_cache
@@ -395,6 +396,17 @@ async def handle_tutoring_interaction(
         depth = session.tutoring.depth
         is_new_branch = session.tutoring.is_new_branch
 
+    # Emit session_start event for graph visualization
+    await event_bus.publish(
+        session_id,
+        {
+            "type": "session_start",
+            "question_id": question_id,
+            "current_node_id": current_node_id,
+            "depth": depth,
+        },
+    )
+
     # Step 2: Check if we can skip cache search (new branch optimization)
     if is_new_branch:
         logger.info(
@@ -406,6 +418,16 @@ async def handle_tutoring_interaction(
     else:
         # Step 2b: Embed user response
         user_embedding = await _embed_text(user_response, request_id)
+
+        # Emit cache_search event
+        await event_bus.publish(
+            session_id,
+            {
+                "type": "cache_search",
+                "question_id": question_id,
+                "parent_id": current_node_id,
+            },
+        )
 
         # Step 3: Search cache for matching child node
         cache_result = await _search_tutoring_cache(
@@ -425,6 +447,24 @@ async def handle_tutoring_interaction(
             logger.info(
                 f"Tutoring cache HIT: node_id={new_node_id}, score={cache_result['match_score']:.2f}",
                 request_id=request_id,
+            )
+
+            # Emit cache_hit and position_update events
+            await event_bus.publish(
+                session_id,
+                {
+                    "type": "cache_hit",
+                    "matched_node_id": new_node_id,
+                    "score": cache_result["match_score"],
+                },
+            )
+            await event_bus.publish(
+                session_id,
+                {
+                    "type": "position_update",
+                    "current_node_id": new_node_id,
+                    "depth": new_depth,
+                },
             )
 
             # Update session with the matched node (following existing path)
@@ -455,9 +495,26 @@ async def handle_tutoring_interaction(
     # Step 5: Cache miss (or skipped) - classify intent
     logger.info("Tutoring cache MISS: generating new response", request_id=request_id)
 
+    # Emit cache_miss event (only if we actually searched, not if skipped)
+    if not is_new_branch:
+        await event_bus.publish(
+            session_id,
+            {"type": "cache_miss", "parent_id": current_node_id},
+        )
+
     context = f"The tutor is teaching: {original_question}"
     intent_result = await _classify_intent(user_response, context, request_id)
     intent = intent_result["intent"]
+
+    # Emit intent_classified event
+    await event_bus.publish(
+        session_id,
+        {
+            "type": "intent_classified",
+            "intent": intent,
+            "confidence": intent_result.get("confidence", 0),
+        },
+    )
 
     # Step 5b: CORRECTION — re-run full pipeline with corrected question
     if intent == "correction":
@@ -504,6 +561,12 @@ async def handle_tutoring_interaction(
             request_id=request_id,
         )
 
+        # Emit correction event for graph reset
+        await event_bus.publish(
+            session_id,
+            {"type": "correction", "question_id": new_question_id},
+        )
+
         return {
             "tutor_message": f"Got it! Let me help you with the corrected question.\n\n{new_answer}",
             "is_complete": False,
@@ -541,6 +604,20 @@ async def handle_tutoring_interaction(
         request_id=request_id,
     )
 
+    # Emit node_created event
+    if new_node_id:
+        await event_bus.publish(
+            session_id,
+            {
+                "type": "node_created",
+                "node_id": new_node_id,
+                "parent_id": current_node_id,
+                "question_id": question_id,
+                "user_input": user_response,
+                "depth": depth + 1,
+            },
+        )
+
     # Step 9: Update session with new node (mark as new branch since we just created it)
     if new_node_id and not tutoring_result["is_complete"]:
         session_service.update_tutoring_state(
@@ -550,6 +627,16 @@ async def handle_tutoring_interaction(
             depth=depth + 1,
             is_new_branch=True,
             request_id=request_id,
+        )
+
+        # Emit position_update event
+        await event_bus.publish(
+            session_id,
+            {
+                "type": "position_update",
+                "current_node_id": new_node_id,
+                "depth": depth + 1,
+            },
         )
 
     logger.info(

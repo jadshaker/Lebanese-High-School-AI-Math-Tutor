@@ -177,6 +177,21 @@ async def add_interaction(
     return node_id
 
 
+async def get_all_children(
+    question_id: str,
+    parent_id: Optional[str] = None,
+) -> list[dict]:
+    """Get all children of a parent node."""
+    repository = get_repo()
+    return await repository.get_all_children(question_id, parent_id)
+
+
+async def get_full_tree(question_id: str) -> list[dict]:
+    """Get all nodes for a question to build the complete tree."""
+    repository = get_repo()
+    return await repository.get_full_tree(question_id)
+
+
 async def get_conversation_path(
     question_id: str,
     node_id: Optional[str] = None,
