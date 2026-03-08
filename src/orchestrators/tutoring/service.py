@@ -14,7 +14,10 @@ from src.metrics import (
     gateway_small_llm_duration_seconds,
 )
 from src.models.schemas import SessionPhase
-from src.orchestrators.answer_retrieval.service import _clean_llm_response, retrieve_answer
+from src.orchestrators.answer_retrieval.service import (
+    _clean_llm_response,
+    retrieve_answer,
+)
 from src.orchestrators.data_processing.service import process_user_input
 from src.orchestrators.tutoring.prompts import (
     TUTORING_AFFIRMATIVE_PROMPT,
