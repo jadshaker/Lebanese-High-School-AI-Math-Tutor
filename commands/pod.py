@@ -194,11 +194,21 @@ def start() -> None:
     pod_id: str = pod["id"]
     _write_env_dev(pod_id)
 
-    print("\nWaiting for pod...")
-    _wait_for_pod_running(pod_id)
+    try:
+        print("\nWaiting for pod...")
+        _wait_for_pod_running(pod_id)
 
-    print("\nWaiting for vLLM (downloading models on first start)...")
-    _wait_for_vllm_ready(pod_id)
+        print("\nWaiting for vLLM (downloading models on first start)...")
+        _wait_for_vllm_ready(pod_id)
+    except KeyboardInterrupt:
+        print("\n\nInterrupted — terminating pod...")
+        try:
+            runpod.terminate_pod(pod_id)
+        except Exception as e:
+            print(f"Warning: {e}")
+        ENV_DEV_FILE.unlink(missing_ok=True)
+        print("Pod terminated, .env.dev deleted.")
+        sys.exit(1)
 
     print("\nDev pod ready! Run: docker compose up --build")
 

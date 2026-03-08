@@ -9,14 +9,14 @@ KEEP_DAYS = 7
 
 
 def _today_log_file() -> Path:
-    """Return path to today's log file (e.g. app-2026-02-16.log)."""
-    return LOG_DIR / f"app-{datetime.utcnow().strftime('%Y-%m-%d')}.log"
+    """Return path to today's log file (e.g. 2026-02-16.log)."""
+    return LOG_DIR / f"{datetime.utcnow().strftime('%Y-%m-%d')}.log"
 
 
 def _cleanup_old_logs() -> None:
     """Delete log files older than KEEP_DAYS."""
     cutoff = datetime.utcnow().timestamp() - (KEEP_DAYS * 86400)
-    for f in LOG_DIR.glob("app-*.log"):
+    for f in LOG_DIR.glob("*.log"):
         try:
             if f.stat().st_mtime < cutoff:
                 f.unlink()
@@ -30,7 +30,7 @@ class StructuredLogger:
 
     Logs to both:
     - Console (stdout) - for Docker logs
-    - File (date-based, e.g. app-2026-02-16.log) - 7 days retained
+    - File (date-based, e.g. 2026-02-16.log) - 7 days retained
     """
 
     def __init__(self, service_name: str):
@@ -126,7 +126,7 @@ def generate_request_id() -> str:
 def get_logs_by_request_id(request_id: str, max_lines: int = 1000) -> list[str]:
     """Search log files for entries matching a request ID."""
     matching_logs: list[str] = []
-    log_files = sorted(LOG_DIR.glob("app-*.log"), reverse=True)
+    log_files = sorted(LOG_DIR.glob("*.log"), reverse=True)
 
     for log_file in log_files:
         try:

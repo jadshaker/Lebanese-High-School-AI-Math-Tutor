@@ -492,13 +492,19 @@ async def retrieve_answer(
 ) -> dict:
     """Execute 4-Tier Answer Retrieval pipeline."""
     original_query = original_query or query
+    pipeline_start = time.time()
+    latency: dict[str, float] = {}
     logger.info("4-Tier Answer Retrieval Pipeline: Started", request_id=request_id)
 
     # Step 1: Embed the query
+    t0 = time.time()
     embedding = await _embed_query(query, request_id)
+    latency["embedding"] = round(time.time() - t0, 3)
 
     # Step 2: Search vector cache
+    t0 = time.time()
     cached_results = await _search_cache(embedding, request_id)
+    latency["cache_search"] = round(time.time() - t0, 3)
 
     # Determine confidence and tier
     top_confidence = cached_results[0].get("score", 0) if cached_results else 0
@@ -523,9 +529,11 @@ async def retrieve_answer(
         cached_answer = cached_results[0]["answer_text"]
 
         try:
+            t0 = time.time()
             result = await _validate_or_generate_with_small_llm(
                 query, cached_question, cached_answer, request_id
             )
+            latency["llm"] = round(time.time() - t0, 3)
             answer = result["answer"]
             cache_reused = result["cache_reused"]
 
@@ -538,9 +546,11 @@ async def retrieve_answer(
             else:
                 gateway_cache_misses_total.inc()
                 source = f"{tier.value}_generated"
+                t0 = time.time()
                 question_id = await _save_to_cache(
                     original_query, query, answer, embedding, request_id
                 )
+                latency["cache_save"] = round(time.time() - t0, 3)
 
         except Exception:
             logger.warning(
@@ -548,11 +558,15 @@ async def retrieve_answer(
                 request_id=request_id,
             )
             gateway_cache_misses_total.inc()
+            t0 = time.time()
             answer = await _query_large_llm(query, request_id)
+            latency["llm"] = round(time.time() - t0, 3)
             source = f"{tier.value}_fallback"
+            t0 = time.time()
             question_id = await _save_to_cache(
                 original_query, query, answer, embedding, request_id
             )
+            latency["cache_save"] = round(time.time() - t0, 3)
 
     else:
         # Tiers 2/3/4: Run LLM identity check to see if this question
@@ -565,25 +579,33 @@ async def retrieve_answer(
 
         if tier == ConfidenceTier.TIER_2_SMALL_LLM_CONTEXT:
             gateway_cache_misses_total.inc()
+            t0 = time.time()
             answer = await _query_small_llm_with_context(
                 query, cached_results, request_id
             )
+            latency["llm"] = round(time.time() - t0, 3)
 
         elif tier == ConfidenceTier.TIER_3_FINE_TUNED:
             gateway_cache_misses_total.inc()
             try:
+                t0 = time.time()
                 answer = await _query_fine_tuned_model(query, request_id)
+                latency["llm"] = round(time.time() - t0, 3)
             except Exception:
                 logger.warning(
                     "Tier 3: Fine-tuned failed, falling back to Large LLM",
                     request_id=request_id,
                 )
+                t0 = time.time()
                 answer = await _query_large_llm(query, request_id)
+                latency["llm"] = round(time.time() - t0, 3)
                 source = f"{tier.value}_fallback"
 
         else:
             gateway_cache_misses_total.inc()
+            t0 = time.time()
             answer = await _query_large_llm(query, request_id)
+            latency["llm"] = round(time.time() - t0, 3)
 
         # After generating the answer, decide question_id
         if identical_question_id:
@@ -599,9 +621,11 @@ async def retrieve_answer(
                     request_id=request_id,
                 )
         else:
+            t0 = time.time()
             question_id = await _save_to_cache(
                 original_query, query, answer, embedding, request_id
             )
+            latency["cache_save"] = round(time.time() - t0, 3)
 
     if reused_question:
         logger.info(
@@ -609,6 +633,8 @@ async def retrieve_answer(
             context={"question_id": question_id},
             request_id=request_id,
         )
+
+    latency["answer_retrieval_total"] = round(time.time() - pipeline_start, 3)
 
     logger.info(
         f"4-Tier Answer Retrieval Pipeline: Completed - {source} ({len(answer)} chars)",
@@ -624,4 +650,5 @@ async def retrieve_answer(
         "cache_reused": cache_reused,
         "question_id": question_id,
         "reused_question": reused_question,
+        "latency": latency,
     }
