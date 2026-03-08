@@ -349,8 +349,9 @@ async def chat_completions(
         if conversation_history and conversation_history[-1].content == user_message:
             conversation_history = conversation_history[:-1]
         # Pass None instead of empty list for cleaner downstream checks
-        if not conversation_history:
-            conversation_history = None
+        conversation_history: list[ChatMessage] | None = (
+            conversation_history or None
+        )
 
         # ===== ROUTING: First question vs tutoring follow-up =====
         conversation_key = _derive_conversation_key(request.messages)
