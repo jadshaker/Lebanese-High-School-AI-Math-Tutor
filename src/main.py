@@ -342,16 +342,14 @@ async def chat_completions(
 
         # ===== CONVERSATION HISTORY =====
         # Extract prior user/assistant messages for reformulator context
-        conversation_history = [
+        conversation_history: list[ChatMessage] | None = [
             msg for msg in request.messages if msg.role in ("user", "assistant")
         ]
         # Remove the last entry if it's the current user message
         if conversation_history and conversation_history[-1].content == user_message:
             conversation_history = conversation_history[:-1]
         # Pass None instead of empty list for cleaner downstream checks
-        conversation_history: list[ChatMessage] | None = (
-            conversation_history or None
-        )
+        conversation_history = conversation_history or None
 
         # ===== ROUTING: First question vs tutoring follow-up =====
         conversation_key = _derive_conversation_key(request.messages)
