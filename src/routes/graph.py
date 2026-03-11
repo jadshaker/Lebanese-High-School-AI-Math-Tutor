@@ -1,5 +1,4 @@
 import asyncio
-import json
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
