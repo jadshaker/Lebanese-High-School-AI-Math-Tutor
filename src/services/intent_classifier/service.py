@@ -42,9 +42,13 @@ def classify_rule_based(
         intent = list(matches.keys())[0]
         return intent, 0.95, matches[intent]
 
-    # Priority: CORRECTION takes precedence over NEGATIVE when both match
-    if IntentCategory.CORRECTION in matches and IntentCategory.NEGATIVE in matches:
-        del matches[IntentCategory.NEGATIVE]
+    # Priority: CORRECTION takes precedence over NEGATIVE and ANSWER_ATTEMPT when both match
+    # (e.g., "no it is 2x^5" is a correction, not an answer attempt)
+    if IntentCategory.CORRECTION in matches:
+        if IntentCategory.NEGATIVE in matches:
+            del matches[IntentCategory.NEGATIVE]
+        if IntentCategory.ANSWER_ATTEMPT in matches:
+            del matches[IntentCategory.ANSWER_ATTEMPT]
         if len(matches) == 1:
             return IntentCategory.CORRECTION, 0.95, matches[IntentCategory.CORRECTION]
 
@@ -96,6 +100,7 @@ def classify_llm_based(
             "PARTIAL": IntentCategory.PARTIAL,
             "QUESTION": IntentCategory.QUESTION,
             "SKIP": IntentCategory.SKIP,
+            "ANSWER_ATTEMPT": IntentCategory.ANSWER_ATTEMPT,
             "OFF_TOPIC": IntentCategory.OFF_TOPIC,
         }
 

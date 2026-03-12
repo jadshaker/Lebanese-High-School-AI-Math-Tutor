@@ -9,13 +9,14 @@ Classify the user's response into ONE of these categories:
 - PARTIAL: User partially understands or is uncertain (somewhat, a little, not sure, maybe, kind of)
 - QUESTION: User asks for clarification or more information (what do you mean, can you explain, how, why)
 - SKIP: User wants to skip explanation and get the answer (just tell me, give me the answer, skip)
-- OFF_TOPIC: Response is unrelated to the tutoring context
+- ANSWER_ATTEMPT: User attempts to answer the tutor's question or proposes a solution (I think it is 3x, is it x^2?, the answer is 5, it equals 1/x, you subtract the exponents)
+- OFF_TOPIC: Response is completely unrelated to math or the tutoring context (my name is Jeff, what's for lunch, I like dogs)
 
 Context: The tutor asked a diagnostic question to gauge the student's understanding.
 
 User response: "{response}"
 
-Reply with ONLY the category name (AFFIRMATIVE, NEGATIVE, CORRECTION, PARTIAL, QUESTION, SKIP, or OFF_TOPIC)."""
+Reply with ONLY the category name (AFFIRMATIVE, NEGATIVE, CORRECTION, PARTIAL, QUESTION, SKIP, ANSWER_ATTEMPT, or OFF_TOPIC)."""
 
 INTENT_PATTERNS: dict[IntentCategory, list[str]] = {
     IntentCategory.AFFIRMATIVE: [
@@ -111,5 +112,27 @@ INTENT_PATTERNS: dict[IntentCategory, list[str]] = {
         r"\bget\s+to\s+the\s+point\b",
         r"\bno\s+need\s+to\s+explain\b",
         r"\bjust\s+answer\b",
+    ],
+    IntentCategory.ANSWER_ATTEMPT: [
+        # "I think it is..." / "I think the answer is..."
+        r"\bi\s+think\s+(it\s+is|it's|the\s+answer\s+is|it\s+equals|it\s+would\s+be|we\s+(get|use|need|apply|subtract|add|multiply|divide))\b",
+        # "is it..." / "is the answer..."
+        r"^\s*is\s+it\b",
+        r"\bis\s+the\s+answer\b",
+        # "the answer is..." / "it is..." / "it's..." / "it equals..."
+        r"\bthe\s+answer\s+is\b",
+        r"\bit\s+equals\b",
+        r"\bit\s+(is|should\s+be|would\s+be|gives)\s+\d",
+        r"\bit\s+(is|should\s+be|would\s+be|gives)\s+[-]?\s*\d*\s*[/\\]?\s*[a-z]",
+        # "you subtract/add/multiply/divide..."
+        r"\byou\s+(subtract|add|multiply|divide|factor|simplify|integrate|differentiate|apply)\b",
+        # "we get..." / "we use..." / "that gives..."
+        r"\bwe\s+(get|use|apply|need\s+to)\b",
+        r"\bthat\s+gives\b",
+        # Mathematical expressions as standalone answers (e.g., "1/x^2", "x^3 + 2", "-2x")
+        r"^[\s]*[-]?\s*\d*\s*[/\\]?\s*[a-z]\s*[\^]",
+        r"^[\s]*[-]?\s*\d+\s*[/\\]\s*[a-z]",
+        # "it's x^2" / "it is 1/x"
+        r"\bit'?s\s+[-]?\s*\d*\s*[/\\]?\s*[a-z]",
     ],
 }

@@ -7,15 +7,6 @@ from pydantic import BaseModel, Field
 # === Gateway / API Schemas ===
 
 
-class ConfidenceTier(str, Enum):
-    """4-tier confidence routing levels"""
-
-    TIER_1_SMALL_LLM_VALIDATE_OR_GENERATE = "tier_1_small_llm_validate_or_generate"
-    TIER_2_SMALL_LLM_CONTEXT = "tier_2_small_llm_context"
-    TIER_3_FINE_TUNED = "tier_3_fine_tuned"
-    TIER_4_LARGE_LLM = "tier_4_large_llm"
-
-
 class ChatMessage(BaseModel):
     """A single chat message"""
 
@@ -108,16 +99,6 @@ class TutoringResponse(BaseModel):
     )
 
 
-class RetrievalMetadata(BaseModel):
-    """Metadata about how an answer was retrieved"""
-
-    tier: ConfidenceTier
-    confidence_score: float
-    cache_hit: bool
-    llm_used: Optional[str] = None
-    cache_reused: Optional[bool] = None
-
-
 # === Input Processor Schemas ===
 
 
@@ -198,6 +179,7 @@ class IntentCategory(str, Enum):
     PARTIAL = "partial"
     QUESTION = "question"
     SKIP = "skip"
+    ANSWER_ATTEMPT = "answer_attempt"
     OFF_TOPIC = "off_topic"
 
 

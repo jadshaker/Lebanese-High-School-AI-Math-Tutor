@@ -158,6 +158,40 @@ def test_classify_response_structure():
 
 
 @pytest.mark.unit
+def test_classify_answer_attempt():
+    """Test classification of answer attempt responses via rule-based matching."""
+    test_cases = [
+        "i think it is 1/x power 4",
+        "I think it's x^2",
+        "is it 1/x^2",
+        "the answer is 5",
+        "it equals 3x + 1",
+        "you subtract the exponents",
+        "we get x^-2",
+        "it is 1/x",
+        "I think we use the power rule",
+        "I think the answer is -1/x",
+    ]
+
+    for text in test_cases:
+        result = classify_text(text, None, "req-answer")
+        assert (
+            result.intent == IntentCategory.ANSWER_ATTEMPT
+        ), f"Failed for: {text} (got {result.intent.value})"
+
+
+@pytest.mark.unit
+def test_answer_attempt_not_confused_with_partial():
+    """Test that 'I think it is X' is ANSWER_ATTEMPT, not PARTIAL ('I think so')."""
+    result = classify_text("I think it is 3x^2", None, "req-not-partial")
+    assert result.intent == IntentCategory.ANSWER_ATTEMPT
+
+    # But "I think so" should still be PARTIAL
+    result = classify_text("I think so", None, "req-partial")
+    assert result.intent == IntentCategory.PARTIAL
+
+
+@pytest.mark.unit
 def test_classify_matched_patterns():
     """Test that rule-based results include matched_patterns."""
     result = classify_text("yes, I understand", None, "req-8")

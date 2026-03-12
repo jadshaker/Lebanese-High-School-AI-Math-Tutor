@@ -84,11 +84,6 @@ class Config:
 
     CACHE_TOP_K = int(os.getenv("CACHE_TOP_K", "5"))
 
-    class CONFIDENCE_TIERS:
-        TIER_1_THRESHOLD = float(os.getenv("CONFIDENCE_TIER_1", "0.85"))
-        TIER_2_THRESHOLD = float(os.getenv("CONFIDENCE_TIER_2", "0.70"))
-        TIER_3_THRESHOLD = float(os.getenv("CONFIDENCE_TIER_3", "0.50"))
-
     # === Tutoring ===
 
     class TUTORING:
