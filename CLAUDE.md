@@ -27,19 +27,18 @@ src/
 ├── services/
 │   ├── input_processor/service.py  # Text processing
 │   ├── reformulator/               # Query improvement (prompts.py + service.py)
-│   ├── intent_classifier/          # Rule-based + LLM classification (prompts.py + service.py)
-│   ├── session/service.py          # In-memory session store + TTL cleanup
+│   ├── session/service.py          # In-memory session store + TTL cleanup (async, lock-protected)
 │   └── vector_cache/               # Qdrant operations (repository.py + service.py)
 ├── orchestrators/
-│   ├── answer_retrieval/           # 4-tier routing (prompts.py + service.py)
+│   ├── answer_retrieval/           # Cache-or-generate routing (prompts.py + service.py)
 │   ├── data_processing/service.py  # Input processing + reformulation pipeline
 │   └── tutoring/                   # Tutoring flow (prompts.py + service.py)
 └── routes/admin.py                 # /health, /metrics, /logs, /track
 ```
 
-**4-Tier Routing**: Tier 1 (>=0.85) Small LLM validate-or-generate → Tier 2 (0.70-0.85) Small LLM with context → Tier 3 (0.50-0.70) Fine-tuned model → Tier 4 (<0.50) Large LLM
+**Answer Retrieval**: Embed query → vector search (top-5, threshold 0.5) → Small LLM identity check → cache hit returns cached answer, cache miss generates via Large LLM and saves to Qdrant.
 
-**Tutoring Flow**: Graph-based caching with Session, Embedding, Vector Cache, Intent Classifier, Fine-Tuned Model. `is_new_branch` skips embedding + cache search after inserting a new node.
+**Tutoring Flow**: Single Fine-tuned model call per interaction — classifies (MATCH/NEW_QUESTION/tutoring) AND generates the response in one shot. Graph-based caching with Session, Embedding, Vector Cache. `is_new_branch` skips embedding + cache search after inserting a new node.
 
 ## Key Patterns
 
