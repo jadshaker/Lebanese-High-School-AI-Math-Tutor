@@ -175,36 +175,6 @@ feedback_negative_total = Counter(
     "Total negative feedback",
 )
 
-# === Intent Classifier Metrics ===
-
-classifications_total = Counter(
-    "classifications_total",
-    "Total classifications",
-    ["intent"],
-)
-
-classification_method_total = Counter(
-    "classification_method_total",
-    "Total classifications by method",
-    ["method"],
-)
-
-classification_confidence = Histogram(
-    "classification_confidence",
-    "Classification confidence scores",
-    buckets=[0.3, 0.5, 0.7, 0.8, 0.9, 0.95, 1.0],
-)
-
-llm_fallback_total = Counter(
-    "llm_fallback_total",
-    "Total LLM fallback classifications",
-)
-
-llm_fallback_errors_total = Counter(
-    "llm_fallback_errors_total",
-    "Total LLM fallback errors",
-)
-
 # === Session Metrics ===
 
 sessions_active_total = Gauge(

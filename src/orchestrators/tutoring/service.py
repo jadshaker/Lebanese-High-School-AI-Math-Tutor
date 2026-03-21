@@ -4,14 +4,13 @@ import time
 from typing import Any, Optional
 
 from src.clients.embedding import embedding_client
-from src.clients.llm import fine_tuned_client, small_llm_client
+from src.clients.llm import fine_tuned_client
 from src.config import Config
 from src.logging_utils import StructuredLogger
 from src.metrics import (
     gateway_embedding_duration_seconds,
     gateway_errors_total,
     gateway_llm_calls_total,
-    gateway_small_llm_duration_seconds,
 )
 from src.models.schemas import SessionPhase
 from src.orchestrators.answer_retrieval.service import (
@@ -19,10 +18,7 @@ from src.orchestrators.answer_retrieval.service import (
     retrieve_answer,
 )
 from src.orchestrators.data_processing.service import process_user_input
-from src.orchestrators.tutoring.prompts import (
-    TUTORING_NODE_CLASSIFY_SYSTEM_PROMPT,
-    TUTORING_SYSTEM_PROMPT,
-)
+from src.orchestrators.tutoring.prompts import TUTORING_SYSTEM_PROMPT
 from src.services import event_bus
 from src.services.session import service as session_service
 from src.services.vector_cache import service as vector_cache
@@ -30,99 +26,42 @@ from src.services.vector_cache import service as vector_cache
 logger = StructuredLogger("gateway")
 
 
-async def _classify_tutoring_node(
-    user_response: str,
-    current_question: str,
-    candidates: list[dict],
-    request_id: str,
-) -> tuple[str, dict | None]:
-    """Ask the Small LLM to classify a student message in the tutoring flow.
+def _safe_fmt(template: str, **kwargs: str) -> str:
+    """Substitute $key$ placeholders safely — avoids collisions with math braces."""
+    result = template
+    for key, value in kwargs.items():
+        result = result.replace(f"${key}$", value)
+    return result
 
-    Returns a tuple of (classification, matched_node_or_none):
-        - ("match", matched_node_dict) — identical to a cached response
-        - ("tutoring", None) — normal tutoring follow-up
-        - ("new_question", None) — new math question or correction
+
+def _parse_tutoring_response(
+    response_text: str, candidates: list[dict]
+) -> tuple[str, str | None, dict | None]:
+    """Parse the Fine-tuned model response to detect routing signals.
+
+    Returns (classification, response_text_or_none, matched_node_or_none):
+        - ("match", None, matched_node) — identical to a cached response
+        - ("new_question", None, None) — new math question or correction
+        - ("tutoring", response_text, None) — direct tutoring response
     """
-    start_time = time.time()
-    try:
-        # Build cached responses list (may be empty)
-        cached_list = ""
-        if candidates:
-            for i, node in enumerate(candidates[:5], 1):
-                cached_list += f"{i}. {node.get('user_input', '')}\n"
+    stripped = response_text.strip()
 
-        user_content = (
-            f"Current math problem: {current_question}\n\n"
-            f"New student message: {user_response}\n\n"
-        )
-        if cached_list:
-            user_content += f"Cached student responses:\n{cached_list}"
-        else:
-            user_content += "Cached student responses: (none)"
+    # Check for [MATCH:<number>]
+    match = re.search(r"\[MATCH:(\d+)\]", stripped)
+    if match and candidates:
+        try:
+            idx = int(match.group(1)) - 1
+            if 0 <= idx < len(candidates):
+                return ("match", None, candidates[idx])
+        except (ValueError, IndexError):
+            pass
 
-        messages = [
-            {"role": "system", "content": TUTORING_NODE_CLASSIFY_SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ]
+    # Check for [NEW_QUESTION]
+    if "[NEW_QUESTION]" in stripped:
+        return ("new_question", None, None)
 
-        logger.info(
-            "  → Small LLM (tutoring node classification)", request_id=request_id
-        )
-
-        call_params: dict[str, Any] = {
-            "model": Config.SMALL_LLM.MODEL_NAME,
-            "messages": messages,
-            "temperature": 0.0,
-            "max_tokens": 512,
-        }
-
-        result = await asyncio.to_thread(
-            small_llm_client.chat.completions.create, **call_params  # type: ignore[arg-type]
-        )
-
-        response_text = _clean_llm_response(
-            result.choices[0].message.content or ""
-        ).strip()
-        duration = time.time() - start_time
-        gateway_small_llm_duration_seconds.observe(duration)
-        gateway_llm_calls_total.labels(llm_service="small_llm_tutoring_classify").inc()
-
-        logger.info(
-            f"  ✓ Small LLM tutoring classification ({duration:.1f}s): {response_text}",
-            request_id=request_id,
-        )
-
-        # Parse response
-        if re.search(r"\bNEW_QUESTION\b", response_text, re.IGNORECASE):
-            logger.info("Classification: NEW_QUESTION", request_id=request_id)
-            return ("new_question", None)
-
-        match = re.search(r"\bMATCH\s+(\d+)\b", response_text, re.IGNORECASE)
-        if match and candidates:
-            try:
-                idx = int(match.group(1)) - 1
-                if 0 <= idx < len(candidates):
-                    matched_node = candidates[idx]
-                    logger.info(
-                        f"Classification: MATCH cached node #{idx + 1}",
-                        context={"node_id": matched_node.get("id", "")},
-                        request_id=request_id,
-                    )
-                    return ("match", matched_node)
-            except (ValueError, IndexError):
-                pass
-
-        logger.info("Classification: TUTORING", request_id=request_id)
-        return ("tutoring", None)
-
-    except Exception as e:
-        duration = time.time() - start_time
-        gateway_small_llm_duration_seconds.observe(duration)
-        logger.warning(
-            f"Tutoring classification failed ({duration:.1f}s): {str(e)} — defaulting to TUTORING",
-            request_id=request_id,
-        )
-        return ("tutoring", None)
+    # Everything else is a direct tutoring response
+    return ("tutoring", response_text, None)
 
 
 async def _embed_text(text: str, request_id: str) -> list[float]:
@@ -210,15 +149,21 @@ async def _get_conversation_path(
         return {"path": [], "question_text": "", "answer_text": ""}
 
 
-async def _generate_tutoring_response(
+async def _call_fine_tuned(
     question: str,
     answer: str,
     conversation_path: list[dict],
+    candidates: list[dict],
     user_response: str,
-    depth: int,
     request_id: str,
-) -> dict:
-    """Generate tutoring response using Fine-tuned Model with full context."""
+) -> tuple[str, str | None, dict | None]:
+    """Single Fine-tuned model call that classifies AND generates.
+
+    Returns (classification, response_or_none, matched_node_or_none):
+        - ("match", None, matched_node) — use cached response
+        - ("new_question", None, None) — route to Q&A pipeline
+        - ("tutoring", response_text, None) — direct tutoring response
+    """
     start_time = time.time()
     try:
         # Build conversation context from path
@@ -230,18 +175,19 @@ async def _generate_tutoring_response(
                 path_context += f"  Student: {step.get('user_input', '')}\n"
                 path_context += f"  Tutor: {step.get('system_response', '')}\n"
 
-        def _safe_fmt(template: str, **kwargs: str) -> str:
-            """Substitute $key$ placeholders safely — avoids collisions with math braces."""
-            result = template
-            for key, value in kwargs.items():
-                result = result.replace(f"${key}$", value)
-            return result
+        # Build candidates section
+        candidates_section = ""
+        if candidates:
+            candidates_section = "\n**Cached student responses** (check for match before responding):\n"
+            for i, node in enumerate(candidates[:5], 1):
+                candidates_section += f"{i}. {node.get('user_input', '')}\n"
 
         system_prompt = _safe_fmt(
             TUTORING_SYSTEM_PROMPT,
             question=question,
             answer=answer,
             path_context=path_context,
+            candidates_section=candidates_section,
             user_response=user_response,
         )
 
@@ -265,33 +211,26 @@ async def _generate_tutoring_response(
             fine_tuned_client.chat.completions.create, **call_params  # type: ignore[arg-type]
         )
 
-        response = result.choices[0].message.content or ""
+        response = _clean_llm_response(result.choices[0].message.content or "")
         duration = time.time() - start_time
         gateway_llm_calls_total.labels(llm_service="fine_tuned_tutoring").inc()
-
-        # Clean <think> tags
-        if "</think>" in response:
-            response = response.split("</think>")[-1].strip()
-        elif "<think>" in response:
-            response = response.split("<think>")[0].strip()
 
         logger.info(
             f"  ✓ Fine-Tuned Model tutoring ({duration:.1f}s): {len(response)} chars",
             request_id=request_id,
         )
 
-        is_complete = depth >= Config.TUTORING.MAX_INTERACTION_DEPTH
-        next_prompt = (
-            None
-            if is_complete
-            else "Do you understand this step? Would you like me to explain further?"
+        classification, text, matched = _parse_tutoring_response(response, candidates)
+
+        logger.info(
+            f"  Tutoring classification: {classification}",
+            context={
+                "matched_node": matched.get("id", "") if matched else None,
+            },
+            request_id=request_id,
         )
 
-        return {
-            "response": response,
-            "is_complete": is_complete,
-            "next_prompt": next_prompt,
-        }
+        return classification, text, matched
 
     except Exception as e:
         duration = time.time() - start_time
@@ -389,10 +328,11 @@ async def handle_tutoring_interaction(
         1. Get or create session (with question_id tracking)
         2. Embed user response
         3. Search cache for candidate children of current node (skip if is_new_branch)
-        4. Small LLM classifies: MATCH / TUTORING / NEW_QUESTION
-        5. MATCH → return cached response
-        6. NEW_QUESTION → run full Q&A pipeline, reset session
-        7. TUTORING → generate with Fine-tuned Model, save as new node
+        4. Single Fine-tuned model call: classify + generate
+           - [MATCH:<n>] → return cached response
+           - [NEW_QUESTION] → run full Q&A pipeline (Large LLM)
+           - otherwise → use the response directly as tutoring output
+        5. Save new tutoring interaction to cache
     """
     logger.info(
         f"Tutoring Interaction: session={session_id}, question_id={question_id}",
@@ -481,23 +421,33 @@ async def handle_tutoring_interaction(
                 request_id=request_id,
             )
 
-    # Step 4: Small LLM classification (MATCH / TUTORING / NEW_QUESTION)
-    classification, matched_node = await _classify_tutoring_node(
-        user_response=user_response,
-        current_question=original_question,
+    # Step 4: Get conversation path for context
+    conversation_path: list[dict] = []
+    if current_node_id:
+        path_result = await _get_conversation_path(
+            question_id, current_node_id, request_id
+        )
+        conversation_path = path_result.get("path", [])
+
+    # Step 5: Single Fine-tuned model call — classify + generate
+    classification, tutor_response, matched_node = await _call_fine_tuned(
+        question=original_question,
+        answer=original_answer,
+        conversation_path=conversation_path,
         candidates=candidates,
+        user_response=user_response,
         request_id=request_id,
     )
 
-    # Step 5: Handle MATCH — return cached response
+    # === Handle MATCH — return cached response ===
     if classification == "match" and matched_node:
         new_node_id = matched_node["id"]
-        tutor_response = matched_node["system_response"]
+        cached_response = matched_node["system_response"]
         new_depth = matched_node.get("depth", depth + 1)
         match_score = matched_node.get("score", 0)
 
         logger.info(
-            f"Tutoring cache HIT (LLM verified): node_id={new_node_id}",
+            f"Tutoring cache HIT: node_id={new_node_id}",
             request_id=request_id,
         )
 
@@ -537,14 +487,14 @@ async def handle_tutoring_interaction(
         )
 
         return {
-            "tutor_message": tutor_response,
+            "tutor_message": cached_response,
             "is_complete": is_complete,
             "next_prompt": next_prompt,
             "intent": "cached",
             "cache_hit": True,
         }
 
-    # Step 6: Handle NEW_QUESTION — run full Q&A pipeline
+    # === Handle NEW_QUESTION — run full Q&A pipeline ===
     if classification == "new_question":
         return await _handle_new_question(
             session_id=session_id,
@@ -552,8 +502,11 @@ async def handle_tutoring_interaction(
             request_id=request_id,
         )
 
-    # Step 7: Handle TUTORING — generate with Fine-tuned Model
-    logger.info("Tutoring cache MISS: generating new response", request_id=request_id)
+    # === Handle TUTORING — use the generated response directly ===
+    assert tutor_response is not None
+    new_depth = depth + 1
+
+    logger.info("Tutoring response generated", request_id=request_id)
 
     # Emit cache_miss event (only if we actually searched)
     if not is_new_branch:
@@ -562,31 +515,13 @@ async def handle_tutoring_interaction(
             {"type": "cache_miss", "parent_id": current_node_id},
         )
 
-    # Get conversation path for context
-    conversation_path: list[dict] = []
-    if current_node_id:
-        path_result = await _get_conversation_path(
-            question_id, current_node_id, request_id
-        )
-        conversation_path = path_result.get("path", [])
-
-    # Generate response with Fine-tuned Model
-    tutoring_result = await _generate_tutoring_response(
-        question=original_question,
-        answer=original_answer,
-        conversation_path=conversation_path,
-        user_response=user_response,
-        depth=depth + 1,
-        request_id=request_id,
-    )
-
     # Save new interaction to cache
     new_node_id = await _save_tutoring_interaction(
         question_id=question_id,
         parent_node_id=current_node_id,
         user_input=user_response,
         user_embedding=user_embedding,
-        system_response=tutoring_result["response"],
+        system_response=tutor_response,
         request_id=request_id,
     )
 
@@ -600,17 +535,24 @@ async def handle_tutoring_interaction(
                 "parent_id": current_node_id,
                 "question_id": question_id,
                 "user_input": user_response,
-                "depth": depth + 1,
+                "depth": new_depth,
             },
         )
 
+    is_complete = new_depth >= Config.TUTORING.MAX_INTERACTION_DEPTH
+    next_prompt = (
+        None
+        if is_complete
+        else "Do you understand this step? Would you like me to explain further?"
+    )
+
     # Update session with new node (mark as new branch since we just created it)
-    if new_node_id and not tutoring_result["is_complete"]:
+    if new_node_id and not is_complete:
         await session_service.update_tutoring_state(
             session_id=session_id,
             current_node_id=new_node_id,
             question_id=question_id,
-            depth=depth + 1,
+            depth=new_depth,
             is_new_branch=True,
             request_id=request_id,
         )
@@ -621,19 +563,19 @@ async def handle_tutoring_interaction(
             {
                 "type": "position_update",
                 "current_node_id": new_node_id,
-                "depth": depth + 1,
+                "depth": new_depth,
             },
         )
 
     logger.info(
-        f"Tutoring Interaction: completed - complete={tutoring_result['is_complete']}, saved_node={new_node_id}",
+        f"Tutoring Interaction: completed - complete={is_complete}, saved_node={new_node_id}",
         request_id=request_id,
     )
 
     return {
-        "tutor_message": tutoring_result["response"],
-        "is_complete": tutoring_result["is_complete"],
-        "next_prompt": tutoring_result["next_prompt"],
+        "tutor_message": tutor_response,
+        "is_complete": is_complete,
+        "next_prompt": next_prompt,
         "intent": "generated",
         "cache_hit": False,
     }

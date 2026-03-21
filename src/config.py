@@ -104,18 +104,6 @@ class Config:
         MAX_CONTEXT_MESSAGES = int(os.getenv("REFORMULATOR_MAX_CONTEXT", "5"))
         MAX_CONTEXT_LENGTH = int(os.getenv("REFORMULATOR_MAX_CONTEXT_LENGTH", "500"))
 
-    # === Intent Classifier ===
-
-    class CLASSIFIER:
-        RULE_CONFIDENCE_THRESHOLD = float(
-            os.getenv("INTENT_RULE_CONFIDENCE_THRESHOLD", "0.8")
-        )
-        USE_LLM_FALLBACK = (
-            os.getenv("INTENT_USE_LLM_FALLBACK", "true").lower() == "true"
-        )
-        LLM_TEMPERATURE = float(os.getenv("INTENT_CLASSIFIER_LLM_TEMPERATURE", "0.1"))
-        LLM_MAX_TOKENS = int(os.getenv("INTENT_CLASSIFIER_LLM_MAX_TOKENS", "50"))
-
     # === Session ===
 
     class SESSION:
