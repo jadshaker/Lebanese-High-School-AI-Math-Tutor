@@ -231,10 +231,10 @@ async def _generate_tutoring_response(
                 path_context += f"  Tutor: {step.get('system_response', '')}\n"
 
         def _safe_fmt(template: str, **kwargs: str) -> str:
-            """Substitute {key} placeholders without crashing on user content with braces."""
+            """Substitute $key$ placeholders safely — avoids collisions with math braces."""
             result = template
             for key, value in kwargs.items():
-                result = result.replace(f"{{{key}}}", value)
+                result = result.replace(f"${key}$", value)
             return result
 
         system_prompt = _safe_fmt(
@@ -331,10 +331,10 @@ async def _handle_new_question(
     new_question_id = retrieval_result.get("question_id", "")
 
     # Step 3: Reset session tutoring state
-    session_service.reset_tutoring_state(session_id, request_id=request_id)
+    await session_service.reset_tutoring_state(session_id, request_id=request_id)
 
     # Step 4: Update session with new question context
-    session_service.update_session(
+    await session_service.update_session(
         session_id,
         phase=SessionPhase.TUTORING,
         original_query=user_response,
@@ -345,7 +345,7 @@ async def _handle_new_question(
     )
 
     if new_question_id:
-        session_service.update_tutoring_state(
+        await session_service.update_tutoring_state(
             session_id,
             question_id=new_question_id,
             request_id=request_id,
@@ -410,13 +410,13 @@ async def handle_tutoring_interaction(
         }
 
     # Step 1: Get or create session
-    session = session_service.get_session(session_id)
+    session = await session_service.get_session(session_id)
     is_new_branch = False
     if session is None:
-        session = session_service.create_session(
+        session = await session_service.create_session(
             initial_query=original_question, request_id=request_id
         )
-        session_service.update_tutoring_state(
+        await session_service.update_tutoring_state(
             session.session_id, question_id=question_id, request_id=request_id
         )
         current_node_id = None
@@ -467,7 +467,7 @@ async def handle_tutoring_interaction(
                 question_id=question_id,
                 parent_id=current_node_id,
                 user_input_embedding=user_embedding,
-                threshold=0.5,
+                threshold=0.8,
                 top_k=5,
                 request_id=request_id,
             )
@@ -520,7 +520,7 @@ async def handle_tutoring_interaction(
         )
 
         # Update session with the matched node (following existing path)
-        session_service.update_tutoring_state(
+        await session_service.update_tutoring_state(
             session_id=session_id,
             current_node_id=new_node_id,
             question_id=question_id,
@@ -606,7 +606,7 @@ async def handle_tutoring_interaction(
 
     # Update session with new node (mark as new branch since we just created it)
     if new_node_id and not tutoring_result["is_complete"]:
-        session_service.update_tutoring_state(
+        await session_service.update_tutoring_state(
             session_id=session_id,
             current_node_id=new_node_id,
             question_id=question_id,

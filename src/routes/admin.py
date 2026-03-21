@@ -13,7 +13,7 @@ logger = StructuredLogger("gateway")
 async def health():
     """Health check — no more inter-service HTTP calls."""
     qdrant_health = await vector_cache.get_health()
-    session_count = session_service.get_active_session_count()
+    session_count = await session_service.get_active_session_count()
 
     qdrant_ok = qdrant_health.get("qdrant_connected", False)
     status = "healthy" if qdrant_ok else "degraded"

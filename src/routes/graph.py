@@ -74,23 +74,24 @@ async def get_tree(question_id: str):
 @router.get("/sessions")
 async def list_active_sessions():
     """List all active sessions with tutoring state for the session picker."""
-    from src.services.session.service import sessions
+    from src.services.session.service import _lock, sessions
 
-    result = []
-    for sid, data in sessions.items():
-        if data.tutoring.question_id:
-            result.append(
-                {
-                    "session_id": sid,
-                    "question_id": data.tutoring.question_id,
-                    "original_query": data.original_query or "",
-                    "depth": data.tutoring.depth,
-                    "current_node_id": data.tutoring.current_node_id,
-                    "created_at": (
-                        data.created_at.isoformat() if data.created_at else None
-                    ),
-                }
-            )
+    async with _lock:
+        result = []
+        for sid, data in sessions.items():
+            if data.tutoring.question_id:
+                result.append(
+                    {
+                        "session_id": sid,
+                        "question_id": data.tutoring.question_id,
+                        "original_query": data.original_query or "",
+                        "depth": data.tutoring.depth,
+                        "current_node_id": data.tutoring.current_node_id,
+                        "created_at": (
+                            data.created_at.isoformat() if data.created_at else None
+                        ),
+                    }
+                )
     # Most recent first
     result.sort(key=lambda x: x["created_at"] or "", reverse=True)
     return {"sessions": result}
@@ -99,7 +100,7 @@ async def list_active_sessions():
 @router.get("/session/{session_id}")
 async def get_session_state(session_id: str):
     """Return current session state for graph positioning."""
-    session = session_service.get_session(session_id)
+    session = await session_service.get_session(session_id)
     if not session:
         return {"error": "Session not found", "session_id": session_id}
 
@@ -126,7 +127,7 @@ async def graph_websocket(websocket: WebSocket, session_id: str):
 
     try:
         # Send initial session state
-        session = session_service.get_session(session_id)
+        session = await session_service.get_session(session_id)
         if session and session.tutoring.question_id:
             tree_data = await get_tree(session.tutoring.question_id)
             await websocket.send_json(

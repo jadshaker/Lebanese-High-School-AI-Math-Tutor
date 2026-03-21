@@ -358,7 +358,7 @@ class QdrantRepository:
         question_id: str,
         parent_id: Optional[str],
         user_input_embedding: list[float],
-        threshold: float = 0.5,
+        threshold: float = 0.7,
         top_k: int = 5,
     ) -> list[dict]:
         """Search for top-K similar user inputs among children of a parent node."""

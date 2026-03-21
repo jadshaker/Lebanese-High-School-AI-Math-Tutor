@@ -89,13 +89,12 @@ def _is_simple_greeting(message: str) -> bool:
 _conversation_sessions: dict[str, str] = {}
 
 
-def _cleanup_stale_conversations() -> None:
+async def _cleanup_stale_conversations() -> None:
     """Remove conversation keys whose sessions no longer exist."""
-    stale = [
-        key
-        for key, sid in _conversation_sessions.items()
-        if session_service.get_session(sid) is None
-    ]
+    stale = []
+    for key, sid in _conversation_sessions.items():
+        if await session_service.get_session(sid) is None:
+            stale.append(key)
     for key in stale:
         del _conversation_sessions[key]
     if stale:
@@ -153,7 +152,7 @@ async def lifespan(app: FastAPI):
     async def _periodic_conversation_cleanup() -> None:
         while True:
             await asyncio.sleep(Config.CLEANUP.INTERVAL_SECONDS)
-            _cleanup_stale_conversations()
+            await _cleanup_stale_conversations()
 
     conversation_cleanup_task = asyncio.create_task(_periodic_conversation_cleanup())
 
@@ -359,7 +358,7 @@ async def chat_completions(
         if is_follow_up:
             # ===== TUTORING FOLLOW-UP =====
             session_id = _conversation_sessions[conversation_key]
-            session = session_service.get_session(session_id)
+            session = await session_service.get_session(session_id)
 
             if session and session.tutoring.question_id:
                 logger.info(
@@ -466,17 +465,17 @@ async def chat_completions(
         # valid question_id.  Without one the tutoring system cannot function
         # (it needs the ID to search/store graph nodes in Qdrant).
         if question_id:
-            session = session_service.create_session(
+            session = await session_service.create_session(
                 initial_query=user_message, request_id=request_id
             )
-            session_service.update_session(
+            await session_service.update_session(
                 session.session_id,
                 phase=SessionPhase.TUTORING,
                 retrieved_answer=answer,
                 retrieval_source=source,
                 request_id=request_id,
             )
-            session_service.update_tutoring_state(
+            await session_service.update_tutoring_state(
                 session.session_id,
                 question_id=question_id,
                 request_id=request_id,
@@ -596,7 +595,7 @@ async def tutoring_interaction(
 
         # If not provided, try to get from session
         if not original_question or not question_id:
-            session_data = session_service.get_session(request.session_id)
+            session_data = await session_service.get_session(request.session_id)
             if session_data:
                 if not original_question:
                     original_question = (
