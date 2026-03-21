@@ -87,16 +87,18 @@ def _is_simple_greeting(message: str) -> bool:
 # Maps conversation key (hash of first user message) → session_id.
 # Entries are cleaned up when the underlying session expires (see _cleanup_stale_conversations).
 _conversation_sessions: dict[str, str] = {}
+_conversation_sessions_lock = asyncio.Lock()
 
 
 async def _cleanup_stale_conversations() -> None:
     """Remove conversation keys whose sessions no longer exist."""
-    stale = []
-    for key, sid in _conversation_sessions.items():
-        if await session_service.get_session(sid) is None:
-            stale.append(key)
-    for key in stale:
-        del _conversation_sessions[key]
+    async with _conversation_sessions_lock:
+        stale = []
+        for key, sid in _conversation_sessions.items():
+            if await session_service.get_session(sid) is None:
+                stale.append(key)
+        for key in stale:
+            del _conversation_sessions[key]
     if stale:
         logger.info(
             "Cleaned up stale conversation keys",
@@ -353,11 +355,13 @@ async def chat_completions(
         # ===== ROUTING: First question vs tutoring follow-up =====
         conversation_key = _derive_conversation_key(request.messages)
         user_msg_count = _count_user_messages(request.messages)
-        is_follow_up = user_msg_count > 1 and conversation_key in _conversation_sessions
+
+        async with _conversation_sessions_lock:
+            is_follow_up = user_msg_count > 1 and conversation_key in _conversation_sessions
+            session_id = _conversation_sessions.get(conversation_key, "") if is_follow_up else ""
 
         if is_follow_up:
             # ===== TUTORING FOLLOW-UP =====
-            session_id = _conversation_sessions[conversation_key]
             session = await session_service.get_session(session_id)
 
             if session and session.tutoring.question_id:
@@ -414,7 +418,8 @@ async def chat_completions(
                 context={"session_id": session_id},
                 request_id=request_id,
             )
-            del _conversation_sessions[conversation_key]
+            async with _conversation_sessions_lock:
+                _conversation_sessions.pop(conversation_key, None)
 
         # ===== FIRST QUESTION: Full Q&A Pipeline =====
         logger.info(
@@ -480,7 +485,8 @@ async def chat_completions(
                 question_id=question_id,
                 request_id=request_id,
             )
-            _conversation_sessions[conversation_key] = session.session_id
+            async with _conversation_sessions_lock:
+                _conversation_sessions[conversation_key] = session.session_id
 
             # Emit session_created event for graph visualization
             await event_bus.publish(
