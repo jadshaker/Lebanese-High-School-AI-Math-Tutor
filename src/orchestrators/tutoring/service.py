@@ -407,7 +407,7 @@ async def handle_tutoring_interaction(
                 question_id=question_id,
                 parent_id=current_node_id,
                 user_input_embedding=user_embedding,
-                threshold=0.8,
+                threshold=0.7,
                 top_k=5,
                 request_id=request_id,
             )
