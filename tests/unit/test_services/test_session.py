@@ -79,7 +79,9 @@ async def test_delete_session_success():
         request_id="req-5",
     )
 
-    deleted = await session_service.delete_session(created.session_id, request_id="req-5")
+    deleted = await session_service.delete_session(
+        created.session_id, request_id="req-5"
+    )
     assert deleted is True
 
     fetched = await session_service.get_session(created.session_id)
@@ -90,7 +92,9 @@ async def test_delete_session_success():
 @pytest.mark.asyncio
 async def test_delete_session_not_found():
     """Test that deleting a non-existent session returns False."""
-    result = await session_service.delete_session("non-existent-delete", request_id="req-6")
+    result = await session_service.delete_session(
+        "non-existent-delete", request_id="req-6"
+    )
 
     assert result is False
 

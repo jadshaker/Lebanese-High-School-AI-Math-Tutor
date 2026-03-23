@@ -178,7 +178,9 @@ async def _call_fine_tuned(
         # Build candidates section
         candidates_section = ""
         if candidates:
-            candidates_section = "\n**Cached student responses** (check for match before responding):\n"
+            candidates_section = (
+                "\n**Cached student responses** (check for match before responding):\n"
+            )
             for i, node in enumerate(candidates[:5], 1):
                 candidates_section += f"{i}. {node.get('user_input', '')}\n"
 
@@ -326,13 +328,15 @@ async def handle_tutoring_interaction(
 
     Flow:
         1. Get or create session (with question_id tracking)
-        2. Embed user response
-        3. Search cache for candidate children of current node (skip if is_new_branch)
-        4. Single Fine-tuned model call: classify + generate
+        2. Reformulate user response (better embedding/cache matching)
+        3. Embed reformulated response
+        4. Search cache for candidate children of current node (skip if is_new_branch)
+        5. Get conversation path for context
+        6. Single Fine-tuned model call: classify + generate (uses raw response)
            - [MATCH:<n>] → return cached response
            - [NEW_QUESTION] → run full Q&A pipeline (Large LLM)
            - otherwise → use the response directly as tutoring output
-        5. Save new tutoring interaction to cache
+        7. Save new tutoring interaction to cache (reformulated text)
     """
     logger.info(
         f"Tutoring Interaction: session={session_id}, question_id={question_id}",
@@ -377,10 +381,19 @@ async def handle_tutoring_interaction(
         },
     )
 
-    # Step 2: Embed user response
-    user_embedding = await _embed_text(user_response, request_id)
+    # Step 2: Reformulate user response for better embedding/cache matching
+    logger.info("  → Reformulator (tutoring)", request_id=request_id)
+    processing_result = await process_user_input(user_response, request_id)
+    reformulated_response = processing_result["reformulated_query"]
+    logger.info(
+        f"  ✓ Reformulator (tutoring): {reformulated_response[:50]}...",
+        request_id=request_id,
+    )
 
-    # Step 3: Search cache for candidate children (skip if new branch)
+    # Step 3: Embed reformulated response (better semantic matching)
+    user_embedding = await _embed_text(reformulated_response, request_id)
+
+    # Step 4: Search cache for candidate children (skip if new branch)
     candidates: list[dict] = []
     if is_new_branch:
         logger.info(
@@ -421,7 +434,7 @@ async def handle_tutoring_interaction(
                 request_id=request_id,
             )
 
-    # Step 4: Get conversation path for context
+    # Step 5: Get conversation path for context
     conversation_path: list[dict] = []
     if current_node_id:
         path_result = await _get_conversation_path(
@@ -429,7 +442,7 @@ async def handle_tutoring_interaction(
         )
         conversation_path = path_result.get("path", [])
 
-    # Step 5: Single Fine-tuned model call — classify + generate
+    # Step 6: Single Fine-tuned model call — classify + generate
     classification, tutor_response, matched_node = await _call_fine_tuned(
         question=original_question,
         answer=original_answer,
@@ -515,11 +528,11 @@ async def handle_tutoring_interaction(
             {"type": "cache_miss", "parent_id": current_node_id},
         )
 
-    # Save new interaction to cache
+    # Save new interaction to cache (reformulated text for better future matching)
     new_node_id = await _save_tutoring_interaction(
         question_id=question_id,
         parent_node_id=current_node_id,
-        user_input=user_response,
+        user_input=reformulated_response,
         user_embedding=user_embedding,
         system_response=tutor_response,
         request_id=request_id,

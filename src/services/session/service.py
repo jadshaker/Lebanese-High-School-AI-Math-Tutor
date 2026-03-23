@@ -328,7 +328,9 @@ async def get_messages(
         return session.messages[offset : offset + limit]
 
 
-async def get_context_for_llm(session_id: str, max_messages: int = 10) -> Optional[dict]:
+async def get_context_for_llm(
+    session_id: str, max_messages: int = 10
+) -> Optional[dict]:
     """Get condensed context for LLM calls."""
     async with _lock:
         session = sessions.get(session_id)

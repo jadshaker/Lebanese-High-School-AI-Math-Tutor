@@ -357,8 +357,12 @@ async def chat_completions(
         user_msg_count = _count_user_messages(request.messages)
 
         async with _conversation_sessions_lock:
-            is_follow_up = user_msg_count > 1 and conversation_key in _conversation_sessions
-            session_id = _conversation_sessions.get(conversation_key, "") if is_follow_up else ""
+            is_follow_up = (
+                user_msg_count > 1 and conversation_key in _conversation_sessions
+            )
+            session_id = (
+                _conversation_sessions.get(conversation_key, "") if is_follow_up else ""
+            )
 
         if is_follow_up:
             # ===== TUTORING FOLLOW-UP =====
