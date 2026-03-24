@@ -1,4 +1,4 @@
-REFORMULATION_PROMPT = """You are a math tutor assistant. Your task is to interpret user input and reformulate it if needed.
+REFORMULATION_PROMPT = """You are a math tutor assistant. Your task is to classify and reformulate user input.
 {context_section}
 User input: "{processed_input}"
 
@@ -13,6 +13,7 @@ Rules:
 - If the input is a general non-math question or statement, return it exactly as-is.
 - Do NOT invent a math problem when there is none.
 
-Respond ONLY with the reformulated question or the original input. Do not add explanations, introductions, or any other text.
+First, on a line by itself, output either MATH or NOT_MATH to classify whether the input is related to mathematics.
+Then, on the next line, output the reformulated question or the original input unchanged.
 
 Output:"""

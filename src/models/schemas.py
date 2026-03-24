@@ -7,15 +7,6 @@ from pydantic import BaseModel, Field
 # === Gateway / API Schemas ===
 
 
-class ConfidenceTier(str, Enum):
-    """4-tier confidence routing levels"""
-
-    TIER_1_SMALL_LLM_VALIDATE_OR_GENERATE = "tier_1_small_llm_validate_or_generate"
-    TIER_2_SMALL_LLM_CONTEXT = "tier_2_small_llm_context"
-    TIER_3_FINE_TUNED = "tier_3_fine_tuned"
-    TIER_4_LARGE_LLM = "tier_4_large_llm"
-
-
 class ChatMessage(BaseModel):
     """A single chat message"""
 
@@ -108,16 +99,6 @@ class TutoringResponse(BaseModel):
     )
 
 
-class RetrievalMetadata(BaseModel):
-    """Metadata about how an answer was retrieved"""
-
-    tier: ConfidenceTier
-    confidence_score: float
-    cache_hit: bool
-    llm_used: Optional[str] = None
-    cache_reused: Optional[bool] = None
-
-
 # === Input Processor Schemas ===
 
 
@@ -164,6 +145,9 @@ class ReformulateResponse(BaseModel):
     improvements_made: list[str] = Field(
         default_factory=list, description="List of improvements applied"
     )
+    is_math_related: bool = Field(
+        default=True, description="Whether the input is math-related"
+    )
 
 
 # === Embedding Schemas ===
@@ -181,61 +165,6 @@ class EmbedResponse(BaseModel):
     embedding: list[float] = Field(..., description="Embedding vector")
     model: str = Field(..., description="Model used for embedding")
     dimensions: int = Field(..., description="Dimension of embedding vector")
-
-
-# === Intent Classifier Schemas ===
-
-
-class IntentCategory(str, Enum):
-    """User intent categories"""
-
-    AFFIRMATIVE = "affirmative"
-    NEGATIVE = "negative"
-    PARTIAL = "partial"
-    QUESTION = "question"
-    SKIP = "skip"
-    OFF_TOPIC = "off_topic"
-
-
-class ClassificationMethod(str, Enum):
-    """How the classification was made"""
-
-    RULE_BASED = "rule_based"
-    LLM_BASED = "llm_based"
-    HYBRID = "hybrid"
-
-
-class ClassifyRequest(BaseModel):
-    """Request to classify user intent"""
-
-    text: str = Field(..., description="User response text to classify")
-    context: Optional[str] = Field(
-        None, description="Optional context (tutor's previous question)"
-    )
-
-
-class ClassifyResponse(BaseModel):
-    """Classification result"""
-
-    intent: IntentCategory
-    confidence: float = Field(..., ge=0.0, le=1.0)
-    method: ClassificationMethod
-    matched_patterns: Optional[list[str]] = Field(
-        None, description="Patterns matched (for rule-based)"
-    )
-
-
-class BatchClassifyRequest(BaseModel):
-    """Request to classify multiple texts"""
-
-    texts: list[str]
-    context: Optional[str] = None
-
-
-class BatchClassifyResponse(BaseModel):
-    """Batch classification results"""
-
-    results: list[ClassifyResponse]
 
 
 # === Session Schemas ===

@@ -12,11 +12,10 @@ src/                             # Single consolidated FastAPI application (Port
 ├── services/                    # Business logic modules
 │   ├── input_processor/         # Text/image processing
 │   ├── reformulator/            # Query improvement via vLLM
-│   ├── intent_classifier/       # Hybrid rule-based + LLM classification
-│   ├── session/                 # In-memory session state with TTL cleanup
+│   ├── session/                 # In-memory session state (async, lock-protected)
 │   └── vector_cache/            # Qdrant-backed vector storage
 ├── orchestrators/               # Pipeline orchestration
-│   ├── answer_retrieval/        # 4-tier confidence routing
+│   ├── answer_retrieval/        # Cache-or-generate routing
 │   ├── data_processing/         # Input processing + reformulation
 │   └── tutoring/                # Interactive tutoring flow
 └── routes/admin.py              # Health, metrics, logs, tracking
@@ -30,14 +29,10 @@ External:
 
 **Pipeline**: The app orchestrates two phases:
 
-1. **Data Processing**: Input Processor → Reformulator
-2. **Answer Retrieval**: 4-Tier Confidence Routing
-   - **Tier 1 (>=0.85)**: Small LLM validates cached answer or generates new one
-   - **Tier 2 (0.70-0.85)**: Small LLM generates with cache context
-   - **Tier 3 (0.50-0.70)**: Fine-tuned model
-   - **Tier 4 (<0.50)**: Large LLM for novel questions
+1. **Data Processing**: Input Processor → Reformulator (math/non-math classification)
+2. **Answer Retrieval**: Embed → vector search → Small LLM identity check → cache hit or Large LLM generation
 
-**Tutoring Mode**: Interactive step-by-step problem solving using Session, Intent Classifier, and Fine-Tuned Model. The `is_new_branch` flag skips cache on new conversation nodes.
+**Tutoring Mode**: Single Fine-tuned model call per interaction — classifies (`[MATCH]`/`[NEW_QUESTION]`/tutoring) and generates the response in one shot. Graph-based caching in Qdrant with session state tracking. The `is_new_branch` flag skips cache search on new conversation nodes.
 
 ## Getting Started
 

@@ -49,7 +49,10 @@ async def _process_input_step(
 
 
 async def _reformulate_step(
-    processed_input: str, input_type: str, request_id: str
+    processed_input: str,
+    input_type: str,
+    request_id: str,
+    conversation_history: list | None = None,
 ) -> dict:
     """Reformulate query for clarity."""
     start_time = time.time()
@@ -58,7 +61,11 @@ async def _reformulate_step(
 
         # reformulate_query is sync (OpenAI SDK), run in thread
         result = await asyncio.to_thread(
-            reformulate_query, processed_input, input_type, request_id
+            reformulate_query,
+            processed_input,
+            input_type,
+            request_id,
+            conversation_history,
         )
 
         duration = time.time() - start_time
@@ -74,6 +81,7 @@ async def _reformulate_step(
             "reformulated_query": result.reformulated_query,
             "original_input": result.original_input,
             "improvements_made": result.improvements_made,
+            "is_math_related": result.is_math_related,
         }
 
     except Exception as e:
@@ -87,7 +95,11 @@ async def _reformulate_step(
         raise
 
 
-async def process_user_input(user_message: str, request_id: str) -> dict:
+async def process_user_input(
+    user_message: str,
+    request_id: str,
+    conversation_history: list | None = None,
+) -> dict:
     """Execute Data Processing pipeline: Process input → Reformulate."""
     pipeline_start = time.time()
     latency: dict[str, float] = {}
@@ -101,7 +113,9 @@ async def process_user_input(user_message: str, request_id: str) -> dict:
 
     # Step 2: Reformulate query
     t0 = time.time()
-    reformulate_result = await _reformulate_step(processed_input, "text", request_id)
+    reformulate_result = await _reformulate_step(
+        processed_input, "text", request_id, conversation_history
+    )
     latency["reformulator"] = round(time.time() - t0, 3)
     reformulated_query = reformulate_result["reformulated_query"]
 
@@ -115,5 +129,6 @@ async def process_user_input(user_message: str, request_id: str) -> dict:
         "processed_input": processed_input,
         "reformulated_query": reformulated_query,
         "improvements_made": reformulate_result.get("improvements_made", []),
+        "is_math_related": reformulate_result.get("is_math_related", True),
         "latency": latency,
     }

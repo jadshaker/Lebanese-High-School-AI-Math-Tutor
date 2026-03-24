@@ -144,6 +144,25 @@ async def search_children(
     return result
 
 
+async def search_children_candidates(
+    question_id: str,
+    parent_id: Optional[str],
+    user_input_embedding: list[float],
+    threshold: float = 0.7,
+    top_k: int = 5,
+    request_id: str = "",
+) -> list[dict]:
+    """Search for top-K similar tutoring interactions among children of current node."""
+    repository = get_repo()
+    return await repository.search_children_candidates(
+        question_id=question_id,
+        parent_id=parent_id,
+        user_input_embedding=user_input_embedding,
+        threshold=threshold,
+        top_k=top_k,
+    )
+
+
 async def add_interaction(
     question_id: str,
     parent_id: Optional[str],
@@ -175,6 +194,21 @@ async def add_interaction(
     )
 
     return node_id
+
+
+async def get_all_children(
+    question_id: str,
+    parent_id: Optional[str] = None,
+) -> list[dict]:
+    """Get all children of a parent node."""
+    repository = get_repo()
+    return await repository.get_all_children(question_id, parent_id)
+
+
+async def get_full_tree(question_id: str) -> list[dict]:
+    """Get all nodes for a question to build the complete tree."""
+    repository = get_repo()
+    return await repository.get_full_tree(question_id)
 
 
 async def get_conversation_path(

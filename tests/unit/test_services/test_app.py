@@ -262,7 +262,7 @@ def test_chat_completions_response_structure(mock_retrieve, mock_process):
 def test_health_endpoint(mock_session, mock_get_health):
     """Test /health endpoint returns components structure."""
     mock_get_health.return_value = {"qdrant_connected": True, "collections": {}}
-    mock_session.get_active_session_count.return_value = 2
+    mock_session.get_active_session_count = AsyncMock(return_value=2)
     mock_session.get_uptime.return_value = 123.456
 
     response = client.get("/health")

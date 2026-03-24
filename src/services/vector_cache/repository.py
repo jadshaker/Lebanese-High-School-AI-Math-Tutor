@@ -353,6 +353,85 @@ class QdrantRepository:
             "parent_id": parent_id,
         }
 
+    async def search_children_candidates(
+        self,
+        question_id: str,
+        parent_id: Optional[str],
+        user_input_embedding: list[float],
+        threshold: float = 0.7,
+        top_k: int = 5,
+    ) -> list[dict]:
+        """Search for top-K similar user inputs among children of a parent node."""
+        conditions: list[Condition] = [
+            FieldCondition(key="question_id", match=MatchValue(value=question_id))
+        ]
+
+        if parent_id:
+            conditions.append(
+                FieldCondition(key="parent_id", match=MatchValue(value=parent_id))
+            )
+        else:
+            conditions.append(FieldCondition(key="depth", match=MatchValue(value=1)))
+
+        results = await self.client.query_points(
+            collection_name=self.nodes_collection,
+            query=user_input_embedding,
+            limit=top_k,
+            score_threshold=threshold,
+            query_filter=Filter(must=conditions),
+            with_payload=True,
+        )
+
+        return [
+            {
+                "id": str(r.id),
+                "score": r.score,
+                **(r.payload or {}),
+            }
+            for r in results.points
+        ]
+
+    async def get_all_children(
+        self, question_id: str, parent_id: Optional[str]
+    ) -> list[dict]:
+        """Get ALL children of a parent node (not just best match)."""
+        conditions: list[Condition] = [
+            FieldCondition(key="question_id", match=MatchValue(value=question_id))
+        ]
+
+        if parent_id:
+            conditions.append(
+                FieldCondition(key="parent_id", match=MatchValue(value=parent_id))
+            )
+        else:
+            conditions.append(FieldCondition(key="depth", match=MatchValue(value=1)))
+
+        results, _ = await self.client.scroll(
+            collection_name=self.nodes_collection,
+            scroll_filter=Filter(must=conditions),
+            with_payload=True,
+            with_vectors=False,
+            limit=100,
+        )
+
+        return [{"id": str(r.id), **(r.payload or {})} for r in results]
+
+    async def get_full_tree(self, question_id: str) -> list[dict]:
+        """Get ALL nodes for a question to build the complete tree."""
+        conditions: list[Condition] = [
+            FieldCondition(key="question_id", match=MatchValue(value=question_id))
+        ]
+
+        results, _ = await self.client.scroll(
+            collection_name=self.nodes_collection,
+            scroll_filter=Filter(must=conditions),
+            with_payload=True,
+            with_vectors=False,
+            limit=500,
+        )
+
+        return [{"id": str(r.id), **(r.payload or {})} for r in results]
+
     async def get_conversation_path(
         self, question_id: str, node_id: Optional[str]
     ) -> dict:

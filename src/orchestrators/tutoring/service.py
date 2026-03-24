@@ -1,4 +1,5 @@
 import asyncio
+import re
 import time
 from typing import Any, Optional
 
@@ -11,49 +12,56 @@ from src.metrics import (
     gateway_errors_total,
     gateway_llm_calls_total,
 )
-from src.orchestrators.tutoring.prompts import (
-    TUTORING_AFFIRMATIVE_PROMPT,
-    TUTORING_NEGATIVE_PROMPT,
-    TUTORING_OFF_TOPIC_PROMPT,
-    TUTORING_PARTIAL_PROMPT,
-    TUTORING_QUESTION_PROMPT,
-    TUTORING_SKIP_PROMPT,
+from src.models.schemas import SessionPhase
+from src.orchestrators.answer_retrieval.service import (
+    _clean_llm_response,
+    retrieve_answer,
 )
-from src.services.intent_classifier.service import classify_text
+from src.orchestrators.data_processing.service import process_user_input
+from src.orchestrators.tutoring.prompts import TUTORING_SYSTEM_PROMPT
+from src.services import event_bus
 from src.services.session import service as session_service
 from src.services.vector_cache import service as vector_cache
 
 logger = StructuredLogger("gateway")
 
 
-async def _classify_intent(text: str, context: str | None, request_id: str) -> dict:
-    """Classify user intent using the intent classifier service."""
-    start_time = time.time()
-    try:
-        logger.info("  → Intent Classifier", request_id=request_id)
+def _safe_fmt(template: str, **kwargs: str) -> str:
+    """Substitute $key$ placeholders safely — avoids collisions with math braces."""
+    result = template
+    for key, value in kwargs.items():
+        result = result.replace(f"${key}$", value)
+    return result
 
-        result = classify_text(text, context, request_id)
 
-        duration = time.time() - start_time
-        logger.info(
-            f"  ✓ Intent Classifier ({duration:.1f}s): {result.intent.value} (confidence: {result.confidence:.2f})",
-            request_id=request_id,
-        )
-        return {
-            "intent": result.intent.value,
-            "confidence": result.confidence,
-            "method": result.method.value,
-        }
+def _parse_tutoring_response(
+    response_text: str, candidates: list[dict]
+) -> tuple[str, str | None, dict | None]:
+    """Parse the Fine-tuned model response to detect routing signals.
 
-    except Exception as e:
-        duration = time.time() - start_time
-        gateway_errors_total.labels(error_type="intent_classifier_error").inc()
+    Returns (classification, response_text_or_none, matched_node_or_none):
+        - ("match", None, matched_node) — identical to a cached response
+        - ("new_question", None, None) — new math question or correction
+        - ("tutoring", response_text, None) — direct tutoring response
+    """
+    stripped = response_text.strip()
 
-        logger.error(
-            f"Intent classification failed ({duration:.1f}s): {str(e)}",
-            request_id=request_id,
-        )
-        return {"intent": "question", "confidence": 0.5, "method": "fallback"}
+    # Check for [MATCH:<number>]
+    match = re.search(r"\[MATCH:(\d+)\]", stripped)
+    if match and candidates:
+        try:
+            idx = int(match.group(1)) - 1
+            if 0 <= idx < len(candidates):
+                return ("match", None, candidates[idx])
+        except (ValueError, IndexError):
+            pass
+
+    # Check for [NEW_QUESTION]
+    if "[NEW_QUESTION]" in stripped:
+        return ("new_question", None, None)
+
+    # Everything else is a direct tutoring response
+    return ("tutoring", response_text, None)
 
 
 async def _embed_text(text: str, request_id: str) -> list[float]:
@@ -89,47 +97,6 @@ async def _embed_text(text: str, request_id: str) -> list[float]:
             f"Embedding failed ({duration:.1f}s): {str(e)}", request_id=request_id
         )
         raise
-
-
-async def _search_tutoring_cache(
-    question_id: str,
-    parent_node_id: Optional[str],
-    user_embedding: list[float],
-    request_id: str,
-) -> dict:
-    """Search for cached tutoring response among children of current node."""
-    start_time = time.time()
-    try:
-        logger.info(
-            f"  → Vector Cache (search children, parent={parent_node_id})",
-            request_id=request_id,
-        )
-
-        result = await vector_cache.search_children(
-            question_id=question_id,
-            parent_id=parent_node_id,
-            user_input_embedding=user_embedding,
-            threshold=Config.TUTORING.CACHE_THRESHOLD,
-            request_id=request_id,
-        )
-
-        duration = time.time() - start_time
-        is_hit = result.get("is_cache_hit", False)
-        score = result.get("match_score")
-
-        logger.info(
-            f"  ✓ Vector Cache search ({duration:.2f}s): hit={is_hit}, score={score}",
-            request_id=request_id,
-        )
-        return result
-
-    except Exception as e:
-        duration = time.time() - start_time
-        logger.warning(
-            f"Tutoring cache search failed ({duration:.2f}s): {str(e)} (non-critical)",
-            request_id=request_id,
-        )
-        return {"is_cache_hit": False, "match_score": None, "matched_node": None}
 
 
 async def _save_tutoring_interaction(
@@ -182,16 +149,21 @@ async def _get_conversation_path(
         return {"path": [], "question_text": "", "answer_text": ""}
 
 
-async def _generate_tutoring_response(
+async def _call_fine_tuned(
     question: str,
     answer: str,
     conversation_path: list[dict],
+    candidates: list[dict],
     user_response: str,
-    intent: str,
-    depth: int,
     request_id: str,
-) -> dict:
-    """Generate tutoring response using Fine-tuned Model with full context."""
+) -> tuple[str, str | None, dict | None]:
+    """Single Fine-tuned model call that classifies AND generates.
+
+    Returns (classification, response_or_none, matched_node_or_none):
+        - ("match", None, matched_node) — use cached response
+        - ("new_question", None, None) — route to Q&A pipeline
+        - ("tutoring", response_text, None) — direct tutoring response
+    """
     start_time = time.time()
     try:
         # Build conversation context from path
@@ -203,59 +175,31 @@ async def _generate_tutoring_response(
                 path_context += f"  Student: {step.get('user_input', '')}\n"
                 path_context += f"  Tutor: {step.get('system_response', '')}\n"
 
-        # Build prompt based on intent
-        if intent == "skip":
-            system_prompt = TUTORING_SKIP_PROMPT.format(
-                question=question, answer=answer
+        # Build candidates section
+        candidates_section = ""
+        if candidates:
+            candidates_section = (
+                "\n**Cached student responses** (check for match before responding):\n"
             )
-            user_prompt = "Give me the answer directly."
-            is_complete = True
+            for i, node in enumerate(candidates[:5], 1):
+                candidates_section += f"{i}. {node.get('user_input', '')}\n"
 
-        elif intent == "affirmative":
-            system_prompt = TUTORING_AFFIRMATIVE_PROMPT.format(
-                question=question, answer=answer, path_context=path_context
-            )
-            user_prompt = f"Student says: {user_response}"
-            is_complete = depth >= Config.TUTORING.MAX_INTERACTION_DEPTH
-
-        elif intent == "negative":
-            system_prompt = TUTORING_NEGATIVE_PROMPT.format(
-                question=question, answer=answer, path_context=path_context
-            )
-            user_prompt = f"Student says they don't understand: {user_response}"
-            is_complete = False
-
-        elif intent == "partial":
-            system_prompt = TUTORING_PARTIAL_PROMPT.format(
-                question=question, answer=answer, path_context=path_context
-            )
-            user_prompt = f"Student partially understands: {user_response}"
-            is_complete = False
-
-        elif intent == "question":
-            system_prompt = TUTORING_QUESTION_PROMPT.format(
-                question=question, answer=answer, path_context=path_context
-            )
-            user_prompt = f"Student asks: {user_response}"
-            is_complete = False
-
-        else:  # off_topic
-            system_prompt = TUTORING_OFF_TOPIC_PROMPT.format(
-                question=question, path_context=path_context
-            )
-            user_prompt = f"Student says: {user_response}"
-            is_complete = False
+        system_prompt = _safe_fmt(
+            TUTORING_SYSTEM_PROMPT,
+            question=question,
+            answer=answer,
+            path_context=path_context,
+            candidates_section=candidates_section,
+            user_response=user_response,
+        )
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            {"role": "user", "content": user_response},
         ]
 
-        logger.info(
-            f"  → Fine-Tuned Model (tutoring, intent={intent})", request_id=request_id
-        )
+        logger.info("  → Fine-Tuned Model (tutoring)", request_id=request_id)
 
-        # Use fine_tuned_client directly instead of HTTP call
         call_params: dict[str, Any] = {
             "model": Config.FINE_TUNED_MODEL.MODEL_NAME,
             "messages": messages,
@@ -269,32 +213,26 @@ async def _generate_tutoring_response(
             fine_tuned_client.chat.completions.create, **call_params  # type: ignore[arg-type]
         )
 
-        response = result.choices[0].message.content or ""
+        response = _clean_llm_response(result.choices[0].message.content or "")
         duration = time.time() - start_time
         gateway_llm_calls_total.labels(llm_service="fine_tuned_tutoring").inc()
-
-        # Clean <think> tags
-        if "</think>" in response:
-            response = response.split("</think>")[-1].strip()
-        elif "<think>" in response:
-            response = response.split("<think>")[0].strip()
 
         logger.info(
             f"  ✓ Fine-Tuned Model tutoring ({duration:.1f}s): {len(response)} chars",
             request_id=request_id,
         )
 
-        next_prompt = None
-        if not is_complete:
-            next_prompt = (
-                "Do you understand this step? Would you like me to explain further?"
-            )
+        classification, text, matched = _parse_tutoring_response(response, candidates)
 
-        return {
-            "response": response,
-            "is_complete": is_complete,
-            "next_prompt": next_prompt,
-        }
+        logger.info(
+            f"  Tutoring classification: {classification}",
+            context={
+                "matched_node": matched.get("id", "") if matched else None,
+            },
+            request_id=request_id,
+        )
+
+        return classification, text, matched
 
     except Exception as e:
         duration = time.time() - start_time
@@ -307,6 +245,77 @@ async def _generate_tutoring_response(
         raise
 
 
+async def _handle_new_question(
+    session_id: str,
+    user_response: str,
+    request_id: str,
+) -> dict:
+    """Handle NEW_QUESTION classification: run full Q&A pipeline and reset session.
+
+    This covers both new questions and corrections of the original question.
+    """
+    logger.info(
+        "NEW_QUESTION detected — running full Q&A pipeline",
+        context={"input": user_response[:100]},
+        request_id=request_id,
+    )
+
+    # Step 1: Process + reformulate
+    processing_result = await process_user_input(user_response, request_id)
+    reformulated_query = processing_result["reformulated_query"]
+
+    # Step 2: Answer retrieval (embed → search → identity check → generate if miss)
+    retrieval_result = await retrieve_answer(
+        reformulated_query, request_id, original_query=user_response
+    )
+    new_answer = retrieval_result["answer"]
+    new_question_id = retrieval_result.get("question_id", "")
+
+    # Step 3: Reset session tutoring state
+    await session_service.reset_tutoring_state(session_id, request_id=request_id)
+
+    # Step 4: Update session with new question context
+    await session_service.update_session(
+        session_id,
+        phase=SessionPhase.TUTORING,
+        original_query=user_response,
+        reformulated_query=reformulated_query,
+        retrieved_answer=new_answer,
+        retrieval_source=retrieval_result.get("source", ""),
+        request_id=request_id,
+    )
+
+    if new_question_id:
+        await session_service.update_tutoring_state(
+            session_id,
+            question_id=new_question_id,
+            request_id=request_id,
+        )
+
+    logger.info(
+        "NEW_QUESTION pipeline completed",
+        context={
+            "new_question_id": new_question_id,
+            "answer_length": len(new_answer),
+        },
+        request_id=request_id,
+    )
+
+    # Emit new_question event for graph visualization
+    await event_bus.publish(
+        session_id,
+        {"type": "new_question", "question_id": new_question_id},
+    )
+
+    return {
+        "tutor_message": new_answer,
+        "is_complete": False,
+        "next_prompt": "Do you understand this step? Would you like me to explain further?",
+        "intent": "new_question",
+        "cache_hit": False,
+    }
+
+
 async def handle_tutoring_interaction(
     session_id: str,
     original_question: str,
@@ -315,29 +324,19 @@ async def handle_tutoring_interaction(
     user_response: str,
     request_id: str,
 ) -> dict:
-    """
-    Handle a tutoring interaction with full graph cache support.
+    """Handle a tutoring interaction with full graph cache support.
 
     Flow:
         1. Get or create session (with question_id tracking)
-        2. Embed user response
-        3. Search cache for matching child of current node
-        4. If cache hit → return cached response
-        5. If cache miss → classify intent, generate with Fine-tuned Model
-        6. Save new interaction to cache as child node
-        7. Update session with new node ID
-        8. Return response
-
-    Args:
-        session_id: Session ID for stateful conversation
-        original_question: The original math question
-        original_answer: The final answer (for context)
-        question_id: The question's ID in the cache
-        user_response: Student's response
-        request_id: Request ID for tracing
-
-    Returns:
-        Dict with tutor_message, is_complete, next_prompt, intent, cache_hit
+        2. Reformulate user response (better embedding/cache matching)
+        3. Embed reformulated response
+        4. Search cache for candidate children of current node (skip if is_new_branch)
+        5. Get conversation path for context
+        6. Single Fine-tuned model call: classify + generate (uses raw response)
+           - [MATCH:<n>] → return cached response
+           - [NEW_QUESTION] → run full Q&A pipeline (Large LLM)
+           - otherwise → use the response directly as tutoring output
+        7. Save new tutoring interaction to cache (reformulated text)
     """
     logger.info(
         f"Tutoring Interaction: session={session_id}, question_id={question_id}",
@@ -355,13 +354,13 @@ async def handle_tutoring_interaction(
         }
 
     # Step 1: Get or create session
-    session = session_service.get_session(session_id)
+    session = await session_service.get_session(session_id)
     is_new_branch = False
     if session is None:
-        session = session_service.create_session(
+        session = await session_service.create_session(
             initial_query=original_question, request_id=request_id
         )
-        session_service.update_tutoring_state(
+        await session_service.update_tutoring_state(
             session.session_id, question_id=question_id, request_id=request_id
         )
         current_node_id = None
@@ -371,71 +370,71 @@ async def handle_tutoring_interaction(
         depth = session.tutoring.depth
         is_new_branch = session.tutoring.is_new_branch
 
-    # Step 2: Check if we can skip cache search (new branch optimization)
+    # Emit session_start event for graph visualization
+    await event_bus.publish(
+        session_id,
+        {
+            "type": "session_start",
+            "question_id": question_id,
+            "current_node_id": current_node_id,
+            "depth": depth,
+        },
+    )
+
+    # Step 2: Reformulate user response for better embedding/cache matching
+    logger.info("  → Reformulator (tutoring)", request_id=request_id)
+    processing_result = await process_user_input(user_response, request_id)
+    reformulated_response = processing_result["reformulated_query"]
+    logger.info(
+        f"  ✓ Reformulator (tutoring): {reformulated_response[:50]}...",
+        request_id=request_id,
+    )
+
+    # Step 3: Embed reformulated response (better semantic matching)
+    user_embedding = await _embed_text(reformulated_response, request_id)
+
+    # Step 4: Search cache for candidate children (skip if new branch)
+    candidates: list[dict] = []
     if is_new_branch:
         logger.info(
             "Skipping cache search: is_new_branch=True (node has no cached children)",
             request_id=request_id,
         )
-        # Go directly to intent classification + generation (step 5)
-        user_embedding = await _embed_text(user_response, request_id)
     else:
-        # Step 2b: Embed user response
-        user_embedding = await _embed_text(user_response, request_id)
-
-        # Step 3: Search cache for matching child node
-        cache_result = await _search_tutoring_cache(
-            question_id=question_id,
-            parent_node_id=current_node_id,
-            user_embedding=user_embedding,
-            request_id=request_id,
+        # Emit cache_search event
+        await event_bus.publish(
+            session_id,
+            {
+                "type": "cache_search",
+                "question_id": question_id,
+                "parent_id": current_node_id,
+            },
         )
 
-        # Step 4: Check for cache hit
-        if cache_result.get("is_cache_hit") and cache_result.get("matched_node"):
-            matched_node = cache_result["matched_node"]
-            new_node_id = matched_node["id"]
-            tutor_response = matched_node["system_response"]
-            new_depth = matched_node.get("depth", depth + 1)
-
+        try:
             logger.info(
-                f"Tutoring cache HIT: node_id={new_node_id}, score={cache_result['match_score']:.2f}",
+                f"  → Vector Cache (search children candidates, parent={current_node_id})",
                 request_id=request_id,
             )
-
-            # Update session with the matched node (following existing path)
-            session_service.update_tutoring_state(
-                session_id=session_id,
-                current_node_id=new_node_id,
+            candidates = await vector_cache.search_children_candidates(
                 question_id=question_id,
-                depth=new_depth,
-                is_new_branch=False,
+                parent_id=current_node_id,
+                user_input_embedding=user_embedding,
+                threshold=0.7,
+                top_k=5,
+                request_id=request_id,
+            )
+            logger.info(
+                f"  ✓ Vector Cache search: {len(candidates)} candidates found",
+                request_id=request_id,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Tutoring cache search failed: {str(e)} (non-critical)",
                 request_id=request_id,
             )
 
-            is_complete = new_depth >= Config.TUTORING.MAX_INTERACTION_DEPTH
-            next_prompt = (
-                None
-                if is_complete
-                else "Do you understand? Would you like me to explain further?"
-            )
-
-            return {
-                "tutor_message": tutor_response,
-                "is_complete": is_complete,
-                "next_prompt": next_prompt,
-                "intent": "cached",
-                "cache_hit": True,
-            }
-
-    # Step 5: Cache miss (or skipped) - classify intent
-    logger.info("Tutoring cache MISS: generating new response", request_id=request_id)
-
-    context = f"The tutor is teaching: {original_question}"
-    intent_result = await _classify_intent(user_response, context, request_id)
-    intent = intent_result["intent"]
-
-    # Step 6: Get conversation path for context
+    # Step 5: Get conversation path for context
     conversation_path: list[dict] = []
     if current_node_id:
         path_result = await _get_conversation_path(
@@ -443,47 +442,153 @@ async def handle_tutoring_interaction(
         )
         conversation_path = path_result.get("path", [])
 
-    # Step 7: Generate response with Fine-tuned Model
-    tutoring_result = await _generate_tutoring_response(
+    # Step 6: Single Fine-tuned model call — classify + generate
+    classification, tutor_response, matched_node = await _call_fine_tuned(
         question=original_question,
         answer=original_answer,
         conversation_path=conversation_path,
+        candidates=candidates,
         user_response=user_response,
-        intent=intent,
-        depth=depth + 1,
         request_id=request_id,
     )
 
-    # Step 8: Save new interaction to cache
-    new_node_id = await _save_tutoring_interaction(
-        question_id=question_id,
-        parent_node_id=current_node_id,
-        user_input=user_response,
-        user_embedding=user_embedding,
-        system_response=tutoring_result["response"],
-        request_id=request_id,
-    )
+    # === Handle MATCH — return cached response ===
+    if classification == "match" and matched_node:
+        new_node_id = matched_node["id"]
+        cached_response = matched_node["system_response"]
+        new_depth = matched_node.get("depth", depth + 1)
+        match_score = matched_node.get("score", 0)
 
-    # Step 9: Update session with new node (mark as new branch since we just created it)
-    if new_node_id and not tutoring_result["is_complete"]:
-        session_service.update_tutoring_state(
+        logger.info(
+            f"Tutoring cache HIT: node_id={new_node_id}",
+            request_id=request_id,
+        )
+
+        # Emit cache_hit and position_update events
+        await event_bus.publish(
+            session_id,
+            {
+                "type": "cache_hit",
+                "matched_node_id": new_node_id,
+                "score": match_score,
+            },
+        )
+        await event_bus.publish(
+            session_id,
+            {
+                "type": "position_update",
+                "current_node_id": new_node_id,
+                "depth": new_depth,
+            },
+        )
+
+        # Update session with the matched node (following existing path)
+        await session_service.update_tutoring_state(
             session_id=session_id,
             current_node_id=new_node_id,
             question_id=question_id,
-            depth=depth + 1,
+            depth=new_depth,
+            is_new_branch=False,
+            request_id=request_id,
+        )
+
+        is_complete = new_depth >= Config.TUTORING.MAX_INTERACTION_DEPTH
+        next_prompt = (
+            None
+            if is_complete
+            else "Do you understand? Would you like me to explain further?"
+        )
+
+        return {
+            "tutor_message": cached_response,
+            "is_complete": is_complete,
+            "next_prompt": next_prompt,
+            "intent": "cached",
+            "cache_hit": True,
+        }
+
+    # === Handle NEW_QUESTION — run full Q&A pipeline ===
+    if classification == "new_question":
+        return await _handle_new_question(
+            session_id=session_id,
+            user_response=user_response,
+            request_id=request_id,
+        )
+
+    # === Handle TUTORING — use the generated response directly ===
+    assert tutor_response is not None
+    new_depth = depth + 1
+
+    logger.info("Tutoring response generated", request_id=request_id)
+
+    # Emit cache_miss event (only if we actually searched)
+    if not is_new_branch:
+        await event_bus.publish(
+            session_id,
+            {"type": "cache_miss", "parent_id": current_node_id},
+        )
+
+    # Save new interaction to cache (reformulated text for better future matching)
+    new_node_id = await _save_tutoring_interaction(
+        question_id=question_id,
+        parent_node_id=current_node_id,
+        user_input=reformulated_response,
+        user_embedding=user_embedding,
+        system_response=tutor_response,
+        request_id=request_id,
+    )
+
+    # Emit node_created event
+    if new_node_id:
+        await event_bus.publish(
+            session_id,
+            {
+                "type": "node_created",
+                "node_id": new_node_id,
+                "parent_id": current_node_id,
+                "question_id": question_id,
+                "user_input": user_response,
+                "depth": new_depth,
+            },
+        )
+
+    is_complete = new_depth >= Config.TUTORING.MAX_INTERACTION_DEPTH
+    next_prompt = (
+        None
+        if is_complete
+        else "Do you understand this step? Would you like me to explain further?"
+    )
+
+    # Update session with new node (mark as new branch since we just created it)
+    if new_node_id and not is_complete:
+        await session_service.update_tutoring_state(
+            session_id=session_id,
+            current_node_id=new_node_id,
+            question_id=question_id,
+            depth=new_depth,
             is_new_branch=True,
             request_id=request_id,
         )
 
+        # Emit position_update event
+        await event_bus.publish(
+            session_id,
+            {
+                "type": "position_update",
+                "current_node_id": new_node_id,
+                "depth": new_depth,
+            },
+        )
+
     logger.info(
-        f"Tutoring Interaction: completed - intent={intent}, complete={tutoring_result['is_complete']}, saved_node={new_node_id}",
+        f"Tutoring Interaction: completed - complete={is_complete}, saved_node={new_node_id}",
         request_id=request_id,
     )
 
     return {
-        "tutor_message": tutoring_result["response"],
-        "is_complete": tutoring_result["is_complete"],
-        "next_prompt": tutoring_result["next_prompt"],
-        "intent": intent,
+        "tutor_message": tutor_response,
+        "is_complete": is_complete,
+        "next_prompt": next_prompt,
+        "intent": "generated",
         "cache_hit": False,
     }
