@@ -385,6 +385,7 @@ async def chat_completions(
                     session_id=session_id,
                     original_question=session.original_query or "",
                     original_answer=session.retrieved_answer or "",
+                    final_solution=session.final_solution or "",
                     question_id=session.tutoring.question_id,
                     user_response=user_message,
                     request_id=request_id,
@@ -464,6 +465,7 @@ async def chat_completions(
             reformulated_query, request_id, original_query=user_message
         )
         answer = retrieval_result["answer"]
+        final_solution = retrieval_result.get("final_solution", "")
         source = retrieval_result["source"]
         question_id = retrieval_result.get("question_id", "")
         reused_question = retrieval_result.get("reused_question", False)
@@ -481,6 +483,7 @@ async def chat_completions(
                 session.session_id,
                 phase=SessionPhase.TUTORING,
                 retrieved_answer=answer,
+                final_solution=final_solution,
                 retrieval_source=source,
                 request_id=request_id,
             )
@@ -601,6 +604,7 @@ async def tutoring_interaction(
         # Get context from request or session
         original_question = request.original_question
         original_answer = request.original_answer or ""
+        final_solution = ""
         question_id = request.question_id or ""
 
         # If not provided, try to get from session
@@ -615,6 +619,7 @@ async def tutoring_interaction(
                     question_id = session_data.tutoring.question_id or ""
                 if not original_answer:
                     original_answer = session_data.retrieved_answer or ""
+                final_solution = session_data.final_solution or ""
 
             if not original_question:
                 original_question = "the math problem being tutored"
@@ -623,6 +628,7 @@ async def tutoring_interaction(
             session_id=request.session_id,
             original_question=original_question,
             original_answer=original_answer,
+            final_solution=final_solution,
             question_id=question_id,
             user_response=request.user_response,
             request_id=request_id,

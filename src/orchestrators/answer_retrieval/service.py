@@ -28,6 +28,9 @@ from src.services.vector_cache import service as vector_cache
 logger = StructuredLogger("gateway")
 
 
+_SOLUTION_SEPARATOR = "---SOLUTION---"
+
+
 def _clean_llm_response(response: str) -> str:
     """Strip <think>...</think> blocks from DeepSeek-R1 style responses."""
     if "</think>" in response:
@@ -35,6 +38,18 @@ def _clean_llm_response(response: str) -> str:
     elif "<think>" in response:
         response = response.split("<think>")[0].strip()
     return response
+
+
+def _split_answer_and_solution(raw: str) -> tuple[str, str]:
+    """Split an LLM response into the tutoring answer and the hidden solution.
+
+    Returns (answer_text, final_solution).  If the separator is missing the
+    entire response is treated as the answer and the solution is empty.
+    """
+    if _SOLUTION_SEPARATOR in raw:
+        parts = raw.split(_SOLUTION_SEPARATOR, 1)
+        return parts[0].strip(), parts[1].strip()
+    return raw.strip(), ""
 
 
 async def _embed_query(query: str, request_id: str) -> list[float]:
@@ -183,8 +198,11 @@ async def _check_question_identity(
         return None
 
 
-async def _generate_answer(query: str, request_id: str) -> str:
-    """Generate a new answer using the Large LLM."""
+async def _generate_answer(query: str, request_id: str) -> tuple[str, str]:
+    """Generate a new answer using the Large LLM.
+
+    Returns (answer_text, final_solution).
+    """
     start_time = time.time()
     try:
         logger.info("  → Large LLM (answer generation)", request_id=request_id)
@@ -210,16 +228,17 @@ async def _generate_answer(query: str, request_id: str) -> str:
             large_llm_client.chat.completions.create, **call_params  # type: ignore[arg-type]
         )
 
-        answer = _clean_llm_response(result.choices[0].message.content or "")
+        raw = _clean_llm_response(result.choices[0].message.content or "")
+        answer, final_solution = _split_answer_and_solution(raw)
         duration = time.time() - start_time
         gateway_large_llm_duration_seconds.observe(duration)
         gateway_llm_calls_total.labels(llm_service="large_llm").inc()
 
         logger.info(
-            f"  ✓ Large LLM ({duration:.1f}s): {len(answer)} chars",
+            f"  ✓ Large LLM ({duration:.1f}s): {len(answer)} chars answer, {len(final_solution)} chars solution",
             request_id=request_id,
         )
-        return answer
+        return answer, final_solution
 
     except Exception as e:
         duration = time.time() - start_time
@@ -236,6 +255,7 @@ async def _save_to_cache(
     original_query: str,
     reformulated_query: str,
     answer: str,
+    final_solution: str,
     embedding: list[float],
     request_id: str,
 ) -> str:
@@ -248,6 +268,7 @@ async def _save_to_cache(
             question_text=original_query,
             reformulated_text=reformulated_query,
             answer_text=answer,
+            final_solution=final_solution,
             embedding=embedding,
             request_id=request_id,
         )
@@ -313,6 +334,7 @@ async def retrieve_answer(
         gateway_cache_hits_total.inc()
         question_id = matched.get("id", "")
         answer = matched.get("answer_text", "")
+        final_solution = matched.get("final_solution", "")
 
         logger.info(
             f"Answer Retrieval Pipeline: Cache HIT (question_id={question_id})",
@@ -323,6 +345,7 @@ async def retrieve_answer(
 
         return {
             "answer": answer,
+            "final_solution": final_solution,
             "source": "cache_hit",
             "question_id": question_id,
             "reused_question": True,
@@ -334,13 +357,13 @@ async def retrieve_answer(
     gateway_cache_misses_total.inc()
 
     t0 = time.time()
-    answer = await _generate_answer(query, request_id)
+    answer, final_solution = await _generate_answer(query, request_id)
     latency["llm"] = round(time.time() - t0, 3)
 
     # Save to cache
     t0 = time.time()
     question_id = await _save_to_cache(
-        original_query, query, answer, embedding, request_id
+        original_query, query, answer, final_solution, embedding, request_id
     )
     latency["cache_save"] = round(time.time() - t0, 3)
 
@@ -353,6 +376,7 @@ async def retrieve_answer(
 
     return {
         "answer": answer,
+        "final_solution": final_solution,
         "source": "generated",
         "question_id": question_id,
         "reused_question": False,

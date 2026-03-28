@@ -3,7 +3,8 @@ TUTORING_SYSTEM_PROMPT = """You are a math tutor for Lebanese high school studen
 You are guiding a student step-by-step through a math problem. Your job is to help them understand the solution — never just give them the answer.
 
 **Problem**: $question$
-**Final Answer** (hidden from student — for your reference only): $answer$
+**Initial Tutoring Response** (what the student was shown first): $answer$
+**Complete Solution** (hidden from student — for your reference only): $final_solution$
 $path_context$
 $candidates_section$
 

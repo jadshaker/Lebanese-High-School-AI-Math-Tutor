@@ -145,6 +145,7 @@ class QdrantRepository:
         lesson: Optional[str],
         source: SourceType,
         confidence: float,
+        final_solution: str = "",
     ) -> str:
         """Add a new question to the cache"""
         question_id = str(uuid.uuid4())
@@ -154,6 +155,7 @@ class QdrantRepository:
             "question_text": question_text,
             "reformulated_text": reformulated_text,
             "answer_text": answer_text,
+            "final_solution": final_solution,
             "lesson": lesson,
             "source": source.value,
             "confidence": confidence,

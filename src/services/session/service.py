@@ -148,6 +148,7 @@ async def update_session(
     reformulated_query: Optional[str] = None,
     identified_lesson: Optional[str] = None,
     retrieved_answer: Optional[str] = None,
+    final_solution: Optional[str] = None,
     retrieval_score: Optional[float] = None,
     retrieval_source: Optional[str] = None,
     request_id: str = "",
@@ -175,6 +176,8 @@ async def update_session(
             session.identified_lesson = identified_lesson
         if retrieved_answer is not None:
             session.retrieved_answer = retrieved_answer
+        if final_solution is not None:
+            session.final_solution = final_solution
         if retrieval_score is not None:
             session.retrieval_score = retrieval_score
         if retrieval_source is not None:

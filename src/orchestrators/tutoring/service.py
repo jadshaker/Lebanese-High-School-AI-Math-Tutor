@@ -152,6 +152,7 @@ async def _get_conversation_path(
 async def _call_fine_tuned(
     question: str,
     answer: str,
+    final_solution: str,
     conversation_path: list[dict],
     candidates: list[dict],
     user_response: str,
@@ -188,6 +189,7 @@ async def _call_fine_tuned(
             TUTORING_SYSTEM_PROMPT,
             question=question,
             answer=answer,
+            final_solution=final_solution,
             path_context=path_context,
             candidates_section=candidates_section,
             user_response=user_response,
@@ -269,6 +271,7 @@ async def _handle_new_question(
         reformulated_query, request_id, original_query=user_response
     )
     new_answer = retrieval_result["answer"]
+    new_final_solution = retrieval_result.get("final_solution", "")
     new_question_id = retrieval_result.get("question_id", "")
 
     # Step 3: Reset session tutoring state
@@ -281,6 +284,7 @@ async def _handle_new_question(
         original_query=user_response,
         reformulated_query=reformulated_query,
         retrieved_answer=new_answer,
+        final_solution=new_final_solution,
         retrieval_source=retrieval_result.get("source", ""),
         request_id=request_id,
     )
@@ -320,6 +324,7 @@ async def handle_tutoring_interaction(
     session_id: str,
     original_question: str,
     original_answer: str,
+    final_solution: str,
     question_id: str,
     user_response: str,
     request_id: str,
@@ -446,6 +451,7 @@ async def handle_tutoring_interaction(
     classification, tutor_response, matched_node = await _call_fine_tuned(
         question=original_question,
         answer=original_answer,
+        final_solution=final_solution,
         conversation_path=conversation_path,
         candidates=candidates,
         user_response=user_response,
