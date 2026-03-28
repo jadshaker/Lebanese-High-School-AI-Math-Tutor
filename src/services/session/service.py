@@ -280,6 +280,7 @@ async def reset_tutoring_state(
         session.original_query = None
         session.reformulated_query = None
         session.retrieved_answer = None
+        session.final_solution = None
         session.retrieval_score = None
         session.retrieval_source = None
         session.last_activity = datetime.now(timezone.utc)
