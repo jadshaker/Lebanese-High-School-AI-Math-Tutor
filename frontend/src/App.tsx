@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import type { Attachment } from './api/types'
+import { uuid } from './utils/uuid'
 import { useConversationStore } from './hooks/useConversationStore'
 import { useGraph } from './hooks/useGraph'
 import { useHealth } from './hooks/useHealth'
@@ -66,7 +67,7 @@ export default function App() {
         filename: string
       }
       const attachment: Attachment = {
-        id: crypto.randomUUID(),
+        id: uuid(),
         name: filename,
         type: 'image',
         mimeType,

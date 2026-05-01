@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { buildWsUrl, fetchGraphTree, fetchSessionState } from '../api/client'
 import type { GraphEvent, GraphTree } from '../api/types'
+import { uuid } from '../utils/uuid'
 
 const MAX_EVENTS = 20
 
@@ -23,7 +24,7 @@ export function useGraph(sessionId: string | null) {
 
   const pushEvent = useCallback((event: GraphEvent) => {
     setEvents((prev) => [
-      { ...event, id: crypto.randomUUID() },
+      { ...event, id: uuid() },
       ...prev.slice(0, MAX_EVENTS - 1),
     ])
   }, [])
