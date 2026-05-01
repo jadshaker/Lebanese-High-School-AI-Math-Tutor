@@ -216,7 +216,11 @@ export function MessageBlock({ message, isLastAssistant, onRegenerate, onEditRes
               </div>
             </div>
           ) : isUser ? (
-            <span className="whitespace-pre-wrap">{message.content}</span>
+            <div className="prose prose-invert prose-sm max-w-none prose-p:my-0.5 prose-p:leading-relaxed">
+              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                {normaliseLatex(message.content)}
+              </ReactMarkdown>
+            </div>
           ) : (
             <div className="prose prose-invert prose-sm max-w-none
               prose-p:my-1 prose-p:leading-relaxed
