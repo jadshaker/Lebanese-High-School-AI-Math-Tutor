@@ -98,6 +98,15 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
+// ── LaTeX delimiter normaliser ────────────────────────────────────────────────
+// DeepSeek (and many LLMs) emit \(...\) / \[...\] delimiters; remark-math only
+// understands $...$ / $$...$$, so we convert before rendering.
+function normaliseLatex(content: string): string {
+  return content
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_m, math) => `$$${math}$$`)
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_m, math) => `$${math}$`)
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface Props {
@@ -218,7 +227,7 @@ export function MessageBlock({ message, isLastAssistant, onRegenerate, onEditRes
               prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5
             ">
               <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                {message.content}
+                {normaliseLatex(message.content)}
               </ReactMarkdown>
             </div>
           )}
