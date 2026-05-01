@@ -91,6 +91,7 @@ async def add_question(
     lesson: Optional[str] = None,
     source: SourceType = SourceType.API_LLM,
     confidence: float = 0.9,
+    final_solution: str = "",
     request_id: str = "",
 ) -> str:
     """Add a question to the cache."""
@@ -106,6 +107,7 @@ async def add_question(
         lesson=lesson,
         source=source,
         confidence=confidence,
+        final_solution=final_solution,
     )
 
     cache_questions_total.inc()

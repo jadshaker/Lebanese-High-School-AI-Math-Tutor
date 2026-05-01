@@ -217,6 +217,7 @@ class SessionData(BaseModel):
     reformulated_query: Optional[str] = None
     identified_lesson: Optional[str] = None
     retrieved_answer: Optional[str] = None
+    final_solution: Optional[str] = None
     retrieval_score: Optional[float] = None
     retrieval_source: Optional[str] = None
     tutoring: TutoringState = Field(default_factory=TutoringState)
@@ -265,6 +266,7 @@ class SessionUpdateRequest(BaseModel):
     reformulated_query: Optional[str] = None
     identified_lesson: Optional[str] = None
     retrieved_answer: Optional[str] = None
+    final_solution: Optional[str] = None
     retrieval_score: Optional[float] = None
     retrieval_source: Optional[str] = None
 
