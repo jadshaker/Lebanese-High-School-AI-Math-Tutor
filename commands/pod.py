@@ -68,29 +68,16 @@ def _build_startup_cmd() -> str:
     """Build docker startup command for 3 vLLM instances.
 
     Each instance is pinned to its own GPU via CUDA_VISIBLE_DEVICES.
-    The fine-tuned model slot uses LoRA (Llama base + adapter from HF).
+    Model names are read from .env so each instance serves the right model.
     """
     cmds = []
     for model_var, _, _, port, gpu_idx in SERVICES:
-        if model_var == "FINE_TUNED_MODEL_NAME":
-            base = _read_env_var("FINE_TUNED_BASE_MODEL")
-            repo = _read_env_var("FINE_TUNED_ADAPTER_REPO")
-            adapter = _read_env_var("FINE_TUNED_ADAPTER_NAME")
-            cmds.append(
-                f"hf download {repo} --local-dir /workspace/adapter && "
-                f"hf download {base} --local-dir /workspace/base-model && "
-                f"CUDA_VISIBLE_DEVICES={gpu_idx} vllm serve /workspace/base-model "
-                f"--enable-lora --lora-modules {adapter}=/workspace/adapter/{adapter} "
-                f"--port {port} --gpu-memory-utilization 0.9 "
-                f"--max-model-len 4096 --max-lora-rank 64 --host 0.0.0.0 --api-key {VLLM_API_KEY} &"
-            )
-        else:
-            model = _read_env_var(model_var)
-            cmds.append(
-                f"CUDA_VISIBLE_DEVICES={gpu_idx} vllm serve {model} "
-                f"--port {port} --gpu-memory-utilization 0.9 "
-                f"--max-model-len 4096 --host 0.0.0.0 --api-key {VLLM_API_KEY} &"
-            )
+        model = _read_env_var(model_var)
+        cmds.append(
+            f"CUDA_VISIBLE_DEVICES={gpu_idx} vllm serve {model} "
+            f"--port {port} --gpu-memory-utilization 0.9 "
+            f"--max-model-len 4096 --host 0.0.0.0 --api-key {VLLM_API_KEY} &"
+        )
     vllm_starts = " ".join(cmds)
     script = f"export HF_HOME=/root/.cache/huggingface && {vllm_starts} wait"
     # Escaped double quotes — the RunPod SDK wraps docker_args in "..." for GraphQL
