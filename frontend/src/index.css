@@ -1,0 +1,79 @@
+@import 'katex/dist/katex.min.css';
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base ───────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #0a0a10;
+  color: #e2e8f0;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────────── */
+.scrollbar-thin::-webkit-scrollbar { width: 4px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #2a2a42; border-radius: 2px; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #3a3a5c; }
+
+/* ── Thinking animation ─────────────────────────────────────────────────────── */
+@keyframes thinking {
+  0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+  40%           { transform: scale(1); opacity: 1; }
+}
+
+/* ── KaTeX overrides for dark theme ────────────────────────────────────────── */
+.katex { color: #e2e8f0; font-size: 1em; }
+.katex-display { overflow-x: auto; padding: 0.5rem 0; }
+.katex-display > .katex { text-align: left; }
+
+/* ── Prose math ─────────────────────────────────────────────────────────────── */
+.prose .katex-display {
+  margin: 0.75rem 0;
+  padding: 0.75rem 1rem;
+  background: #1a1a28;
+  border: 1px solid #2a2a42;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+}
+
+/* ── Dot grid background for chat panel ────────────────────────────────────── */
+.dot-grid {
+  background-image: radial-gradient(circle, #2a2a42 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 0 0;
+}
+
+/* ── Cytoscape container ────────────────────────────────────────────────────── */
+.cy-tooltip {
+  position: absolute;
+  background: #1a1a28;
+  border: 1px solid #2a2a42;
+  color: #94a3b8;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  max-width: 220px;
+  z-index: 100;
+}
+
+/* ── Utility ────────────────────────────────────────────────────────────────── */
+.bg-gold\/8  { background-color: rgba(245, 158, 11, 0.08); }
+.bg-indigo\/8 { background-color: rgba(129, 140, 248, 0.08); }
+.bg-rose\/8  { background-color: rgba(248, 113, 113, 0.08); }

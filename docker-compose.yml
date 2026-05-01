@@ -35,38 +35,18 @@ services:
       - math-tutor-network
     restart: unless-stopped
 
-  # Open WebUI - User-facing frontend
-  open-webui:
-    image: ghcr.io/open-webui/open-webui:main
+  # Math Atelier - Custom React frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: math-tutor-ui
     ports:
-      - '3000:8080'
-    environment:
-      # API Configuration
-      - OPENAI_API_BASE_URLS=http://app:8000/v1
-      - OPENAI_API_KEYS=dummy-key
-
-      # OLLAMA Configuration
-      - ENABLE_OLLAMA_API=False
-
-      # Branding
-      - WEBUI_NAME=Lebanese High School Math Tutor
-      - DEFAULT_LOCALE=en-US
-
-      # User Management
-      - ENABLE_SIGNUP=True
-      - ENABLE_LOGIN_FORM=True
-      - DEFAULT_USER_ROLE=user
-
-      # UI Customization
-      - SHOW_ADMIN_DETAILS=True
-      - ENABLE_COMMUNITY_SHARING=False
+      - '3000:80'
     depends_on:
       - app
     networks:
       - math-tutor-network
-    volumes:
-      - open-webui-data:/app/backend/data
     restart: unless-stopped
 
   # Prometheus - Metrics collection
@@ -108,7 +88,6 @@ networks:
     driver: bridge
 
 volumes:
-  open-webui-data:
   prometheus-data:
   grafana-data:
   qdrant-data:
