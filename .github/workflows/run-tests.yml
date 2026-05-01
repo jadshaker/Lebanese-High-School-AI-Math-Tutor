@@ -52,7 +52,7 @@ jobs:
           EMBEDDING_DIMENSIONS=1536
 
           FINE_TUNED_MODEL_SERVICE_URL=https://api.runpod.ai/v2/${FINE_TUNED_ENDPOINT_ID}/openai
-          FINE_TUNED_MODEL_NAME=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+          FINE_TUNED_MODEL_NAME=jadshaker/tutorbot-dpo-merged
           FINE_TUNED_MODEL_API_KEY=$RUNPOD_API_KEY
           FINE_TUNED_MODEL_TEMPERATURE=0.7
           FINE_TUNED_MODEL_TOP_P=0.9
@@ -112,7 +112,7 @@ jobs:
           curl -s -m 300 "https://api.runpod.ai/v2/${FINE_TUNED_ENDPOINT_ID}/openai/v1/chat/completions" \
             -H "Authorization: Bearer $RUNPOD_API_KEY" \
             -H "Content-Type: application/json" \
-            -d '{"model":"deepseek-ai/DeepSeek-R1-Distill-Qwen-7B","messages":[{"role":"user","content":"hi"}]}' > /dev/null &
+            -d '{"model":"jadshaker/tutorbot-dpo-merged","messages":[{"role":"user","content":"hi"}]}' > /dev/null &
           PID3=$!
 
           # Wait for all warmup requests to complete
@@ -163,7 +163,7 @@ jobs:
         env:
           SMALL_LLM_MODEL_NAME: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
           REFORMULATOR_LLM_MODEL_NAME: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
-          FINE_TUNED_MODEL_NAME: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+          FINE_TUNED_MODEL_NAME: jadshaker/tutorbot-dpo-merged
           LARGE_LLM_MODEL_NAME: gpt-4o-mini
         run: |
           echo "Running all tests..."
