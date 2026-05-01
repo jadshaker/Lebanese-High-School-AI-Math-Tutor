@@ -177,7 +177,6 @@ def start() -> None:
                 container_disk_in_gb=100,
                 ports=",".join(f"{p}/http" for _, _, _, p, _ in SERVICES),
                 docker_args=_build_startup_cmd(),
-                env={"HF_TOKEN": _read_env_var("HF_TOKEN")},
             )
             used_gpu = gpu
             print(f"  Created: {pod['id']}")
