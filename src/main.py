@@ -140,10 +140,8 @@ async def lifespan(app: FastAPI):
 
     # Initialize Qdrant
     qdrant_client = AsyncQdrantClient(
-        host=Config.QDRANT.HOST,
-        port=Config.QDRANT.PORT,
-        grpc_port=Config.QDRANT.GRPC_PORT,
-        prefer_grpc=True,
+        url=Config.QDRANT.URL,
+        api_key=Config.QDRANT.API_KEY,
     )
     await vector_cache.initialize(qdrant_client)
 

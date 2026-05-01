@@ -58,9 +58,8 @@ class Config:
     # === Qdrant ===
 
     class QDRANT:
-        HOST = os.environ["QDRANT_HOST"]
-        PORT = int(os.getenv("QDRANT_PORT", "6333"))
-        GRPC_PORT = int(os.getenv("QDRANT_GRPC_PORT", "6334"))
+        URL = os.environ["QDRANT_CLUSTER_ENDPOINT"]
+        API_KEY = os.environ["QDRANT_API_KEY"]
 
     class COLLECTIONS:
         QUESTIONS = "questions"
