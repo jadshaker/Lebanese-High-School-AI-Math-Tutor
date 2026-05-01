@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Math Canvas — Interactive Geometry</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a10;
+    --surface: #111118;
+    --surface-hover: #20203a;
+    --border: #2a2a42;
+    --border-active: #3a3a5c;
+    --text: #e2e8f0;
+    --text-muted: #64748b;
+    --accent: #818cf8;
+    --accent-glow: rgba(129, 140, 248, 0.15);
+    --accent-hover: #a5b4fc;
+    --gold: #f59e0b;
+    --gold-glow: rgba(245, 158, 11, 0.15);
+    --green: #34d399;
+    --orange: #f59e0b;
+    --red: #f87171;
+    --pink: #c084fc;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
+    flex-shrink: 0;
+    height: 48px;
+  }
+  .logo { display: flex; align-items: center; gap: 8px; }
+  .logo-icon {
+    width: 28px; height: 28px;
+    background: rgba(129, 140, 248, 0.15);
+    border: 1px solid rgba(129, 140, 248, 0.3);
+    border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+  .logo h1 { font-size: 14px; font-weight: 600; letter-spacing: -0.3px; color: var(--text); }
+  .logo h1 span { color: var(--gold); }
+
+  .header-actions { display: flex; gap: 6px; align-items: center; }
+  .header-btn {
+    background: var(--surface-hover); border: 1px solid var(--border); color: var(--text-muted);
+    padding: 5px 12px; border-radius: var(--radius-sm); font-size: 12px; font-family: inherit;
+    cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 5px;
+    white-space: nowrap;
+  }
+  .header-btn:hover { background: var(--border); color: var(--text); border-color: var(--border-active); }
+  .header-btn.primary {
+    background: rgba(245,158,11,0.15); border-color: rgba(245,158,11,0.35); color: var(--gold);
+  }
+  .header-btn.primary:hover { background: rgba(245,158,11,0.25); }
+  /* ── Export modal ── */
+  .export-modal-backdrop {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+    z-index: 500; align-items: center; justify-content: center;
+  }
+  .export-modal-backdrop.visible { display: flex; animation: fadeIn 0.15s ease; }
+  .export-modal {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    width: 420px; max-width: 95vw; box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .export-modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 18px 12px; border-bottom: 1px solid var(--border);
+  }
+  .export-modal-header h3 { font-size: 14px; font-weight: 600; color: var(--text); }
+  .export-modal-header h3 span { color: var(--gold); }
+  .export-modal-close {
+    background: var(--surface-hover); border: 1px solid var(--border); color: var(--text-muted);
+    border-radius: 6px; width: 26px; height: 26px; cursor: pointer; font-size: 14px;
+    display: flex; align-items: center; justify-content: center; transition: all 0.12s;
+  }
+  .export-modal-close:hover { background: var(--border); color: var(--text); }
+  .export-modal-body { padding: 18px; display: flex; flex-direction: column; gap: 18px; }
+  .export-section-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 8px;
+  }
+  .export-format-row { display: flex; gap: 8px; }
+  .export-format-btn {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text-muted); padding: 10px 8px; font-size: 12px; font-family: inherit;
+    cursor: pointer; transition: all 0.12s; text-align: center;
+  }
+  .export-format-btn:hover { border-color: var(--accent); color: var(--text); }
+  .export-format-btn.selected {
+    border-color: var(--accent); background: rgba(129,140,248,0.12); color: var(--accent);
+  }
+  .export-format-btn .fmt-ext {
+    display: block; font-size: 16px; font-weight: 700; margin-bottom: 2px; color: inherit;
+  }
+  .export-dest-row { display: flex; gap: 8px; }
+  .export-dest-btn {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text-muted); padding: 14px 10px; font-size: 12px; font-family: inherit;
+    cursor: pointer; transition: all 0.12s; text-align: center; display: flex;
+    flex-direction: column; align-items: center; gap: 6px;
+  }
+  .export-dest-btn:hover { border-color: var(--gold); color: var(--text); }
+  .export-dest-btn .dest-icon { font-size: 22px; }
+  .export-dest-btn.dest-chat { }
+  .export-dest-btn.dest-chat:hover { border-color: var(--accent); }
+  .export-modal-note {
+    font-size: 11px; color: var(--text-muted); background: var(--bg);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 8px 10px; line-height: 1.5;
+  }
+  .export-modal-note span { color: var(--gold); }
+
+  /* ── Layout ── */
+  .main-layout { display: flex; flex: 1; overflow: hidden; }
+  .sidebar {
+    width: 240px; background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto;
+  }
+  .sidebar-section { padding: 12px; border-bottom: 1px solid var(--border); }
+  .sidebar-section h3 {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--text-muted); margin-bottom: 8px; font-weight: 600;
+  }
+  .tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+  .tool-btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 6px; border-radius: var(--radius-sm); font-size: 11px; font-family: inherit;
+    cursor: pointer; transition: all 0.15s; display: flex; flex-direction: column;
+    align-items: center; gap: 4px; text-align: center; line-height: 1.2;
+  }
+  .tool-btn .tool-icon { font-size: 16px; line-height: 1; }
+  .tool-btn:hover { background: var(--surface-hover); border-color: var(--accent); }
+  .tool-btn.active {
+    background: var(--accent-glow); border-color: var(--accent); color: var(--accent);
+  }
+
+  .quick-shapes { display: flex; flex-direction: column; gap: 3px; }
+  .shape-btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 7px 10px; border-radius: var(--radius-sm); font-size: 12px; font-family: inherit;
+    cursor: pointer; transition: all 0.15s; text-align: left; display: flex; align-items: center; gap: 7px;
+  }
+  .shape-btn:hover { background: var(--surface-hover); border-color: var(--gold); }
+  .shape-btn .shape-icon { font-size: 14px; width: 18px; text-align: center; }
+
+  .color-swatches { display: flex; gap: 5px; flex-wrap: wrap; }
+  .swatch {
+    width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .swatch:hover { transform: scale(1.15); }
+  .swatch.active { border-color: white; box-shadow: 0 0 6px rgba(255,255,255,0.25); }
+
+  /* ── Canvas area ── */
+  .canvas-area { flex: 1; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+  .toolbar-strip {
+    display: flex; align-items: center; gap: 5px; padding: 6px 12px;
+    background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto;
+  }
+  .toolbar-strip .tb-btn {
+    background: none; border: 1px solid transparent; color: var(--text-muted);
+    padding: 5px 9px; border-radius: 6px; font-size: 11px; font-family: inherit;
+    cursor: pointer; white-space: nowrap; transition: all 0.12s; display: flex; align-items: center; gap: 4px;
+  }
+  .toolbar-strip .tb-btn:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border); }
+  .toolbar-strip .tb-btn.active { background: var(--accent-glow); border-color: var(--accent); color: var(--accent); }
+  .tb-divider { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
+
+  #ggb-container { flex: 1; position: relative; background: #ffffff; }
+  .svg-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
+
+  /* ── Command bar ── */
+  .command-bar {
+    display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+    background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0;
+  }
+  .command-bar label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .command-bar input {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 10px; border-radius: var(--radius-sm); font-size: 12px;
+    font-family: 'Inter', monospace; outline: none; transition: border-color 0.15s;
+  }
+  .command-bar input:focus { border-color: var(--accent); }
+  .command-bar input::placeholder { color: var(--text-muted); opacity: 0.5; }
+  .command-bar button {
+    background: rgba(129,140,248,0.2); border: 1px solid rgba(129,140,248,0.4); color: var(--accent);
+    padding: 6px 14px; border-radius: var(--radius-sm); font-size: 12px; font-family: inherit;
+    cursor: pointer; font-weight: 600; transition: background 0.15s;
+  }
+  .command-bar button:hover { background: rgba(129,140,248,0.3); }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(50px);
+    background: var(--surface); border: 1px solid var(--border); padding: 8px 18px; border-radius: 24px;
+    font-size: 12px; color: var(--text); box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    opacity: 0; transition: all 0.25s ease; z-index: 600; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── Help overlay ── */
+  .help-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 500; display: none; overflow-y: auto; }
+  .help-overlay.visible { display: block; animation: fadeIn 0.18s ease; }
+  .help-header {
+    display: flex; align-items: center; justify-content: space-between; padding: 12px 28px;
+    background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10;
+  }
+  .help-header h2 { font-size: 16px; font-weight: 600; color: var(--text); }
+  .help-header h2 span { color: var(--gold); }
+  .help-close-btn {
+    background: var(--surface-hover); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 14px; border-radius: var(--radius-sm); font-size: 12px; font-family: inherit;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .help-close-btn:hover { background: var(--border); }
+  .help-content { max-width: 860px; margin: 0 auto; padding: 28px; }
+  .help-content h2 {
+    font-size: 14px; font-weight: 600; color: var(--accent);
+    margin: 28px 0 12px; padding-bottom: 7px; border-bottom: 1px solid var(--border);
+  }
+  .help-content h2:first-child { margin-top: 0; }
+  .help-intro { font-size: 13px; line-height: 1.7; color: var(--text-muted); margin-bottom: 8px; }
+  .help-tool-table { width: 100%; border-collapse: collapse; margin: 10px 0 20px; }
+  .help-tool-table th {
+    text-align: left; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 600;
+  }
+  .help-tool-table td {
+    padding: 9px 12px; border: 1px solid var(--border); font-size: 12px; color: var(--text);
+    vertical-align: top; line-height: 1.5;
+  }
+  .help-tool-table tr:hover td { background: var(--surface); }
+  .help-tool-table .tn { font-weight: 600; color: var(--accent); white-space: nowrap; }
+  .help-tool-table .steps { color: var(--text-muted); font-size: 11px; margin-top: 3px; }
+  .help-tool-table .steps strong { color: var(--green); font-weight: 500; }
+  .help-cmd-example {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 12px 16px; margin: 8px 0; font-family: 'Inter', monospace; font-size: 12px;
+    color: var(--green); line-height: 1.9;
+  }
+  .help-cmd-example .desc { color: var(--text-muted); font-family: 'Inter', sans-serif; }
+  .help-shortcut-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+  .help-shortcut-table td { padding: 7px 12px; border: 1px solid var(--border); font-size: 12px; }
+  .help-shortcut-table td:first-child { width: 140px; }
+  .help-shortcut-table kbd {
+    background: var(--bg); border: 1px solid var(--border); padding: 2px 7px; border-radius: 4px;
+    font-size: 11px; color: var(--accent);
+  }
+  .help-shortcut-table td:last-child { color: var(--text-muted); }
+  .help-tip {
+    background: var(--accent-glow); border: 1px solid rgba(129,140,248,0.25);
+    border-radius: var(--radius-sm); padding: 10px 14px; margin: 10px 0; font-size: 12px;
+    color: var(--text); line-height: 1.6;
+  }
+  .help-tip strong { color: var(--accent); }
+
+  /* ── SVG Import Modal ── */
+  .import-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 500;
+    display: none; align-items: center; justify-content: center;
+  }
+  .import-modal-backdrop.visible { display: flex; animation: fadeIn 0.15s ease; }
+  .import-modal {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    width: 540px; max-width: 92vw; max-height: 85vh; overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .import-modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+  }
+  .import-modal-header h3 { font-size: 15px; font-weight: 600; color: var(--text); }
+  .import-modal-header h3 span { color: var(--gold); }
+  .import-modal-close {
+    background: var(--surface-hover); border: 1px solid var(--border); color: var(--text-muted);
+    width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    display: flex; align-items: center; justify-content: center; transition: background 0.12s;
+  }
+  .import-modal-close:hover { background: var(--border); color: var(--text); }
+  .import-modal-body { padding: 18px; }
+  .import-preview {
+    background: #ffffff; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 10px; margin-bottom: 14px; display: flex; align-items: center; justify-content: center;
+    min-height: 160px; max-height: 260px; overflow: hidden;
+  }
+  .import-preview svg { max-width: 100%; max-height: 240px; }
+  .import-stats {
+    font-size: 11px; color: var(--text-muted); margin-bottom: 14px;
+    background: var(--bg); padding: 9px 12px; border-radius: var(--radius-sm); line-height: 1.7;
+  }
+  .import-stats strong { color: var(--text); }
+  .import-options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+  .import-opt-row { display: flex; align-items: center; gap: 10px; }
+  .import-opt-row label { font-size: 12px; color: var(--text-muted); min-width: 90px; flex-shrink: 0; }
+  .import-opt-row input[type="number"] {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 5px 9px; border-radius: 6px; font-size: 12px; font-family: inherit;
+    width: 82px; outline: none; transition: border-color 0.15s;
+  }
+  .import-opt-row input[type="number"]:focus { border-color: var(--accent); }
+  .import-opt-row input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+  .import-opt-row .opt-hint { font-size: 10px; color: var(--text-muted); }
+  .import-modal-footer {
+    display: flex; justify-content: flex-end; gap: 7px;
+    padding: 12px 18px; border-top: 1px solid var(--border);
+  }
+  .import-modal-footer button {
+    padding: 7px 18px; border-radius: var(--radius-sm); font-size: 12px;
+    font-family: inherit; cursor: pointer; font-weight: 600; transition: all 0.12s; border: 1px solid var(--border);
+  }
+  .import-btn-cancel { background: var(--surface-hover); color: var(--text-muted); }
+  .import-btn-cancel:hover { background: var(--border); color: var(--text); }
+  .import-btn-go { background: rgba(245,158,11,0.15); border-color: rgba(245,158,11,0.4) !important; color: var(--gold); }
+  .import-btn-go:hover { background: rgba(245,158,11,0.25); }
+
+  /* ── Import tabs ── */
+  .import-tab {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text-muted);
+    padding: 4px 10px; border-radius: 6px; font-size: 11px; font-family: inherit;
+    cursor: pointer; transition: all 0.12s;
+  }
+  .import-tab:hover { color: var(--text); }
+  .import-tab.active { background: var(--accent-glow); border-color: var(--accent); color: var(--accent); }
+
+  /* ── Primitives table ── */
+  .primitives-table-wrap {
+    max-height: 260px; overflow-y: auto; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--bg);
+  }
+  .prim-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .prim-table th {
+    position: sticky; top: 0; background: var(--surface); padding: 7px 9px;
+    text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--border); z-index: 1;
+  }
+  .prim-table td { padding: 5px 9px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+  .prim-table tr:hover td { background: var(--surface); }
+  .prim-table .prim-enabled { text-align: center; }
+  .prim-table .prim-enabled input { accent-color: var(--accent); cursor: pointer; }
+  .prim-type-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 9px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .prim-type-badge.segment { background: rgba(129,140,248,0.15); color: var(--accent); }
+  .prim-type-badge.circle  { background: rgba(52,211,153,0.15);  color: var(--green); }
+  .prim-type-badge.ellipse { background: rgba(192,132,252,0.15); color: var(--pink); }
+  .prim-type-badge.polygon { background: rgba(245,158,11,0.15);  color: var(--gold); }
+  .prim-type-badge.path    { background: rgba(248,113,113,0.15); color: var(--red); }
+  .prim-ggb-cmd {
+    color: var(--green); max-width: 260px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; font-family: 'Inter', monospace;
+  }
+
+  /* ── AI Modal ── */
+  .ai-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 500;
+    display: none; align-items: center; justify-content: center;
+  }
+  .ai-modal-backdrop.visible { display: flex; animation: fadeIn 0.15s ease; }
+  .ai-modal {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    width: 560px; max-width: 94vw; max-height: 88vh; overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .ai-modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+  }
+  .ai-modal-header h3 { font-size: 15px; font-weight: 600; color: var(--text); }
+  .ai-modal-header h3 span { color: var(--pink); }
+  .ai-modal-close {
+    background: var(--surface-hover); border: 1px solid var(--border); color: var(--text-muted);
+    width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    display: flex; align-items: center; justify-content: center; transition: background 0.12s;
+  }
+  .ai-modal-close:hover { background: var(--border); color: var(--text); }
+  .ai-modal-body { padding: 18px; }
+  .ai-upload-zone {
+    border: 2px dashed var(--border); border-radius: var(--radius-sm);
+    padding: 24px 18px; text-align: center; cursor: pointer;
+    transition: all 0.15s; background: var(--bg); margin-bottom: 14px;
+  }
+  .ai-upload-zone:hover, .ai-upload-zone.dragover { border-color: var(--pink); background: rgba(192,132,252,0.08); }
+  .ai-upload-zone .upload-icon { font-size: 28px; margin-bottom: 7px; }
+  .ai-upload-zone p { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+  .ai-upload-zone p strong { color: var(--text); }
+  .ai-image-preview {
+    background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    margin-bottom: 14px; display: none; align-items: center; justify-content: center;
+    overflow: hidden; max-height: 200px; position: relative;
+  }
+  .ai-image-preview.visible { display: flex; }
+  .ai-image-preview img { max-width: 100%; max-height: 200px; object-fit: contain; }
+  .ai-image-preview .change-img-btn {
+    position: absolute; top: 7px; right: 7px;
+    background: rgba(0,0,0,0.6); border: none; color: white;
+    padding: 3px 9px; border-radius: 5px; font-size: 10px; cursor: pointer;
+  }
+  .ai-status {
+    font-size: 12px; color: var(--text-muted); padding: 5px 0; min-height: 24px;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .ai-spinner {
+    width: 13px; height: 13px; border: 2px solid var(--border);
+    border-top-color: var(--pink); border-radius: 50%;
+    animation: spin 0.7s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ai-commands-wrap { margin-top: 10px; display: none; }
+  .ai-commands-wrap.visible { display: block; }
+  .ai-commands-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--text-muted); font-weight: 600; margin-bottom: 5px;
+  }
+  .ai-commands-textarea {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--green);
+    padding: 10px; border-radius: var(--radius-sm); font-size: 11px;
+    font-family: 'Inter', monospace; outline: none; resize: vertical;
+    min-height: 120px; line-height: 1.8; transition: border-color 0.15s;
+  }
+  .ai-commands-textarea:focus { border-color: var(--accent); }
+  .ai-modal-footer {
+    display: flex; justify-content: space-between; align-items: center; gap: 7px;
+    padding: 12px 18px; border-top: 1px solid var(--border);
+  }
+  .ai-footer-right { display: flex; gap: 7px; }
+  .ai-btn-cancel {
+    background: var(--surface-hover); border: 1px solid var(--border); color: var(--text-muted);
+    padding: 7px 16px; border-radius: var(--radius-sm); font-size: 12px;
+    font-family: inherit; cursor: pointer; font-weight: 600; transition: all 0.12s;
+  }
+  .ai-btn-cancel:hover { background: var(--border); color: var(--text); }
+  .ai-btn-analyze {
+    background: rgba(192,132,252,0.15); border: 1px solid rgba(192,132,252,0.4); color: var(--pink);
+    padding: 7px 16px; border-radius: var(--radius-sm); font-size: 12px;
+    font-family: inherit; cursor: pointer; font-weight: 600; transition: opacity 0.12s;
+  }
+  .ai-btn-analyze:hover:not(:disabled) { background: rgba(192,132,252,0.25); }
+  .ai-btn-analyze:disabled, .ai-btn-run:disabled { opacity: 0.35; cursor: not-allowed; }
+  .ai-btn-run {
+    background: rgba(129,140,248,0.2); border: 1px solid rgba(129,140,248,0.4); color: var(--accent);
+    padding: 7px 16px; border-radius: var(--radius-sm); font-size: 12px;
+    font-family: inherit; cursor: pointer; font-weight: 600; transition: background 0.12s;
+  }
+  .ai-btn-run:hover:not(:disabled) { background: rgba(129,140,248,0.3); }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Animations ── */
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+  @media (max-width: 720px) {
+    .sidebar { display: none; }
+    .logo h1 { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">◈</div>
+    <h1>Math <span>Canvas</span></h1>
+  </div>
+  <div class="header-actions">
+    <button class="header-btn" onclick="undoAction()">↩ Undo</button>
+    <button class="header-btn" onclick="redoAction()">↪ Redo</button>
+    <button class="header-btn" onclick="clearAll()">⊘ Clear</button>
+    <button class="header-btn" onclick="document.getElementById('svg-file-input').click()">↑ Import SVG</button>
+    <input type="file" id="svg-file-input" accept=".svg" style="display:none" onchange="handleSVGImport(event)">
+    <button class="header-btn" onclick="openAIModal()" title="Use Gemini AI to convert an image into GeoGebra objects">✦ AI Image</button>
+    <button class="header-btn" onclick="openExportModal()">↓ Export ▾</button>
+
+  <!-- Export Modal -->
+  <div class="export-modal-backdrop" id="export-modal-backdrop" onclick="handleExportBackdropClick(event)">
+    <div class="export-modal">
+      <div class="export-modal-header">
+        <h3>Export <span>Canvas</span></h3>
+        <button class="export-modal-close" onclick="closeExportModal()">✕</button>
+      </div>
+      <div class="export-modal-body">
+        <!-- Format -->
+        <div>
+          <div class="export-section-label">File Format</div>
+          <div class="export-format-row">
+            <button class="export-format-btn selected" id="fmt-png" onclick="selectFormat('png')">
+              <span class="fmt-ext">PNG</span>image
+            </button>
+            <button class="export-format-btn" id="fmt-svg" onclick="selectFormat('svg')">
+              <span class="fmt-ext">SVG</span>vector
+            </button>
+          </div>
+        </div>
+        <!-- Destination -->
+        <div>
+          <div class="export-section-label">Export To</div>
+          <div class="export-dest-row">
+            <button class="export-dest-btn dest-chat" onclick="exportToChat()">
+              <span class="dest-icon">💬</span>
+              <span>Send to Chat</span>
+              <span style="font-size:10px;color:var(--text-muted)">attaches to current conversation</span>
+            </button>
+            <button class="export-dest-btn" onclick="exportToDownload()">
+              <span class="dest-icon">⬇</span>
+              <span>Download File</span>
+              <span style="font-size:10px;color:var(--text-muted)">save to computer</span>
+            </button>
+          </div>
+        </div>
+        <div class="export-modal-note">
+          <span>Send to Chat</span> switches back to the Math Atelier tab and attaches the image to the input bar ready to send.
+        </div>
+      </div>
+    </div>
+  </div>
+    <button class="header-btn primary" onclick="toggleHelp()">? Help</button>
+  </div>
+</header>
+
+<div class="main-layout">
+  <aside class="sidebar">
+
+    <div class="sidebar-section">
+      <h3>Drawing Tools</h3>
+      <div class="tool-grid">
+        <button class="tool-btn active" onclick="setMode(0, this)" title="Move / select objects">
+          <span class="tool-icon">↖</span> Move
+        </button>
+        <button class="tool-btn" onclick="setMode(1, this)" title="Create a point">
+          <span class="tool-icon">●</span> Point
+        </button>
+        <button class="tool-btn" onclick="setMode(2, this)" title="Line through two points">
+          <span class="tool-icon">⟋</span> Line
+        </button>
+        <button class="tool-btn" onclick="setMode(15, this)" title="Segment between two points">
+          <span class="tool-icon">—</span> Segment
+        </button>
+        <button class="tool-btn" onclick="setMode(18, this)" title="Ray from a point through another">
+          <span class="tool-icon">→</span> Ray
+        </button>
+        <button class="tool-btn" onclick="setMode(4, this)" title="Perpendicular line through a point">
+          <span class="tool-icon">⊥</span> Perp.
+        </button>
+        <button class="tool-btn" onclick="setMode(3, this)" title="Parallel line through a point">
+          <span class="tool-icon">∥</span> Parallel
+        </button>
+        <button class="tool-btn" onclick="startAngleMode(this)" title="Angle: click vertex first">
+          <span class="tool-icon">∠</span> Angle
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Shapes & Circles</h3>
+      <div class="tool-grid">
+        <button class="tool-btn" onclick="setMode(10, this)" title="Circle: center then edge point">
+          <span class="tool-icon">○</span> Circle
+        </button>
+        <button class="tool-btn" onclick="setMode(16, this)" title="Polygon: click vertices to close">
+          <span class="tool-icon">⬟</span> Polygon
+        </button>
+        <button class="tool-btn" onclick="setMode(11, this)" title="Circle through 3 points">
+          <span class="tool-icon">⊕</span> 3pt Circle
+        </button>
+        <button class="tool-btn" onclick="setMode(55, this)" title="Ellipse: two foci then point">
+          <span class="tool-icon">⬭</span> Ellipse
+        </button>
+        <button class="tool-btn" onclick="setMode(34, this)" title="Circle: click center, type radius">
+          <span class="tool-icon">⊙</span> Circle (r)
+        </button>
+        <button class="tool-btn" onclick="setMode(51, this)" title="Regular polygon">
+          <span class="tool-icon">⬡</span> Reg. Poly
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Measure & Transform</h3>
+      <div class="tool-grid">
+        <button class="tool-btn" onclick="setMode(38, this)" title="Distance between points">
+          <span class="tool-icon">↔</span> Distance
+        </button>
+        <button class="tool-btn" onclick="setMode(49, this)" title="Area of polygon or circle">
+          <span class="tool-icon">▣</span> Area
+        </button>
+        <button class="tool-btn" onclick="setMode(19, this)" title="Midpoint">
+          <span class="tool-icon">⊕</span> Midpoint
+        </button>
+        <button class="tool-btn" onclick="setMode(30, this)" title="Reflect across a line">
+          <span class="tool-icon">⇔</span> Reflect
+        </button>
+        <button class="tool-btn" onclick="setMode(53, this)" title="Compass: copy radius">
+          <span class="tool-icon">⊗</span> Compass
+        </button>
+        <button class="tool-btn" onclick="setMode(32, this)" title="Rotate around a point">
+          <span class="tool-icon">↻</span> Rotate
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>More Tools</h3>
+      <div class="tool-grid">
+        <button class="tool-btn" onclick="setMode(5, this)" title="Intersection of two objects">
+          <span class="tool-icon">✕</span> Intersect
+        </button>
+        <button class="tool-btn" onclick="setMode(8, this)" title="Perpendicular bisector">
+          <span class="tool-icon">⊣</span> Bisector
+        </button>
+        <button class="tool-btn" onclick="setMode(9, this)" title="Angular bisector">
+          <span class="tool-icon">⊻</span> Ang.Bisect
+        </button>
+        <button class="tool-btn" onclick="setMode(13, this)" title="Tangent to circle/conic">
+          <span class="tool-icon">⌒</span> Tangent
+        </button>
+        <button class="tool-btn" onclick="setMode(50, this)" title="Slope of a line">
+          <span class="tool-icon">↗</span> Slope
+        </button>
+        <button class="tool-btn" onclick="setMode(7, this)" title="Vector from point to point">
+          <span class="tool-icon">⇒</span> Vector
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Quick Shapes</h3>
+      <div class="quick-shapes">
+        <button class="shape-btn" onclick="insertShape('triangle')">
+          <span class="shape-icon">△</span> Equilateral Triangle
+        </button>
+        <button class="shape-btn" onclick="insertShape('square')">
+          <span class="shape-icon">□</span> Square
+        </button>
+        <button class="shape-btn" onclick="insertShape('hexagon')">
+          <span class="shape-icon">⬡</span> Regular Hexagon
+        </button>
+        <button class="shape-btn" onclick="insertShape('circle')">
+          <span class="shape-icon">○</span> Unit Circle
+        </button>
+        <button class="shape-btn" onclick="insertShape('axes')">
+          <span class="shape-icon">+</span> Show Axes & Grid
+        </button>
+        <button class="shape-btn" onclick="insertShape('parabola')">
+          <span class="shape-icon">∪</span> Parabola y=x²
+        </button>
+        <button class="shape-btn" onclick="insertShape('sine')">
+          <span class="shape-icon">∿</span> Sine Wave
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Object Color</h3>
+      <div class="color-swatches">
+        <div class="swatch active" style="background:#818cf8" onclick="setColor('#818cf8', this)"></div>
+        <div class="swatch" style="background:#34d399" onclick="setColor('#34d399', this)"></div>
+        <div class="swatch" style="background:#f59e0b" onclick="setColor('#f59e0b', this)"></div>
+        <div class="swatch" style="background:#f87171" onclick="setColor('#f87171', this)"></div>
+        <div class="swatch" style="background:#c084fc" onclick="setColor('#c084fc', this)"></div>
+        <div class="swatch" style="background:#38bdf8" onclick="setColor('#38bdf8', this)"></div>
+        <div class="swatch" style="background:#ffffff; border: 1px solid #3a3a5c;" onclick="setColor('#ffffff', this)"></div>
+      </div>
+      <p style="font-size:10px; color:var(--text-muted); margin-top:7px;">New objects use the selected color.</p>
+    </div>
+
+  </aside>
+
+  <div class="canvas-area">
+    <div class="toolbar-strip">
+      <button class="tb-btn active" id="tb-grid" onclick="toggleGrid(this)">⊞ Grid</button>
+      <button class="tb-btn active" id="tb-axes" onclick="toggleAxes(this)">+ Axes</button>
+      <button class="tb-btn" id="tb-labels" onclick="toggleLabels(this)">Aᵢ Labels</button>
+      <div class="tb-divider"></div>
+      <button class="tb-btn" onclick="zoomIn()">＋ Zoom In</button>
+      <button class="tb-btn" onclick="zoomOut()">－ Zoom Out</button>
+      <button class="tb-btn" onclick="zoomFit()">⊡ Fit</button>
+      <div class="tb-divider"></div>
+      <button class="tb-btn" onclick="setMode(62, null)" title="Pen drawing">✏ Pen</button>
+      <button class="tb-btn" onclick="setMode(73, null)" title="Freehand shape">✦ Freehand</button>
+      <button class="tb-btn" onclick="setMode(17, null)" title="Add text">T Text</button>
+      <button class="tb-btn" onclick="setMode(25, null)" title="Insert slider">▶ Slider</button>
+      <div class="tb-divider"></div>
+      <button class="tb-btn" onclick="setMode(6, null)" title="Click object to delete" style="color:var(--red);">✕ Delete</button>
+    </div>
+    <div id="ggb-container">
+      <div class="svg-overlay" id="svg-overlay"></div>
+    </div>
+    <div class="command-bar">
+      <label>⌨ Command:</label>
+      <input type="text" id="cmd-input"
+             placeholder="e.g. f(x) = sin(x),  Circle((0,0), 3),  Polygon((0,0),(4,0),(2,3))"
+             onkeydown="if(event.key==='Enter') runCommand()">
+      <button onclick="runCommand()">Run</button>
+    </div>
+  </div>
+</div>
+
+<!-- SVG Import Modal -->
+<div class="import-modal-backdrop" id="import-modal">
+  <div class="import-modal">
+    <div class="import-modal-header">
+      <h3>Import <span>SVG</span></h3>
+      <div style="display:flex;gap:5px;align-items:center;">
+        <button class="import-tab active" id="tab-preview" onclick="switchImportTab('preview')">Preview</button>
+        <button class="import-tab" id="tab-primitives" onclick="switchImportTab('primitives')">Primitives</button>
+        <button class="import-modal-close" onclick="closeImportModal()">✕</button>
+      </div>
+    </div>
+    <div class="import-modal-body">
+      <div id="import-tab-preview">
+        <div class="import-preview" id="import-preview"></div>
+      </div>
+      <div id="import-tab-primitives" style="display:none;">
+        <div class="primitives-table-wrap" id="primitives-table-wrap"></div>
+      </div>
+      <div class="import-stats" id="import-stats"></div>
+      <div class="import-options">
+        <div class="import-opt-row">
+          <label>Scale factor:</label>
+          <input type="number" id="import-scale" value="1" min="0.01" max="100" step="0.1" onchange="recalcPrimitives()">
+          <span class="opt-hint">Resize the imported geometry</span>
+        </div>
+        <div class="import-opt-row">
+          <label>Offset X:</label>
+          <input type="number" id="import-offset-x" value="0" step="0.5" onchange="recalcPrimitives()">
+          <span class="opt-hint">Shift horizontally</span>
+        </div>
+        <div class="import-opt-row">
+          <label>Offset Y:</label>
+          <input type="number" id="import-offset-y" value="0" step="0.5" onchange="recalcPrimitives()">
+          <span class="opt-hint">Shift vertically</span>
+        </div>
+        <div class="import-opt-row">
+          <label>Keep SVG overlay:</label>
+          <input type="checkbox" id="import-overlay">
+          <span class="opt-hint">Show original SVG as background reference</span>
+        </div>
+      </div>
+    </div>
+    <div class="import-modal-footer">
+      <button class="import-btn-cancel" onclick="closeImportModal()">Cancel</button>
+      <button class="import-btn-go" onclick="executeImport()">Import to Canvas</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI Image-to-GeoGebra Modal -->
+<div class="ai-modal-backdrop" id="ai-modal">
+  <div class="ai-modal">
+    <div class="ai-modal-header">
+      <h3>✦ AI Image → <span>GeoGebra</span></h3>
+      <button class="ai-modal-close" onclick="closeAIModal()">✕</button>
+    </div>
+    <div class="ai-modal-body">
+      <div class="ai-upload-zone" id="ai-upload-zone"
+           onclick="document.getElementById('ai-file-input').click()"
+           ondragover="aiDragOver(event)" ondragleave="aiDragLeave(event)" ondrop="aiDrop(event)">
+        <div class="upload-icon">🖼</div>
+        <p><strong>Click to upload</strong> or drag &amp; drop an image</p>
+        <p>PNG, JPG, WEBP · Geometry diagrams, sketches, graphs</p>
+      </div>
+      <input type="file" id="ai-file-input" accept="image/*" style="display:none" onchange="handleAIImage(event)">
+      <div class="ai-image-preview" id="ai-image-preview">
+        <img id="ai-preview-img" src="" alt="Preview">
+        <button class="change-img-btn" onclick="document.getElementById('ai-file-input').click()">Change image</button>
+      </div>
+      <div class="ai-status" id="ai-status"></div>
+      <div style="display:flex;align-items:center;gap:10px;margin:8px 0 3px;">
+        <label style="font-size:11px;color:var(--text-muted);white-space:nowrap;">Coordinate range:</label>
+        <input type="number" id="ai-coord-min" value="-10" step="1"
+               style="width:60px;background:var(--bg);border:1px solid var(--border);color:var(--text);
+                      border-radius:var(--radius-sm);padding:4px 7px;font-size:11px;text-align:center;">
+        <span style="font-size:11px;color:var(--text-muted);">to</span>
+        <input type="number" id="ai-coord-max" value="10" step="1"
+               style="width:60px;background:var(--bg);border:1px solid var(--border);color:var(--text);
+                      border-radius:var(--radius-sm);padding:4px 7px;font-size:11px;text-align:center;">
+      </div>
+      <details id="ai-context-details" style="margin:9px 0 3px;">
+        <summary style="font-size:11px;color:var(--text-muted);cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:5px;">
+          <span id="ai-context-arrow" style="font-size:9px;transition:transform 0.15s;">▶</span>
+          <span>Additional context <span style="opacity:0.6;">(optional)</span></span>
+        </summary>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:7px;">
+          <textarea id="ai-context-text" rows="3" spellcheck="false"
+            style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
+                   border-radius:var(--radius-sm);padding:7px 9px;font-size:11px;font-family:inherit;
+                   resize:vertical;box-sizing:border-box;"
+            placeholder="Describe the figure, give coordinates, clarify labels…"></textarea>
+          <div id="ai-ctx-upload-zone"
+               onclick="document.getElementById('ai-ctx-file-input').click()"
+               ondragover="aiCtxDragOver(event)" ondragleave="aiCtxDragLeave(event)" ondrop="aiCtxDrop(event)"
+               style="border:1.5px dashed var(--border);border-radius:var(--radius-sm);padding:9px 12px;
+                      cursor:pointer;display:flex;align-items:center;gap:9px;font-size:11px;
+                      color:var(--text-muted);transition:border-color 0.15s;">
+            <span style="font-size:15px;">📎</span>
+            <span><strong>Attach an image</strong> with notes <span style="opacity:0.6;">(optional)</span></span>
+          </div>
+          <input type="file" id="ai-ctx-file-input" accept="image/*" style="display:none" onchange="handleCtxImage(event)">
+          <div id="ai-ctx-preview" style="display:none;align-items:center;gap:7px;">
+            <img id="ai-ctx-preview-img" src="" alt="" style="max-height:52px;max-width:100px;border-radius:4px;border:1px solid var(--border);">
+            <span id="ai-ctx-preview-name" style="font-size:10px;color:var(--text-muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+            <button onclick="clearCtxImage()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;">✕</button>
+          </div>
+        </div>
+      </details>
+      <div class="ai-commands-wrap" id="ai-commands-wrap">
+        <div class="ai-commands-label">Generated GeoGebra Commands — review &amp; edit before running:</div>
+        <textarea class="ai-commands-textarea" id="ai-commands-textarea" spellcheck="false"
+                  placeholder="Commands will appear here after analysis…"></textarea>
+      </div>
+    </div>
+    <div class="ai-modal-footer">
+      <div style="font-size:10px;color:var(--text-muted);">Powered by Gemini 2.5 Pro</div>
+      <div class="ai-footer-right">
+        <button class="ai-btn-cancel" onclick="closeAIModal()">Cancel</button>
+        <button class="ai-btn-analyze" id="ai-btn-analyze" onclick="analyzeWithGemini()" disabled>✦ Analyze</button>
+        <button class="ai-btn-run" id="ai-btn-run" onclick="executeAICommands()" disabled>▶ Run on Canvas</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Help Page -->
+<div class="help-overlay" id="help-overlay">
+  <div class="help-header">
+    <h2>Math <span>Canvas</span> — Help Guide</h2>
+    <button class="help-close-btn" onclick="toggleHelp()">✕ Close Help</button>
+  </div>
+  <div class="help-content">
+    <h2>Getting Started</h2>
+    <p class="help-intro">
+      Math Canvas is an interactive geometry and graphing tool powered by GeoGebra. Draw shapes, plot functions, measure distances and angles, and perform geometric constructions — all in your browser.
+    </p>
+    <div class="help-tip">
+      <strong>Basic workflow:</strong> Select a tool from the sidebar → click on the white canvas to place points and create objects → switch to <strong>Move</strong> to drag objects around. You can also type GeoGebra commands in the Command Bar at the bottom.
+    </div>
+
+    <h2>Drawing Tools</h2>
+    <table class="help-tool-table">
+      <tr><th style="width:110px;">Tool</th><th>Description</th></tr>
+      <tr><td class="tn">↖ Move</td><td>Click and drag objects to reposition them.<div class="steps"><strong>Steps:</strong> Click → drag objects</div></td></tr>
+      <tr><td class="tn">● Point</td><td>Creates a free point wherever you click.<div class="steps"><strong>Steps:</strong> Click on canvas → point appears</div></td></tr>
+      <tr><td class="tn">⟋ Line</td><td>Draws an infinite line through two points.<div class="steps"><strong>Steps:</strong> Click point 1 → click point 2</div></td></tr>
+      <tr><td class="tn">— Segment</td><td>Draws a finite segment between two points.<div class="steps"><strong>Steps:</strong> Click start → click end</div></td></tr>
+      <tr><td class="tn">→ Ray</td><td>Ray from a point through a second point.<div class="steps"><strong>Steps:</strong> Click origin → click direction point</div></td></tr>
+      <tr><td class="tn">⊥ Perp.</td><td>Line perpendicular to an existing line through a point.<div class="steps"><strong>Steps:</strong> Click a point → click a line</div></td></tr>
+      <tr><td class="tn">∥ Parallel</td><td>Line parallel to an existing line through a point.<div class="steps"><strong>Steps:</strong> Click a point → click a line</div></td></tr>
+      <tr><td class="tn">∠ Angle</td><td>Measures angle at a vertex — click vertex first.<div class="steps"><strong>Steps:</strong> Click vertex V → click point A → click point B</div></td></tr>
+    </table>
+
+    <h2>Command Bar</h2>
+    <p class="help-intro">Type GeoGebra commands at the bottom and press <strong>Enter</strong> or click <strong>Run</strong>.</p>
+    <div class="help-cmd-example">
+      f(x) = sin(x) <span class="desc">→ plots a sine curve</span><br>
+      g(x) = 2x + 1 <span class="desc">→ plots a straight line</span><br>
+      Circle((0,0), 5) <span class="desc">→ circle at origin, radius 5</span><br>
+      Polygon((0,0),(3,0),(3,3),(0,3)) <span class="desc">→ a square</span><br>
+      Intersect(f, g) <span class="desc">→ find where two functions cross</span>
+    </div>
+
+    <h2>Keyboard Shortcuts</h2>
+    <table class="help-shortcut-table">
+      <tr><td><kbd>Ctrl</kbd> + <kbd>Z</kbd></td><td>Undo</td></tr>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>Y</kbd></td><td>Redo</td></tr>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>A</kbd></td><td>Select all</td></tr>
+      <tr><td><kbd>Delete</kbd></td><td>Remove selected object</td></tr>
+      <tr><td><kbd>Scroll wheel</kbd></td><td>Zoom in/out</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Switch to Move / cancel action</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.geogebra.org/apps/deployggb.js"></script>
+<script>
+  // ── Gemini API Key ────────────────────────────────────────────────────────────
+  // Get a free key at: https://aistudio.google.com/app/apikey
+  const GEMINI_API_KEY = 'AIzaSyCAw062h0V7V7Xfnf0rKmk5WCWzxbeSZtA';
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  let ggbApp, api;
+  let gridVisible = true, axesVisible = true, labelsVisible = false;
+  let currentColor = [129, 140, 248]; // indigo default
+
+  // ── Custom Angle Mode ─────────────────────────────────────────────────────────
+  let angleModeActive = false;
+  let anglePoints = [];
+  let angleClickListener = null;
+  let angleAddListener = null;
+
+  function angleCollectPoint(name) {
+    if (!angleModeActive) return;
+    try { if (api.getObjectType(name) !== 'point') return; } catch(e) { return; }
+    if (anglePoints.length > 0 && anglePoints[anglePoints.length-1] === name) return;
+    anglePoints.push(name);
+    if (anglePoints.length === 1) {
+      showToast('∠ Vertex set (' + name + ') — now click a point on one ray');
+    } else if (anglePoints.length === 2) {
+      showToast('∠ Got ' + name + ' — now click a point on the other ray');
+    } else if (anglePoints.length >= 3) {
+      var cmd = 'Angle(' + anglePoints[2] + ', ' + anglePoints[0] + ', ' + anglePoints[1] + ')';
+      try {
+        var label = api.evalCommandGetLabels(cmd);
+        showToast(label ? '∠ Angle at ' + anglePoints[0] + ' = ' + api.getValueString(label) : '∠ Angle created');
+      } catch(e) { showToast('✕ Could not create angle — try again'); }
+      anglePoints = [];
+      setTimeout(function() { if (angleModeActive) showToast('∠ Click the vertex point first'); }, 1500);
+    }
+  }
+
+  function startAngleMode(btn) {
+    if (!api) return;
+    document.querySelectorAll('.tool-btn').forEach(function(b) { b.classList.remove('active'); });
+    if (btn) btn.classList.add('active');
+    api.setMode(1);
+    angleModeActive = true; anglePoints = [];
+    showToast('∠ Angle tool — click the vertex point first');
+    cancelAngleListeners();
+    angleClickListener = function(name) { if (angleModeActive) angleCollectPoint(name); };
+    angleAddListener   = function(name) { if (angleModeActive) angleCollectPoint(name); };
+    api.registerClickListener(angleClickListener);
+    api.registerAddListener(angleAddListener);
+  }
+
+  function cancelAngleListeners() {
+    if (angleClickListener) { try { api.unregisterClickListener(angleClickListener); } catch(e){} angleClickListener = null; }
+    if (angleAddListener)   { try { api.unregisterAddListener(angleAddListener); }   catch(e){} angleAddListener   = null; }
+  }
+
+  function cancelAngleMode() {
+    if (!angleModeActive) return;
+    angleModeActive = false; anglePoints = [];
+    cancelAngleListeners();
+  }
+
+  // ── GeoGebra init ─────────────────────────────────────────────────────────────
+  const params = {
+    appName: 'classic',
+    width: window.innerWidth - 240,
+    height: window.innerHeight - 130,
+    showToolBar: false, showAlgebraInput: false, showMenuBar: false,
+    showResetIcon: false, enableLabelDrags: true, enableShiftDragZoom: true,
+    enableRightClick: true, showZoomButtons: false,
+    appletOnLoad: function(appletApi) {
+      api = appletApi;
+      api.setAxesVisible(true, true);
+      api.setGridVisible(true);
+      api.registerAddListener(function(name) {
+        try {
+          api.setColor(name, currentColor[0], currentColor[1], currentColor[2]);
+          api.setLabelVisible(name, labelsVisible);
+        } catch(e) {}
+      });
+      showToast('◈ Math Canvas ready — pick a tool and start drawing!');
+    },
+    language: 'en',
+    borderColor: '#0a0a10',
+  };
+
+  ggbApp = new GGBApplet(params, true);
+  window.addEventListener('DOMContentLoaded', function() { ggbApp.inject('ggb-container'); });
+
+  // Export modal state
+  var _exportFormat = 'png';
+
+  function openExportModal() {
+    document.getElementById('export-modal-backdrop').classList.add('visible');
+  }
+  function closeExportModal() {
+    document.getElementById('export-modal-backdrop').classList.remove('visible');
+  }
+  function handleExportBackdropClick(e) {
+    if (e.target === document.getElementById('export-modal-backdrop')) closeExportModal();
+  }
+  function selectFormat(fmt) {
+    _exportFormat = fmt;
+    document.getElementById('fmt-png').classList.toggle('selected', fmt === 'png');
+    document.getElementById('fmt-svg').classList.toggle('selected', fmt === 'svg');
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      document.getElementById('help-overlay').classList.remove('visible');
+      if (angleModeActive) { cancelAngleMode(); setMode(0, document.querySelector('.tool-btn')); }
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var det = document.getElementById('ai-context-details');
+    if (det) det.addEventListener('toggle', function() {
+      document.getElementById('ai-context-arrow').style.transform = det.open ? 'rotate(90deg)' : '';
+    });
+  });
+
+  // ── Tool helpers ──────────────────────────────────────────────────────────────
+  function setMode(mode, btn) {
+    if (!api) return;
+    cancelAngleMode();
+    api.setMode(mode);
+    if (btn) {
+      document.querySelectorAll('.tool-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+    }
+  }
+
+  function runCommand() {
+    var input = document.getElementById('cmd-input');
+    var cmd = input.value.trim();
+    if (!cmd || !api) return;
+    try {
+      var result = api.evalCommandGetLabels(cmd);
+      showToast(result ? '✓ Created: ' + result : '✓ Command executed');
+      input.value = '';
+    } catch(e) { showToast('✕ Error: check your command syntax'); }
+  }
+
+  function insertShape(type) {
+    if (!api) return;
+    var shapes = {
+      triangle: ['Polygon((0,0),(4,0),(2,3.46))', '△ Equilateral triangle created'],
+      square:   ['Polygon((0,0),(4,0),(4,4),(0,4))', '□ Square created'],
+      hexagon:  ['Polygon((2,0),(1,1.73),(-1,1.73),(-2,0),(-1,-1.73),(1,-1.73))', '⬡ Hexagon created'],
+      circle:   ['Circle((0,0), 1)', '○ Unit circle created'],
+      parabola: ['f(x) = x^2', '∪ Parabola y = x² plotted'],
+      sine:     ['g(x) = sin(x)', '∿ Sine wave plotted'],
+    };
+    if (type === 'axes') {
+      api.setAxesVisible(true, true); api.setGridVisible(true);
+      axesVisible = true; gridVisible = true;
+      document.getElementById('tb-axes').classList.add('active');
+      document.getElementById('tb-grid').classList.add('active');
+      showToast('+ Axes & grid enabled'); return;
+    }
+    if (shapes[type]) { api.evalCommand(shapes[type][0]); showToast(shapes[type][1]); }
+  }
+
+  function setColor(hex, el) {
+    var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    currentColor = [r,g,b];
+    document.querySelectorAll('.swatch').forEach(function(s) { s.classList.remove('active'); });
+    el.classList.add('active');
+    showToast('Color selected — new objects use this color');
+  }
+
+  function toggleGrid(btn) {
+    if (!api) return;
+    gridVisible = !gridVisible;
+    api.setGridVisible(gridVisible);
+    btn.classList.toggle('active', gridVisible);
+    showToast(gridVisible ? '⊞ Grid shown' : '⊞ Grid hidden');
+  }
+
+  function toggleAxes(btn) {
+    if (!api) return;
+    axesVisible = !axesVisible;
+    api.setAxesVisible(axesVisible, axesVisible);
+    btn.classList.toggle('active', axesVisible);
+    showToast(axesVisible ? '+ Axes shown' : '+ Axes hidden');
+  }
+
+  function toggleLabels(btn) {
+    if (!api) return;
+    labelsVisible = !labelsVisible;
+    var n = api.getObjectNumber();
+    for (var i = 0; i < n; i++) api.setLabelVisible(api.getObjectName(i), labelsVisible);
+    btn.classList.toggle('active', labelsVisible);
+    showToast(labelsVisible ? 'Aᵢ Labels shown' : 'Aᵢ Labels hidden');
+  }
+
+  function zoomIn() {
+    if (!api) return;
+    var xmin=api.getXMin(),xmax=api.getXMax(),ymin=api.getYMin(),ymax=api.getYMax();
+    var cx=(xmin+xmax)/2,cy=(ymin+ymax)/2,f=0.75;
+    api.setCoordSystem(cx-(xmax-xmin)/2*f,cx+(xmax-xmin)/2*f,cy-(ymax-ymin)/2*f,cy+(ymax-ymin)/2*f);
+  }
+  function zoomOut() {
+    if (!api) return;
+    var xmin=api.getXMin(),xmax=api.getXMax(),ymin=api.getYMin(),ymax=api.getYMax();
+    var cx=(xmin+xmax)/2,cy=(ymin+ymax)/2,f=1.333;
+    api.setCoordSystem(cx-(xmax-xmin)/2*f,cx+(xmax-xmin)/2*f,cy-(ymax-ymin)/2*f,cy+(ymax-ymin)/2*f);
+  }
+  function zoomFit() { if (api) api.setCoordSystem(-10,10,-10,10); }
+  function undoAction() { if (api) api.undo(); }
+  function redoAction() { if (api) api.redo(); }
+
+  function clearAll() {
+    if (!api) return;
+    if (confirm('Clear the entire canvas? This cannot be undone.')) {
+      cancelAngleMode(); api.reset();
+      api.setAxesVisible(true,true); api.setGridVisible(true);
+      gridVisible=true; axesVisible=true;
+      document.getElementById('tb-grid').classList.add('active');
+      document.getElementById('tb-axes').classList.add('active');
+      showToast('⊘ Canvas cleared');
+    }
+  }
+
+  // ── Export helpers ────────────────────────────────────────────────────────────
+
+  function exportToDownload() {
+    if (!api) return;
+    closeExportModal();
+    if (_exportFormat === 'svg') { _doExportSVGDownload(); }
+    else { _doExportPNGDownload(); }
+  }
+
+  function exportToChat() {
+    if (!api) return;
+    closeExportModal();
+    if (_exportFormat === 'svg') { _doExportSVGChat(); }
+    else { _doExportPNGChat(); }
+  }
+
+  function _doExportPNGDownload() {
+    var b64 = api.getPNGBase64(1,true,72);
+    var a = document.createElement('a');
+    a.download = 'mathcanvas.png'; a.href = 'data:image/png;base64,'+b64;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    showToast('↓ PNG downloaded!');
+  }
+
+  function _doExportPNGChat() {
+    var b64 = api.getPNGBase64(1,true,72);
+    var dataUrl = 'data:image/png;base64,' + b64;
+    _sendToChat(dataUrl, 'image/png', 'mathcanvas.png');
+  }
+
+  function _doExportSVGDownload() {
+    if (typeof api.exportSVG === 'function') {
+      api.exportSVG(function(svg) { svg ? _downloadSVGString(svg) : _exportSVGFallbackDownload(); });
+    } else { _exportSVGFallbackDownload(); }
+  }
+
+  function _doExportSVGChat() {
+    if (typeof api.exportSVG === 'function') {
+      api.exportSVG(function(svg) { svg ? _sendSVGToChat(svg) : _exportSVGFallbackChat(); });
+    } else { _exportSVGFallbackChat(); }
+  }
+
+  function _downloadSVGString(svgContent) {
+    var blob = new Blob([svgContent], {type:'image/svg+xml;charset=utf-8'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.download='mathcanvas.svg'; a.href=url;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(url);},5000);
+    showToast('↓ SVG downloaded!');
+  }
+
+  function _sendSVGToChat(svgContent) {
+    var b64 = btoa(unescape(encodeURIComponent(svgContent)));
+    var dataUrl = 'data:image/svg+xml;base64,' + b64;
+    _sendToChat(dataUrl, 'image/svg+xml', 'mathcanvas.svg');
+  }
+
+  function _exportSVGFallbackDownload() {
+    var svgEl = document.querySelector('#ggb-container svg');
+    if (svgEl) {
+      var str = new XMLSerializer().serializeToString(svgEl);
+      if (str.indexOf('<?xml') !== 0) str = '<?xml version="1.0" encoding="UTF-8"?>\n' + str;
+      _downloadSVGString(str);
+    } else {
+      var b64 = api.getPNGBase64(2,true,150);
+      var img = new Image();
+      img.onload = function() {
+        var w=img.width, h=img.height;
+        _downloadSVGString('<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><image width="'+w+'" height="'+h+'" xlink:href="data:image/png;base64,'+b64+'"/></svg>');
+      };
+      img.src = 'data:image/png;base64,'+b64;
+    }
+  }
+
+  function _exportSVGFallbackChat() {
+    var svgEl = document.querySelector('#ggb-container svg');
+    if (svgEl) {
+      var str = new XMLSerializer().serializeToString(svgEl);
+      if (str.indexOf('<?xml') !== 0) str = '<?xml version="1.0" encoding="UTF-8"?>\n' + str;
+      _sendSVGToChat(str);
+    } else {
+      // Fall back to PNG if no SVG element found
+      _doExportPNGChat();
+    }
+  }
+
+  function _sendToChat(dataUrl, mimeType, filename) {
+    // Post message to the opener (Math Atelier tab)
+    var target = window.opener || window.parent;
+    if (target && target !== window) {
+      target.postMessage({ type: 'mathcanvas-export', dataUrl: dataUrl, mimeType: mimeType, filename: filename }, '*');
+      showToast('💬 Sent to chat!');
+      // Switch focus back to the parent tab
+      try { target.focus(); } catch(e) {}
+    } else {
+      showToast('✕ No chat tab found — use Download instead');
+    }
+  }
+
+  function toggleHelp() { document.getElementById('help-overlay').classList.toggle('visible'); }
+
+  // ── SVG Import ────────────────────────────────────────────────────────────────
+  let pendingSVGData = null;
+  let parsedPrimitives = [];
+
+  function handleSVGImport(event) {
+    var file = event.target.files[0]; if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.svg')) { showToast('✕ Please select an .svg file'); event.target.value=''; return; }
+    var reader = new FileReader();
+    reader.onload = function(e) { openImportModal(e.target.result, file.name); };
+    reader.readAsText(file); event.target.value='';
+  }
+
+  function openImportModal(svgText, filename) {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(svgText, 'image/svg+xml');
+    var svgEl = doc.querySelector('svg');
+    if (!svgEl || doc.querySelector('parsererror')) { showToast('✕ Could not parse SVG file'); return; }
+    var vb=svgEl.getAttribute('viewBox'), rawW=svgEl.getAttribute('width')||'', rawH=svgEl.getAttribute('height')||'';
+    var svgW=parseFloat(rawW)||0, svgH=parseFloat(rawH)||0, vbMinX=0, vbMinY=0;
+    if (vb) { var p=vb.trim().split(/[\s,]+/); if(p.length===4){vbMinX=parseFloat(p[0])||0;vbMinY=parseFloat(p[1])||0;if(!svgW||rawW.indexOf('%')!==-1)svgW=parseFloat(p[2])||0;if(!svgH||rawH.indexOf('%')!==-1)svgH=parseFloat(p[3])||0;} }
+    if(!svgW)svgW=300; if(!svgH)svgH=300;
+    var maxDim=Math.max(svgW,svgH);
+    var autoScale=maxDim>0?Math.round((16/maxDim)*1000)/1000:1;
+    pendingSVGData={svgText,filename,svgW,svgH,vbMinX,vbMinY,autoScale};
+    document.getElementById('import-scale').value=autoScale;
+    document.getElementById('import-offset-x').value=0;
+    document.getElementById('import-offset-y').value=0;
+    document.getElementById('import-preview').innerHTML=svgText;
+    var ps=document.querySelector('#import-preview svg');
+    if(ps){ps.style.maxWidth='100%';ps.style.maxHeight='240px';ps.removeAttribute('width');ps.removeAttribute('height');}
+    recalcPrimitives(); switchImportTab('preview');
+    document.getElementById('import-modal').classList.add('visible');
+  }
+
+  function closeImportModal() { document.getElementById('import-modal').classList.remove('visible'); pendingSVGData=null; parsedPrimitives=[]; }
+  function switchImportTab(tab) {
+    document.getElementById('import-tab-preview').style.display=tab==='preview'?'':'none';
+    document.getElementById('import-tab-primitives').style.display=tab==='primitives'?'':'none';
+    document.getElementById('tab-preview').classList.toggle('active',tab==='preview');
+    document.getElementById('tab-primitives').classList.toggle('active',tab==='primitives');
+  }
+
+  function recalcPrimitives() {
+    if (!pendingSVGData) return;
+    var scale=parseFloat(document.getElementById('import-scale').value)||1;
+    var offX=parseFloat(document.getElementById('import-offset-x').value)||0;
+    var offY=parseFloat(document.getElementById('import-offset-y').value)||0;
+    var parser=new DOMParser();
+    var doc=parser.parseFromString(pendingSVGData.svgText,'image/svg+xml');
+    var svgEl=doc.querySelector('svg'); if(!svgEl) return;
+    var svgW=pendingSVGData.svgW,svgH=pendingSVGData.svgH,vbMinX=pendingSVGData.vbMinX,vbMinY=pendingSVGData.vbMinY;
+    var cx=vbMinX+svgW/2,cy=vbMinY+svgH/2;
+    function tx(x){return Math.round(((parseFloat(x)-cx)*scale+offX)*1000)/1000;}
+    function ty(y){return Math.round(((cy-parseFloat(y))*scale+offY)*1000)/1000;}
+    function getTransformChain(el){var ts=[],n=el;while(n&&n.tagName!=='svg'){var t=n.getAttribute('transform');if(t)ts.unshift(t);n=n.parentElement;}return ts;}
+    function applyTransforms(x,y,transforms){var px=parseFloat(x),py=parseFloat(y);for(var i=0;i<transforms.length;i++){var t=transforms[i],tm;tm=t.match(/translate\(\s*([-\d.]+)[\s,]*([-\d.]*)\s*\)/);if(tm){px+=parseFloat(tm[1])||0;py+=parseFloat(tm[2])||0;}tm=t.match(/scale\(\s*([-\d.]+)[\s,]*([-\d.]*)\s*\)/);if(tm){var sx=parseFloat(tm[1])||1;var sy=parseFloat(tm[2])||sx;px*=sx;py*=sy;}tm=t.match(/matrix\(\s*([-\d.]+)[\s,]+([-\d.]+)[\s,]+([-\d.]+)[\s,]+([-\d.]+)[\s,]+([-\d.]+)[\s,]+([-\d.]+)\s*\)/);if(tm){var a=+tm[1],b=+tm[2],c=+tm[3],d=+tm[4],e=+tm[5],f=+tm[6];var nx=a*px+c*py+e;var ny=b*px+d*py+f;px=nx;py=ny;}}return[px,py];}
+    function transformPt(rawX,rawY,el){var chain=getTransformChain(el);var pt=applyTransforms(rawX,rawY,chain);return[tx(pt[0]),ty(pt[1])];}
+    function transformLen(val){return Math.round(parseFloat(val)*scale*1000)/1000;}
+    function getColor(el){var stroke=el.getAttribute('stroke'),fill=el.getAttribute('fill'),style=el.getAttribute('style')||'';var sm=style.match(/stroke\s*:\s*([^;]+)/);if(sm)stroke=sm[1].trim();var fm=style.match(/fill\s*:\s*([^;]+)/);if(fm)fill=fm[1].trim();var c=stroke||'';if(!c||c==='none')c=fill||'';if(c==='none'||c==='transparent')c='';return c||null;}
+    var tickMaxLen=Math.min(svgW,svgH)*0.04;
+    function isGridOrAxisArtifact(el){
+      var cls=(el.getAttribute('class')||'').toLowerCase(),id=(el.getAttribute('id')||'').toLowerCase();
+      if(/grid|axis|axes|tick|label|text|background|border|frame/i.test(cls+' '+id))return true;
+      var parent=el.parentElement,depth=0;
+      while(parent&&parent.tagName!=='svg'&&depth<5){var pcls=(parent.getAttribute('class')||'').toLowerCase(),pid=(parent.getAttribute('id')||'').toLowerCase();if(/grid|axis|axes|tick|label|background|frame/i.test(pcls+' '+pid))return true;parent=parent.parentElement;depth++;}
+      var style=el.getAttribute('style')||'',opacity=el.getAttribute('opacity')||el.getAttribute('stroke-opacity')||'';
+      var soMatch=style.match(/(?:stroke-)?opacity\s*:\s*([\d.]+)/);if(soMatch&&parseFloat(soMatch[1])<0.3)return true;
+      if(opacity&&parseFloat(opacity)<0.3)return true;
+      var sw=el.getAttribute('stroke-width')||'';var swMatch=style.match(/stroke-width\s*:\s*([\d.]+)/);if(swMatch)sw=swMatch[1];
+      if(sw&&parseFloat(sw)<=0.5&&el.tagName==='line'){var lx1=parseFloat(el.getAttribute('x1')||0),ly1=parseFloat(el.getAttribute('y1')||0),lx2=parseFloat(el.getAttribute('x2')||0),ly2=parseFloat(el.getAttribute('y2')||0);if(Math.abs(lx1-lx2)<0.1||Math.abs(ly1-ly2)<0.1)return true;}
+      if(el.tagName==='line'){var x1=parseFloat(el.getAttribute('x1')||0),y1=parseFloat(el.getAttribute('y1')||0),x2=parseFloat(el.getAttribute('x2')||0),y2=parseFloat(el.getAttribute('y2')||0);var isH=Math.abs(y1-y2)<0.5,isV=Math.abs(x1-x2)<0.5;if(isH){var xMin=Math.min(x1,x2),xMax=Math.max(x1,x2);if((xMax-xMin)/svgW>0.7)return true;if((xMax-xMin)<tickMaxLen)return true;}if(isV){var yMin=Math.min(y1,y2),yMax=Math.max(y1,y2);if((yMax-yMin)/svgH>0.7)return true;if((yMax-yMin)<tickMaxLen)return true;}}
+      if(el.tagName==='path'){var d=el.getAttribute('d')||'';var shv=d.match(/^M\s*([-\d.]+)[\s,]+([-\d.]+)\s*[LlHhVv]\s*([-\d.]+)[\s,]*([-\d.]*)\s*$/);if(shv){var px1=parseFloat(shv[1]),py1=parseFloat(shv[2]),px2=parseFloat(shv[3]),py2=parseFloat(shv[4]||py1);var isH2=Math.abs(py1-py2)<0.5,isV2=Math.abs(px1-px2)<0.5;if(isH2&&Math.abs(px2-px1)/svgW>0.7)return true;if(isV2&&Math.abs(py2-py1)/svgH>0.7)return true;if(isH2&&Math.abs(px2-px1)<tickMaxLen)return true;if(isV2&&Math.abs(py2-py1)<tickMaxLen)return true;}}
+      if(el.tagName==='rect'){var rw=parseFloat(el.getAttribute('width')||0),rh=parseFloat(el.getAttribute('height')||0);if(rw/svgW>0.9&&rh/svgH>0.9)return true;}
+      return false;
+    }
+    parsedPrimitives=[]; var idx=0;
+    svgEl.querySelectorAll('line').forEach(function(el){if(isGridOrAxisArtifact(el))return;var p1=transformPt(el.getAttribute('x1')||0,el.getAttribute('y1')||0,el),p2=transformPt(el.getAttribute('x2')||0,el.getAttribute('y2')||0,el);parsedPrimitives.push({id:idx++,enabled:true,type:'segment',color:getColor(el),desc:'('+p1[0]+','+p1[1]+') → ('+p2[0]+','+p2[1]+')',ggb:'Segment(('+p1[0]+','+p1[1]+'),('+p2[0]+','+p2[1]+'))'});});
+    svgEl.querySelectorAll('rect').forEach(function(el){if(isGridOrAxisArtifact(el))return;var rx=parseFloat(el.getAttribute('x')||0),ry=parseFloat(el.getAttribute('y')||0),rw=parseFloat(el.getAttribute('width')||0),rh=parseFloat(el.getAttribute('height')||0);if(!rw||!rh)return;var tc=[[rx,ry],[rx+rw,ry],[rx+rw,ry+rh],[rx,ry+rh]].map(function(c){return transformPt(c[0],c[1],el);});parsedPrimitives.push({id:idx++,enabled:true,type:'polygon',color:getColor(el),desc:rw.toFixed(1)+'×'+rh.toFixed(1)+' rect',ggb:'Polygon('+tc.map(function(c){return'('+c[0]+','+c[1]+')'}).join(',')+')'});});
+    svgEl.querySelectorAll('circle').forEach(function(el){if(isGridOrAxisArtifact(el))return;var center=transformPt(el.getAttribute('cx')||0,el.getAttribute('cy')||0,el),r=transformLen(el.getAttribute('r')||0);if(r<=0)return;parsedPrimitives.push({id:idx++,enabled:true,type:'circle',color:getColor(el),desc:'center ('+center[0]+','+center[1]+') r='+r,ggb:'Circle(('+center[0]+','+center[1]+'),'+r+')'});});
+    svgEl.querySelectorAll('ellipse').forEach(function(el){if(isGridOrAxisArtifact(el))return;var center=transformPt(el.getAttribute('cx')||0,el.getAttribute('cy')||0,el),erx=transformLen(el.getAttribute('rx')||0),ery=transformLen(el.getAttribute('ry')||0);if(erx<=0||ery<=0)return;if(Math.abs(erx-ery)<0.01){parsedPrimitives.push({id:idx++,enabled:true,type:'circle',color:getColor(el),desc:'center ('+center[0]+','+center[1]+') r='+erx,ggb:'Circle(('+center[0]+','+center[1]+'),'+erx+')'});}else{var a=Math.max(erx,ery),b=Math.min(erx,ery),fc=Math.round(Math.sqrt(a*a-b*b)*1000)/1000;var cmd=erx>=ery?'Ellipse('+'('+( center[0]-fc)+','+center[1]+'),('+( center[0]+fc)+','+center[1]+'),('+center[0]+','+(center[1]+ery)+'))':'Ellipse(('+center[0]+','+(center[1]-fc)+'),('+center[0]+','+(center[1]+fc)+'),('+( center[0]+erx)+','+center[1]+'))';parsedPrimitives.push({id:idx++,enabled:true,type:'ellipse',color:getColor(el),desc:'rx='+erx+' ry='+ery,ggb:cmd});}});
+    svgEl.querySelectorAll('polygon').forEach(function(el){if(isGridOrAxisArtifact(el))return;var raw=el.getAttribute('points');if(!raw)return;var nums=raw.trim().split(/[\s,]+/),pts=[];for(var j=0;j<nums.length-1;j+=2){var p=transformPt(nums[j],nums[j+1],el);pts.push('('+p[0]+','+p[1]+')');}if(pts.length>=3)parsedPrimitives.push({id:idx++,enabled:true,type:'polygon',color:getColor(el),desc:pts.length+'-gon',ggb:'Polygon('+pts.join(',')+')'});});
+    svgEl.querySelectorAll('polyline').forEach(function(el){if(isGridOrAxisArtifact(el))return;var raw=el.getAttribute('points');if(!raw)return;var nums=raw.trim().split(/[\s,]+/),pts=[];for(var j=0;j<nums.length-1;j+=2)pts.push(transformPt(nums[j],nums[j+1],el));for(var j=0;j<pts.length-1;j++)parsedPrimitives.push({id:idx++,enabled:true,type:'segment',color:getColor(el),desc:'('+pts[j][0]+','+pts[j][1]+') → ('+pts[j+1][0]+','+pts[j+1][1]+')',ggb:'Segment(('+pts[j][0]+','+pts[j][1]+'),('+pts[j+1][0]+','+pts[j+1][1]+'))'});});
+    svgEl.querySelectorAll('path').forEach(function(el){if(isGridOrAxisArtifact(el))return;var d=el.getAttribute('d');if(!d)return;var chain=getTransformChain(el);var subpaths=tokenizePath(d,chain,cx,cy,scale,offX,offY);var color=getColor(el);subpaths.forEach(function(sp){if(sp.length<2)return;var first=sp[0],last=sp[sp.length-1],closed=(Math.abs(first[0]-last[0])<0.01&&Math.abs(first[1]-last[1])<0.01);if(closed&&sp.length>=4){var pts=[];for(var j=0;j<sp.length-1;j++)pts.push('('+sp[j][0]+','+sp[j][1]+')');parsedPrimitives.push({id:idx++,enabled:true,type:'polygon',color,desc:pts.length+'-gon (path)',ggb:'Polygon('+pts.join(',')+')'});}else{for(var j=0;j<sp.length-1;j++)parsedPrimitives.push({id:idx++,enabled:true,type:'segment',color,desc:'('+sp[j][0]+','+sp[j][1]+') → ('+sp[j+1][0]+','+sp[j+1][1]+')',ggb:'Segment(('+sp[j][0]+','+sp[j][1]+'),('+sp[j+1][0]+','+sp[j+1][1]+'))'});}});});
+    var totalSvg=svgEl.querySelectorAll('line,rect,circle,ellipse,polygon,polyline,path').length;
+    var textEl=svgEl.querySelectorAll('text,tspan').length;
+    var byType={};parsedPrimitives.forEach(function(p){byType[p.type]=(byType[p.type]||0)+1;});
+    var statsHtml='<strong>'+pendingSVGData.filename+'</strong> — '+pendingSVGData.svgW.toFixed(0)+' × '+pendingSVGData.svgH.toFixed(0)+' SVG units<br><strong>'+parsedPrimitives.length+' primitives</strong> extracted';
+    var filtered=totalSvg-parsedPrimitives.length;
+    if(filtered>0||textEl>0){statsHtml+=' · <span style="color:var(--orange)">'+filtered+' grid/axis artifacts filtered</span>';if(textEl>0)statsHtml+=' · '+textEl+' text labels skipped';}
+    var tp=[];for(var t in byType)tp.push(byType[t]+' '+t+(byType[t]>1?'s':''));if(tp.length)statsHtml+='<br>'+tp.join(', ');
+    document.getElementById('import-stats').innerHTML=statsHtml;
+    renderPrimitivesTable();
+  }
+
+  function renderPrimitivesTable() {
+    if(parsedPrimitives.length===0){document.getElementById('primitives-table-wrap').innerHTML='<div style="padding:18px;text-align:center;color:var(--text-muted);font-size:12px;">No geometry primitives found in this SVG.</div>';return;}
+    var html='<table class="prim-table"><thead><tr><th style="width:30px">✓</th><th style="width:28px">#</th><th style="width:68px">Type</th><th>Description</th><th>Command</th></tr></thead><tbody>';
+    parsedPrimitives.forEach(function(p){html+='<tr><td class="prim-enabled"><input type="checkbox"'+(p.enabled?' checked':'')+' onchange="togglePrimitive('+p.id+',this.checked)"></td><td style="color:var(--text-muted)">'+p.id+'</td><td><span class="prim-type-badge '+p.type+'">'+p.type+'</span></td><td style="color:var(--text-muted);font-size:10px;">'+escHtml(p.desc)+'</td><td class="prim-ggb-cmd" title="'+escHtml(p.ggb)+'">'+escHtml(p.ggb)+'</td></tr>';});
+    html+='</tbody></table>';
+    document.getElementById('primitives-table-wrap').innerHTML=html;
+  }
+
+  function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  function togglePrimitive(id,enabled){for(var i=0;i<parsedPrimitives.length;i++)if(parsedPrimitives[i].id===id){parsedPrimitives[i].enabled=enabled;break;}}
+
+  function executeImport() {
+    if(!pendingSVGData||!api)return;
+    var doOverlay=document.getElementById('import-overlay').checked;
+    var created=0,failed=0;
+    parsedPrimitives.forEach(function(p){if(!p.enabled)return;try{var lbl=api.evalCommandGetLabels(p.ggb);if(!lbl)api.evalCommand(p.ggb);if(p.color&&lbl){var hex=p.color;if(hex.charAt(0)==='#'){var r,g,b;if(hex.length===4){r=parseInt(hex[1]+hex[1],16);g=parseInt(hex[2]+hex[2],16);b=parseInt(hex[3]+hex[3],16);}else if(hex.length>=7){r=parseInt(hex.slice(1,3),16);g=parseInt(hex.slice(3,5),16);b=parseInt(hex.slice(5,7),16);}if(!isNaN(r))lbl.split(',').forEach(function(l){if(l.trim())api.setColor(l.trim(),r,g,b);});}}created++;}catch(e){console.warn('[SVG Import] Failed:',p.ggb,e);failed++;}});
+    var overlayEl=document.getElementById('svg-overlay');
+    if(doOverlay){overlayEl.innerHTML=pendingSVGData.svgText;var oSvg=overlayEl.querySelector('svg');if(oSvg){oSvg.style.width='100%';oSvg.style.height='100%';oSvg.style.opacity='0.3';oSvg.removeAttribute('width');oSvg.removeAttribute('height');}}else{overlayEl.innerHTML='';}
+    closeImportModal();
+    showToast('↑ Imported '+created+' object'+(created!==1?'s':'')+(failed>0?' ('+failed+' failed)':''));
+  }
+
+  function tokenizePath(d,parentTransforms,svgCX,svgCY,scale,offX,offY){
+    function txC(rawX,rawY){var px=rawX,py=rawY;for(var i=0;i<parentTransforms.length;i++){var t=parentTransforms[i],tm;tm=t.match(/translate\(\s*([-\d.]+)[\s,]*([-\d.]*)\s*\)/);if(tm){px+=parseFloat(tm[1])||0;py+=parseFloat(tm[2])||0;}tm=t.match(/scale\(\s*([-\d.]+)[\s,]*([-\d.]*)\s*\)/);if(tm){var sx=parseFloat(tm[1])||1,sy=parseFloat(tm[2])||sx;px*=sx;py*=sy;}tm=t.match(/matrix\(\s*([-\d.]+)[\s,]+([-\d.]+)[\s,]+([-\d.]+)[\s,]+([-\d.]+)[\s,]+([-\d.]+)[\s,]+([-\d.]+)\s*\)/);if(tm){var a=+tm[1],b=+tm[2],c=+tm[3],dd=+tm[4],e=+tm[5],f=+tm[6];var nx=a*px+c*py+e,ny=b*px+dd*py+f;px=nx;py=ny;}}return[Math.round(((px-svgCX)*scale+offX)*1000)/1000,Math.round(((svgCY-py)*scale+offY)*1000)/1000];}
+    var subpaths=[],current=[],cx=0,cy=0,startX=0,startY=0,prevCpX=0,prevCpY=0,prevCmd='';
+    var tokens=d.match(/[a-zA-Z]|[-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?/g);
+    if(!tokens)return subpaths;
+    var i=0;function num(){return i<tokens.length?parseFloat(tokens[i++]):0;}function pushPt(x,y){current.push(txC(x,y));}
+    function cubicBez(x0,y0,c1x,c1y,c2x,c2y,ex,ey){for(var s=1;s<=8;s++){var t=s/8,u=1-t;pushPt(u*u*u*x0+3*u*u*t*c1x+3*u*t*t*c2x+t*t*t*ex,u*u*u*y0+3*u*u*t*c1y+3*u*t*t*c2y+t*t*t*ey);}}
+    function quadBez(x0,y0,cpx,cpy,ex,ey){for(var s=1;s<=6;s++){var t=s/6,u=1-t;pushPt(u*u*x0+2*u*t*cpx+t*t*ex,u*u*y0+2*u*t*cpy+t*t*ey);}}
+    function arcTo(x0,y0,rx,ry,xRot,la,sw,x1,y1){if(!rx||!ry){pushPt(x1,y1);return;}rx=Math.abs(rx);ry=Math.abs(ry);var phi=xRot*Math.PI/180,cosPhi=Math.cos(phi),sinPhi=Math.sin(phi);var dx2=(x0-x1)/2,dy2=(y0-y1)/2,x1p=cosPhi*dx2+sinPhi*dy2,y1p=-sinPhi*dx2+cosPhi*dy2;var rxSq=rx*rx,rySq=ry*ry,x1pSq=x1p*x1p,y1pSq=y1p*y1p;var lam=x1pSq/rxSq+y1pSq/rySq;if(lam>1){rx*=Math.sqrt(lam);ry*=Math.sqrt(lam);rxSq=rx*rx;rySq=ry*ry;}var sign=(la===sw)?-1:1;var sq=Math.max(0,(rxSq*rySq-rxSq*y1pSq-rySq*x1pSq)/(rxSq*y1pSq+rySq*x1pSq));var coef=sign*Math.sqrt(sq);var cxp=coef*(rx*y1p/ry),cyp=coef*(-(ry*x1p/rx));var cxO=cosPhi*cxp-sinPhi*cyp+(x0+x1)/2,cyO=sinPhi*cxp+cosPhi*cyp+(y0+y1)/2;function ang(ux,uy,vx,vy){var d=ux*vx+uy*vy,l=Math.sqrt(ux*ux+uy*uy)*Math.sqrt(vx*vx+vy*vy);var c2=Math.max(-1,Math.min(1,d/l));var a2=Math.acos(c2);return(ux*vy-uy*vx<0)?-a2:a2;}var th1=ang(1,0,(x1p-cxp)/rx,(y1p-cyp)/ry);var dTh=ang((x1p-cxp)/rx,(y1p-cyp)/ry,(-x1p-cxp)/rx,(-y1p-cyp)/ry);if(!sw&&dTh>0)dTh-=2*Math.PI;if(sw&&dTh<0)dTh+=2*Math.PI;var steps=Math.max(8,Math.ceil(Math.abs(dTh)/(Math.PI/8)));for(var s=1;s<=steps;s++){var t2=th1+(s/steps)*dTh;pushPt(Math.cos(t2)*rx*cosPhi-Math.sin(t2)*ry*sinPhi+cxO,Math.cos(t2)*rx*sinPhi+Math.sin(t2)*ry*cosPhi+cyO);}}
+    while(i<tokens.length){var cmd=tokens[i];if(/[a-zA-Z]/.test(cmd)){i++;}else{cmd=prevCmd;}switch(cmd){case 'M':if(current.length>0){subpaths.push(current);current=[];}cx=num();cy=num();startX=cx;startY=cy;pushPt(cx,cy);prevCmd='L';break;case 'm':if(current.length>0){subpaths.push(current);current=[];}cx+=num();cy+=num();startX=cx;startY=cy;pushPt(cx,cy);prevCmd='l';break;case 'L':cx=num();cy=num();pushPt(cx,cy);prevCmd='L';break;case 'l':cx+=num();cy+=num();pushPt(cx,cy);prevCmd='l';break;case 'H':cx=num();pushPt(cx,cy);prevCmd='H';break;case 'h':cx+=num();pushPt(cx,cy);prevCmd='h';break;case 'V':cy=num();pushPt(cx,cy);prevCmd='V';break;case 'v':cy+=num();pushPt(cx,cy);prevCmd='v';break;case 'C':{var a1=num(),b1=num(),a2=num(),b2=num(),ex=num(),ey=num();cubicBez(cx,cy,a1,b1,a2,b2,ex,ey);prevCpX=a2;prevCpY=b2;cx=ex;cy=ey;prevCmd='C';break;}case 'c':{var a1=cx+num(),b1=cy+num(),a2=cx+num(),b2=cy+num(),ex=cx+num(),ey=cy+num();cubicBez(cx,cy,a1,b1,a2,b2,ex,ey);prevCpX=a2;prevCpY=b2;cx=ex;cy=ey;prevCmd='c';break;}case 'S':{var r1=2*cx-prevCpX,r2=2*cy-prevCpY,a2=num(),b2=num(),ex=num(),ey=num();cubicBez(cx,cy,r1,r2,a2,b2,ex,ey);prevCpX=a2;prevCpY=b2;cx=ex;cy=ey;prevCmd='S';break;}case 's':{var r1=2*cx-prevCpX,r2=2*cy-prevCpY,a2=cx+num(),b2=cy+num(),ex=cx+num(),ey=cy+num();cubicBez(cx,cy,r1,r2,a2,b2,ex,ey);prevCpX=a2;prevCpY=b2;cx=ex;cy=ey;prevCmd='s';break;}case 'Q':{var qx=num(),qy=num(),ex=num(),ey=num();quadBez(cx,cy,qx,qy,ex,ey);prevCpX=qx;prevCpY=qy;cx=ex;cy=ey;prevCmd='Q';break;}case 'q':{var qx=cx+num(),qy=cy+num(),ex=cx+num(),ey=cy+num();quadBez(cx,cy,qx,qy,ex,ey);prevCpX=qx;prevCpY=qy;cx=ex;cy=ey;prevCmd='q';break;}case 'T':{var qx=2*cx-prevCpX,qy=2*cy-prevCpY,ex=num(),ey=num();quadBez(cx,cy,qx,qy,ex,ey);prevCpX=qx;prevCpY=qy;cx=ex;cy=ey;prevCmd='T';break;}case 't':{var qx=2*cx-prevCpX,qy=2*cy-prevCpY,ex=cx+num(),ey=cy+num();quadBez(cx,cy,qx,qy,ex,ey);prevCpX=qx;prevCpY=qy;cx=ex;cy=ey;prevCmd='t';break;}case 'A':{var arx=num(),ary=num(),xr=num(),la=num(),sw=num(),ex=num(),ey=num();arcTo(cx,cy,arx,ary,xr,la,sw,ex,ey);cx=ex;cy=ey;prevCmd='A';break;}case 'a':{var arx=num(),ary=num(),xr=num(),la=num(),sw=num(),ex=cx+num(),ey=cy+num();arcTo(cx,cy,arx,ary,xr,la,sw,ex,ey);cx=ex;cy=ey;prevCmd='a';break;}case 'Z':case 'z':cx=startX;cy=startY;pushPt(cx,cy);prevCmd=cmd;break;default:i++;}if(!'CcSsQqTt'.includes(cmd)){prevCpX=cx;prevCpY=cy;}}
+    if(current.length>0)subpaths.push(current);
+    return subpaths;
+  }
+
+  // ── AI Image-to-GeoGebra ──────────────────────────────────────────────────────
+  let aiImageData = null;
+  let aiContextImageData = null;
+
+  function openAIModal() { document.getElementById('ai-modal').classList.add('visible'); }
+
+  function closeAIModal() {
+    document.getElementById('ai-modal').classList.remove('visible');
+    aiImageData = null;
+    document.getElementById('ai-upload-zone').style.display='';
+    document.getElementById('ai-image-preview').classList.remove('visible');
+    document.getElementById('ai-preview-img').src='';
+    document.getElementById('ai-status').innerHTML='';
+    document.getElementById('ai-commands-wrap').classList.remove('visible');
+    document.getElementById('ai-commands-textarea').value='';
+    document.getElementById('ai-btn-analyze').disabled=true;
+    document.getElementById('ai-btn-run').disabled=true;
+    document.getElementById('ai-context-text').value='';
+    clearCtxImage();
+    document.getElementById('ai-context-details').removeAttribute('open');
+  }
+
+  function handleCtxImage(event){var file=event.target.files[0];event.target.value='';if(file)loadCtxImageFile(file);}
+  function loadCtxImageFile(file){var reader=new FileReader();reader.onload=function(e){var dataUrl=e.target.result,b64=dataUrl.split(',')[1];aiContextImageData={base64:b64,mimeType:file.type,name:file.name};document.getElementById('ai-ctx-upload-zone').style.display='none';var preview=document.getElementById('ai-ctx-preview');preview.style.display='flex';document.getElementById('ai-ctx-preview-img').src=dataUrl;document.getElementById('ai-ctx-preview-name').textContent=file.name;};reader.readAsDataURL(file);}
+  function clearCtxImage(){aiContextImageData=null;document.getElementById('ai-ctx-upload-zone').style.display='';document.getElementById('ai-ctx-preview').style.display='none';document.getElementById('ai-ctx-preview-img').src='';document.getElementById('ai-ctx-preview-name').textContent='';document.getElementById('ai-ctx-file-input').value='';}
+  function aiCtxDragOver(e){e.preventDefault();document.getElementById('ai-ctx-upload-zone').style.borderColor='var(--pink)';}
+  function aiCtxDragLeave(){document.getElementById('ai-ctx-upload-zone').style.borderColor='';}
+  function aiCtxDrop(e){e.preventDefault();aiCtxDragLeave();var file=e.dataTransfer.files[0];if(file&&file.type.startsWith('image/'))loadCtxImageFile(file);}
+
+  function handleAIImage(event){var file=event.target.files[0];event.target.value='';if(file)loadAIImageFile(file);}
+  function loadAIImageFile(file){var reader=new FileReader();reader.onload=function(e){var dataUrl=e.target.result;aiImageData={base64:dataUrl.split(',')[1],mimeType:file.type||'image/png'};document.getElementById('ai-preview-img').src=dataUrl;document.getElementById('ai-image-preview').classList.add('visible');document.getElementById('ai-upload-zone').style.display='none';document.getElementById('ai-status').innerHTML='Image ready — click <strong>✦ Analyze</strong> to generate GeoGebra commands.';document.getElementById('ai-commands-wrap').classList.remove('visible');document.getElementById('ai-commands-textarea').value='';document.getElementById('ai-btn-analyze').disabled=false;document.getElementById('ai-btn-run').disabled=true;};reader.readAsDataURL(file);}
+  function aiDragOver(e){e.preventDefault();document.getElementById('ai-upload-zone').classList.add('dragover');}
+  function aiDragLeave(){document.getElementById('ai-upload-zone').classList.remove('dragover');}
+  function aiDrop(e){e.preventDefault();document.getElementById('ai-upload-zone').classList.remove('dragover');var file=e.dataTransfer.files[0];if(file&&file.type.startsWith('image/')){loadAIImageFile(file);}else{showToast('✕ Please drop an image file');}}
+
+  async function analyzeWithGemini() {
+    if (!aiImageData) return;
+    if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY_HERE') {
+      document.getElementById('ai-status').innerHTML='<span style="color:var(--red)">✕ No API key set — open mathcanvas.html and replace YOUR_GEMINI_API_KEY_HERE.</span>'; return;
+    }
+    var analyzeBtn=document.getElementById('ai-btn-analyze');
+    analyzeBtn.disabled=true; document.getElementById('ai-btn-run').disabled=true;
+    document.getElementById('ai-commands-wrap').classList.remove('visible');
+    document.getElementById('ai-status').innerHTML='<span class="ai-spinner"></span> Sending image to Gemini AI…';
+    var coordMin=parseFloat(document.getElementById('ai-coord-min').value)||(-10);
+    var coordMax=parseFloat(document.getElementById('ai-coord-max').value)||10;
+    if(coordMin>=coordMax){coordMin=-10;coordMax=10;}
+    var prompt='You are a GeoGebra expert. Analyze this geometric image and output GeoGebra commands that exactly recreate every visible shape, point, line, and label.\n\nCOORDINATE SYSTEM:\n- Map the image proportionally into a '+coordMin+' to '+coordMax+' coordinate range\n- Estimate each point\'s position carefully\n\nPOINT SYNTAX — this is critical:\n- Named point:   A = (x, y)\n- Unnamed point: (x, y)\n- NEVER write Point(x, y) — invalid in GeoGebra\n\nSUPPORTED COMMANDS:\nNamed point:    A = (x, y)\nUnnamed point:  (x, y)\nSegment:        Segment(A, B)\nLine:           Line(A, B)\nCircle:         Circle((cx,cy), r)\nPolygon:        Polygon(A, B, C)\nEllipse:        Ellipse((f1x,f1y),(f2x,f2y),(px,py))\nFunction:       f(x) = expression\n\nSTRATEGY:\n1. If the image shows labeled vertices (A, B, C), define them first, then build shapes.\n2. If unlabeled, use coordinate-based commands directly.\n3. Recreate ALL visible elements.\n\nOUTPUT RULES:\n- One command per line\n- No explanations, no markdown, no code blocks, no comments\n\nOutput only the commands.';
+    var ctxText=document.getElementById('ai-context-text').value.trim();
+    if(ctxText) prompt+='\n\nADDITIONAL CONTEXT:\n'+ctxText;
+    if(aiContextImageData) prompt+='\n\nThe user has also provided an additional image with notes.';
+    var parts=[{inline_data:{mime_type:aiImageData.mimeType,data:aiImageData.base64}}];
+    if(aiContextImageData) parts.push({inline_data:{mime_type:aiContextImageData.mimeType,data:aiContextImageData.base64}});
+    parts.push({text:prompt});
+    try {
+      var response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key='+GEMINI_API_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0.1,maxOutputTokens:8192}})});
+      if(!response.ok){var errData=await response.json().catch(function(){return{};});throw new Error((errData.error&&errData.error.message)?errData.error.message:('HTTP '+response.status));}
+      var data=await response.json();
+      var candidate=data.candidates&&data.candidates[0];
+      if(!candidate){var blockReason=data.promptFeedback&&data.promptFeedback.blockReason;throw new Error(blockReason?'Request blocked: '+blockReason:'No candidates in response.');}
+      if(candidate.finishReason==='SAFETY')throw new Error('Response blocked by safety filter.');
+      var pts=candidate.content&&candidate.content.parts;
+      var text=pts&&pts.length?pts.map(function(p){return p.text||'';}).join('\n'):'';
+      if(!text.trim())throw new Error('Model returned no text. Finish reason: '+(candidate.finishReason||'unknown'));
+      var truncated=(candidate.finishReason==='MAX_TOKENS');
+      var lines=text.split('\n').map(function(l){return l.replace(/^```[a-z]*/i,'').replace(/```$/,'').trim();}).filter(function(l){return l&&!l.startsWith('//')&&!l.startsWith('#')&&l!=='```';}).map(function(l){l=l.replace(/^([A-Za-z_]\w*)\s*=\s*Point\(\((-?[\d.]+)\s*,\s*(-?[\d.]+)\)\)$/,'$1 = ($2, $3)');l=l.replace(/^([A-Za-z_]\w*)\s*=\s*Point\((-?[\d.]+)\s*,\s*(-?[\d.]+)\)$/,'$1 = ($2, $3)');l=l.replace(/^Point\(\((-?[\d.]+)\s*,\s*(-?[\d.]+)\)\)$/,'($1, $2)');l=l.replace(/^Point\((-?[\d.]+)\s*,\s*(-?[\d.]+)\)$/,'($1, $2)');return l;});
+      document.getElementById('ai-commands-textarea').value=lines.join('\n');
+      document.getElementById('ai-commands-wrap').classList.add('visible');
+      document.getElementById('ai-status').innerHTML=truncated?'<span style="color:var(--orange)">⚠ '+lines.length+' commands generated (truncated — review before running)</span>':'<span style="color:var(--green)">✓ '+lines.length+' command'+(lines.length!==1?'s':'')+' generated — review, then click ▶ Run on Canvas</span>';
+      document.getElementById('ai-btn-run').disabled=false;
+    } catch(err) {
+      document.getElementById('ai-status').innerHTML='<span style="color:var(--red)">✕ '+escHtml(err.message)+'</span>';
+      showToast('✕ Gemini error — see modal for details');
+    }
+    analyzeBtn.disabled=false;
+  }
+
+  function executeAICommands() {
+    if(!api)return;
+    var lines=document.getElementById('ai-commands-textarea').value.split('\n').map(function(l){return l.trim();}).filter(Boolean);
+    if(!lines.length){showToast('✕ No commands to run');return;}
+    var addedNames=[],ok=0,fail=0;
+    var tmpListener=function(name){addedNames.push(name);};
+    api.registerAddListener(tmpListener);
+    lines.forEach(function(cmd){try{api.evalCommand(cmd);ok++;}catch(e){console.warn('[AI Import] Failed:',cmd,e);fail++;}});
+    api.unregisterAddListener(tmpListener);
+    addedNames.forEach(function(name){try{api.setLabelVisible(name,true);}catch(e){}});
+    closeAIModal();
+    showToast('✦ Executed '+ok+' command'+(ok!==1?'s':'')+(fail>0?' ('+fail+' failed)':''));
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────────────────────
+  var toastTimeout;
+  function showToast(msg) {
+    var t=document.getElementById('toast');
+    t.textContent=msg; t.classList.add('show');
+    clearTimeout(toastTimeout);
+    toastTimeout=setTimeout(function(){t.classList.remove('show');},2400);
+  }
+</script>
+</body>
+</html>
