@@ -1,0 +1,3 @@
+lebanese-high-school-math-tutor.com, www.lebanese-high-school-math-tutor.com {
+    reverse_proxy frontend:80
+}

@@ -31,6 +31,24 @@ services:
       - math-tutor-network
     restart: unless-stopped
 
+  # Caddy - Reverse proxy + automatic HTTPS (Let's Encrypt)
+  caddy:
+    image: caddy:2-alpine
+    container_name: math-tutor-caddy
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+    networks:
+      - math-tutor-network
+    restart: unless-stopped
+
   # Prometheus - Metrics collection
   prometheus:
     image: prom/prometheus:latest
@@ -72,3 +90,5 @@ networks:
 volumes:
   prometheus-data:
   grafana-data:
+  caddy-data:
+  caddy-config:
