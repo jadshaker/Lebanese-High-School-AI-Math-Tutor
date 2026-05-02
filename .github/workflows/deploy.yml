@@ -32,7 +32,8 @@ jobs:
             set_env QDRANT_CLUSTER_ENDPOINT "$QDRANT_CLUSTER_ENDPOINT"
             set_env QDRANT_API_KEY "$QDRANT_API_KEY"
 
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
             docker compose up -d --build
         env:
           QDRANT_CLUSTER_ENDPOINT: ${{ secrets.QDRANT_CLUSTER_ENDPOINT }}
