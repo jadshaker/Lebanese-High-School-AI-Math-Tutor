@@ -1,6 +1,7 @@
 import { FileText, Image, Paperclip, Send, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Attachment } from '../api/types'
+import { uuid } from '../utils/uuid'
 
 const MAX_ATTACHMENTS = 5
 const MAX_TEXT_BYTES = 200_000 // 200 KB cap for text files
@@ -115,7 +116,7 @@ export function InputBar({ onSend, disabled, pendingAttachment, onClearPendingAt
     for (const file of toProcess) {
       const type = fileType(file)
       const base: Omit<Attachment, 'dataUrl' | 'textContent'> = {
-        id: crypto.randomUUID(),
+        id: uuid(),
         name: file.name,
         type,
         mimeType: file.type,

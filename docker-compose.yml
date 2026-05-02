@@ -11,29 +11,11 @@ services:
       - .env
       - path: .env.dev
         required: false
-    environment:
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload --no-access-log
-    depends_on:
-      - qdrant
     volumes:
       - ./.logs:/app/logs
     networks:
       - math-tutor-network
-
-  # Qdrant Vector Database
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: math-tutor-qdrant
-    ports:
-      - '6333:6333'
-      - '6334:6334'
-    volumes:
-      - qdrant-data:/qdrant/storage
-    networks:
-      - math-tutor-network
-    restart: unless-stopped
 
   # Math Atelier - Custom React frontend
   frontend:
@@ -45,6 +27,24 @@ services:
       - '3000:80'
     depends_on:
       - app
+    networks:
+      - math-tutor-network
+    restart: unless-stopped
+
+  # Caddy - Reverse proxy + automatic HTTPS (Let's Encrypt)
+  caddy:
+    image: caddy:2-alpine
+    container_name: math-tutor-caddy
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
     networks:
       - math-tutor-network
     restart: unless-stopped
@@ -90,4 +90,5 @@ networks:
 volumes:
   prometheus-data:
   grafana-data:
-  qdrant-data:
+  caddy-data:
+  caddy-config:

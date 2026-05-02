@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { fetchSessions, sendChatMessage } from '../api/client'
 import type { ChatApiMessage, Message } from '../api/types'
+import { uuid } from '../utils/uuid'
 
 const LOADING_ID = '__loading__'
 
@@ -40,7 +41,7 @@ export function useChat() {
       if (!text.trim() || isLoading) return
 
       const userMsg: Message = {
-        id: crypto.randomUUID(),
+        id: uuid(),
         role: 'user',
         content: text.trim(),
         timestamp: new Date(),
@@ -62,7 +63,7 @@ export function useChat() {
         const reply = await sendChatMessage(newHistory)
 
         const assistantMsg: Message = {
-          id: crypto.randomUUID(),
+          id: uuid(),
           role: 'assistant',
           content: reply,
           timestamp: new Date(),
@@ -78,7 +79,7 @@ export function useChat() {
         }
       } catch {
         const errorMsg: Message = {
-          id: crypto.randomUUID(),
+          id: uuid(),
           role: 'assistant',
           content: 'Something went wrong connecting to the tutor. Please try again.',
           timestamp: new Date(),

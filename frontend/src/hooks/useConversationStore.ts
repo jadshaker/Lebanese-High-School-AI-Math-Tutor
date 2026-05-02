@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchSessions, sendChatMessage } from '../api/client'
 import type { Attachment, ChatApiMessage, Message } from '../api/types'
+import { uuid } from '../utils/uuid'
 
 /** Build the text sent to the API, appending attachment context the backend can use. */
 function buildApiText(text: string, attachments?: Attachment[]): string {
@@ -115,7 +116,7 @@ export function useConversationStore() {
   }, [])
 
   const createConversation = useCallback((): string => {
-    const id = crypto.randomUUID()
+    const id = uuid()
     const now = new Date().toISOString()
     const conv: Conversation = {
       id, title: 'New Conversation', messages: [],
@@ -220,7 +221,7 @@ export function useConversationStore() {
     const isFirst = baseMessages.length === 0
 
     const userMsg: Message = {
-      id: crypto.randomUUID(), role: 'user',
+      id: uuid(), role: 'user',
       content: text.trim(), timestamp: new Date(),
       attachments,
     }
@@ -246,7 +247,7 @@ export function useConversationStore() {
       const reply = await sendChatMessage(newHistory)
 
       const assistantMsg: Message = {
-        id: crypto.randomUUID(), role: 'assistant',
+        id: uuid(), role: 'assistant',
         content: reply, timestamp: new Date(),
       }
       const finalMessages = [...baseMessages, userMsg, assistantMsg]
@@ -262,7 +263,7 @@ export function useConversationStore() {
       if (isFirst) resolveSession(convId, text.trim())
     } catch {
       const errMsg: Message = {
-        id: crypto.randomUUID(), role: 'assistant',
+        id: uuid(), role: 'assistant',
         content: 'Could not reach the tutor. Please check the backend is running and try again.',
         timestamp: new Date(), error: true,
       }
