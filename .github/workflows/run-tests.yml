@@ -30,6 +30,8 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          QDRANT_CLUSTER_ENDPOINT: ${{ secrets.QDRANT_CLUSTER_ENDPOINT }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
         run: |
           cat > .env << EOF
           OPENAI_API_KEY=$OPENAI_API_KEY
@@ -67,8 +69,8 @@ jobs:
           INTENT_CLASSIFIER_LLM_MAX_TOKENS=50
 
           CACHE_TOP_K=5
-          QDRANT_HOST=qdrant
-          QDRANT_PORT=6333
+          QDRANT_CLUSTER_ENDPOINT=$QDRANT_CLUSTER_ENDPOINT
+          QDRANT_API_KEY=$QDRANT_API_KEY
 
           CONFIDENCE_TIER_1=0.85
           CONFIDENCE_TIER_2=0.70
